@@ -4,9 +4,9 @@ HTML-Animation-Engine is a TypeScript library for HTML motion graphics. It works
 
 ## Current scope
 
-We are deliberately keeping this small. **In scope:** the core engine, DOM/SVG/Canvas renderers and effects, **one adapter (Remotion)**, and **one export format (MP4, H.264)**, plus PNG stills for checking frames.
+We are deliberately keeping this small. **In scope:** the core engine, DOM/SVG/Canvas renderers and effects, **3D through the built-in projection** (`spatial/`), **one adapter (Remotion)**, and **one export format (MP4, H.264)**, plus PNG stills for checking frames.
 
-**Deferred; don't build these unless asked:** GSAP, Three.js and Framer Motion adapters; WebM, ProRes, GIF, APNG, PNG-sequence, H.265 and HTML-embed export; segmented and parallel encoding; the audio synth helper. The architecture should still allow them: adapters are separate subpath exports with optional peer dependencies, and the encoder is one module behind the capture loop.
+**Deferred; don't build these unless asked:** GSAP and Framer Motion adapters; a Three.js adapter (add it only when a scene needs textures, smooth shading, intersecting geometry or very high polygon counts, which the built-in projection can't do); WebM, ProRes, GIF, APNG, PNG-sequence, H.265 and HTML-embed export; segmented and parallel encoding; the audio synth helper. The architecture should still allow them: adapters are separate subpath exports with optional peer dependencies, and the encoder is one module behind the capture loop.
 
 ## The core principle (never break this)
 
@@ -38,23 +38,25 @@ tests/visual         Playwright tests; goldens in tests/visual/__goldens__/<plat
 
 ### Core engine (`packages/core/src`)
 
-| Module              | What it gives you                                                                                                  |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `composition.ts`    | `Composition`, `defineComposition`, frame/time conversion, `compositionSeed`                                       |
-| `easing/`           | `cubicBezier` (Newton + bisection fallback), closed-form `spring` (`.duration` = settle time), CSS `steps`         |
-| `tween.ts`          | `progress(t, start, duration, ease)`, `keyframes`, `staggerProgress`, `lerpRect`, `holdFor(text)`                  |
-| `color/`            | CSS colour parsing, OKLCH conversion with gamut mapping, `mixColors` (OKLCH, shortest hue arc)                     |
-| `timeline/`         | `timeline([...])` from `clip`/`gap`/`label`/`seq`/`par`/`stagger`, `at(label, offset)`; `tempo({ bpm })` beat grid |
-| `geometry/`         | matrices, SVG path parse/flatten/length, `rect`/`pill`/`circle`/`pathGeometry`, **`morph`**                        |
-| `scene/`            | scene nodes (group/shape/text), camera, `flattenScene` → paint-ordered draw list                                   |
-| `random/`           | stateless `random(seed, ...keys)`, seeded `createRng`, seeded simplex `createNoise` (with seamless `loop`)         |
-| `text/`             | `registerFontFaces`, `loadFonts`, `createCanvasMeasurer`, `layoutText`, `baselineOffset`                           |
-| `safety/`           | `createFlashDetector`: WCAG 2.3.1 flash analysis on RGBA frames                                                    |
-| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations                   |
+| Module              | What it gives you                                                                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `composition.ts`    | `Composition`, `defineComposition`, frame/time conversion, `compositionSeed`                                                                            |
+| `easing/`           | `cubicBezier` (Newton + bisection fallback), closed-form `spring` (`.duration` = settle time), CSS `steps`                                              |
+| `tween.ts`          | `progress(t, start, duration, ease)`, `keyframes`, `staggerProgress`, `lerpRect`, `holdFor(text)`                                                       |
+| `color/`            | CSS colour parsing, OKLCH conversion with gamut mapping, `mixColors` (OKLCH, shortest hue arc)                                                          |
+| `timeline/`         | `timeline([...])` from `clip`/`gap`/`label`/`seq`/`par`/`stagger`, `at(label, offset)`; `tempo({ bpm })` beat grid                                      |
+| `geometry/`         | matrices, SVG path parse/flatten/length, `rect`/`pill`/`circle`/`pathGeometry`, **`morph`**                                                             |
+| `scene/`            | scene nodes (group/shape/text), camera, `flattenScene` → paint-ordered draw list                                                                        |
+| `random/`           | stateless `random(seed, ...keys)`, seeded `createRng`, seeded simplex `createNoise` (with seamless `loop`)                                              |
+| `text/`             | `registerFontFaces`, `loadFonts`, `createCanvasMeasurer`, `layoutText`, `baselineOffset`                                                                |
+| `spatial/`          | 3D: vectors, matrices, perspective `Camera3D`/`orbitCamera`, meshes (`box`, `plane`, `sphere`, `cylinder`, `pyramid`), `curlVertex`, **`projectSpace`** |
+| `safety/`           | `createFlashDetector`: WCAG 2.3.1 flash analysis on RGBA frames                                                                                         |
+| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations                                                        |
 
 Conventions the code relies on:
 
 - **Units:** seconds for time, px for space, **degrees** for rotation (clockwise on screen, y down).
+- **Colour mixing:** OKLCH with the hue moving in proportion to each end's chroma, so fading a vivid colour to a near-black or grey keeps its hue (lime → `ink` stays lime, never teal).
 - **Rects are centred:** `rect(x, y, w, h, radius)` and `Rect.x/y` are the **centre**, so scaling and morphs stay centred. Pills and circles are rects with a large radius, which is why rect → pill → circle interpolates exactly.
 - **Eases belong to the arriving key** in `keyframes` and `morph`: `{ at: 2, ..., ease }` eases the segment that ends at t = 2.
 - **Timeline placement:** items in a `seq` follow the cursor. An item placed with `{ at }` is absolute and does **not** move the cursor. Labels must be defined before they are referenced.
@@ -62,6 +64,16 @@ Conventions the code relies on:
 - **Scenes are rebuilt every frame** as plain data: `render(t)` builds a `Scene` and a renderer draws `flattenScene(scene)`. Node `id`s must be unique; renderers use them to reuse elements.
 - **Morph shapes must be single closed contours** (multi-contour paths throw). Outline matching happens when `morph()` is called, so call it once in setup or at module scope, not per frame.
 - **Text:** declare `fontFaces` (font files) and `fonts` (specs to load) on the composition; the stage registers and loads them before `setup`, then measure with `createCanvasMeasurer()`. Examples get both from `exampleDefaults`; the bundled font is Inter (`examples/fonts.ts`). Never rely on system fonts: line breaks would differ between machines.
+
+### 3D (`packages/core/src/spatial`)
+
+3D is projected, not rendered by a 3D engine: `projectSpace(id, { camera, objects, light?, fog?, sort? }, viewport)` turns meshes into ordinary 2D shape nodes (one polygon per visible face, flat-shaded via OKLCH lightness, fogged, sorted far → near). So 3D works in all three renderers and in export, and stays a pure function of `t`.
+
+- **Axes:** right-handed, **y up**, the default camera looks down −z; rotations are Euler degrees applied X, then Y, then Z. Mesh faces are counter-clockwise seen from outside (tested for every primitive).
+- **Near clipping** (`Camera3D.near`) cuts geometry passing the camera, so fly-throughs are safe.
+- **Painter's algorithm limits:** intersecting faces, or faces overlapping in a cycle, can sort wrongly. Keep objects apart, hide parts that can't be seen (the slab drops its front plate when the back faces the camera), or pass `sort: false` and give the order yourself (the page curl draws flat part → shadow → strips far-to-near, each strip followed by its printed lines).
+- **Bend along strips, not grids:** a curl that depends on distance from a fold should be cut into strips parallel to the fold (see `pageCurl`); a square grid gives a staircase along a diagonal fold.
+- Each face gets a 1 px seam stroke in its own colour (`seam`) to hide anti-aliasing cracks between neighbours.
 
 ### Renderers and effects (`packages/renderers/src`)
 
@@ -75,7 +87,7 @@ The three renderers draw the same `flattenScene` output and are tested for pixel
 - **Canvas** paints the composition background into the bitmap; DOM/SVG rely on the stage background.
 - **DOM:** rects are `div`s (a centred stroke is a border on an enlarged box), paths and dashed strokes are inline SVG, clips are nested wrappers with `clip-path: path()`.
 
-Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
+Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`, and in 3D `slab3d`, `pageCurl`, `flyThrough`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
 
 The **stage** (`mountStage`) blocks CSS transitions and animations inside it, cancels Web Animations and pauses SMIL after every frame (with a console warning), and passes `ctx.reducedMotion`.
 
@@ -152,6 +164,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 - [x] Phase 1: repo setup (workspace, tooling, playground shell, `Composition` contract, `mountStage`, env check, CI)
 - [x] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text, theme tokens). Determinism is proven in `packages/core/test/determinism.test.ts` (pinned output) and `tests/visual/determinism.spec.ts` (byte-identical Canvas pixels)
 - [x] Phase 3: DOM/SVG/Canvas renderers (pixel parity tested), effects library with 13 examples (goldens, determinism, flash safety each), reduced-motion playback, WCAG flash detector, stage blocks CSS/Web Animations, bundled Inter font, capture page
+- [x] Phase 3b: 3D via projection (`spatial/`): slab rotating with zooms, lifted page corner, fly-through past 3D objects; examples `slab-rotate`, `page-curl`, `fly-through`. Also: chroma-weighted OKLCH hue, bundled JetBrains Mono
 - [ ] Phase 4: Remotion adapter (both directions)
 - [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)
 - [ ] Phase 6: visual regression goldens, performance budgets

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { exampleNames } from './helpers.js';
 
 test('playground boots with its controls and no console errors', async ({ page }) => {
   const errors: string[] = [];
@@ -32,7 +33,9 @@ test('plays examples, and reduced motion only shows key moments', async ({ page 
   await page.goto('/?example=shape-morph&fps=30');
   const stage = page.locator('[data-hae-stage="shape-morph"]');
   await expect(stage).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Examples' }).locator('a')).toHaveCount(13);
+  await expect(page.getByRole('navigation', { name: 'Examples' }).locator('a')).toHaveCount(
+    exampleNames().length,
+  );
 
   await page.getByRole('button', { name: 'Frame ▶' }).click();
   await expect(page.locator('#timecode')).toHaveText(/^0\.033 s · 1 \//);

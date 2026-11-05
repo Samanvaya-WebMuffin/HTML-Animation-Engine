@@ -30,6 +30,16 @@ export {
   type StaggerGridOptions,
 } from './shapes.js';
 export {
+  flyThrough,
+  pageCurl,
+  slab3d,
+  type Corner,
+  type FlyThroughOptions,
+  type PageCurlOptions,
+  type Rotation3D,
+  type Slab3DOptions,
+} from './space.js';
+export {
   counterRoll,
   marquee,
   typeOn,

@@ -126,6 +126,17 @@ describe('mixColors (OKLCH)', () => {
     for (const step of steps) expect(step.h).toBeCloseTo(blueHue, 0);
   });
 
+  it('fades a vivid colour to a near-black without swinging its hue', () => {
+    // ink (#0d0e12) is almost grey but has a faint blue hue (~274°). Plain
+    // OKLCH mixing would be ~112° off lime at p = 0.75 (teal); weighting hue
+    // by chroma keeps it within ~16°, where chroma is already low.
+    const limeHue = rgbToOklch(parseColor('#c6ff3d')).h;
+    for (const p of [0.25, 0.5, 0.75]) {
+      const step = rgbToOklch(parseColor(mixColors('#c6ff3d', '#0d0e12', p)));
+      expect(Math.abs(step.h - limeHue)).toBeLessThan(20);
+    }
+  });
+
   it('interpolates alpha and premultiplies', () => {
     expect(mixColors('rgba(255, 0, 0, 0)', '#0000ff', 0.5)).toMatch(
       /^rgba\(\d+, \d+, \d+, 0\.5\)$/,

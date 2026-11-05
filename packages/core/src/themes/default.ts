@@ -24,7 +24,7 @@ export const defaultTheme = defineTheme({
   },
 
   type: {
-    // Inter is bundled with the examples (OFL); register it via `fontFaces`
+    // Inter and JetBrains Mono are bundled with the examples (OFL); register them via `fontFaces`
     // so text measures and renders the same on every machine.
     display: {
       family: 'Inter, "Helvetica Neue", Arial, sans-serif',
@@ -38,7 +38,7 @@ export const defaultTheme = defineTheme({
       lineHeight: 1.35,
     },
     mono: {
-      family: 'Menlo, Consolas, monospace',
+      family: '"JetBrains Mono", Menlo, Consolas, monospace',
       weight: 500,
       lineHeight: 1.3,
     },

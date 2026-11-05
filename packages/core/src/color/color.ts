@@ -179,26 +179,28 @@ export function oklchToRgb(color: Oklch): Rgba {
 // ---------------------------------------------------------------------------
 
 /**
- * Mixes two OKLCH colours. Hue takes the shorter arc; a grey endpoint adopts
- * the other colour's hue so greys don't swing through the spectrum. L and C
- * are premultiplied by alpha, as in CSS `color-mix()`.
+ * Mixes two OKLCH colours. Hue takes the shorter arc, and moves in proportion
+ * to how much chroma each end contributes: a colour with little chroma (a
+ * near-black or grey) barely pulls the hue, so lime fading to `ink` stays a
+ * darkening lime instead of swinging through teal. Two equally vivid colours
+ * blend hue evenly. L and C are premultiplied by alpha, as in CSS `color-mix()`.
  */
 export function mixOklch(from: Oklch, to: Oklch, p: number): Oklch {
   if (p <= 0) return from;
   if (p >= 1) return to;
-  const fromGrey = from.c < ACHROMATIC || from.a === 0;
-  const toGrey = to.c < ACHROMATIC || to.a === 0;
-  const h1 = fromGrey ? to.h : from.h;
-  const h2 = toGrey ? from.h : to.h;
-  const delta = mod(h2 - h1 + 180, 360) - 180;
+  const c1 = from.a === 0 || from.c < ACHROMATIC ? 0 : from.c;
+  const c2 = to.a === 0 || to.c < ACHROMATIC ? 0 : to.c;
+  const delta = mod(to.h - from.h + 180, 360) - 180;
+  const weight = (1 - p) * c1 + p * c2;
+  const hueProgress = weight > 0 ? (p * c2) / weight : p;
 
   const a = lerp(from.a, to.a, p);
   const premul = (x: number, y: number) =>
     a === 0 ? lerp(x, y, p) : lerp(x * from.a, y * to.a, p) / a;
   return {
     l: premul(from.l, to.l),
-    c: premul(fromGrey ? 0 : from.c, toGrey ? 0 : to.c),
-    h: mod(h1 + delta * p, 360),
+    c: premul(c1, c2),
+    h: mod(from.h + delta * hueProgress, 360),
     a,
   };
 }

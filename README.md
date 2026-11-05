@@ -76,7 +76,7 @@ Goldens are per platform because operating systems rasterise fonts differently. 
 
 ## Fonts
 
-Examples use [Inter](https://rsms.me/inter/) (SIL Open Font License 1.1), bundled through `@fontsource-variable/inter`, so text measures and wraps the same on every machine.
+Examples use [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) (both SIL Open Font License 1.1), bundled through Fontsource, so text measures and wraps the same on every machine.
 
 ## Layout
 

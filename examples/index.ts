@@ -17,7 +17,7 @@ export const exampleDefaults = {
   height: 720,
   fps: 30,
   fontFaces,
-  fonts: [font('display', 64), font('body', 24)],
+  fonts: [font('display', 64), font('body', 24), font('mono', 24)],
 } as const;
 
 /**
