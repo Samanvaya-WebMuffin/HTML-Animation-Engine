@@ -65,6 +65,59 @@ const flight = flyThrough({
   loopDuration: 4,
   fog: { color: colors.ink, near: 300, far: 1500 },
 });
+// The same effects with every optional polish feature turned on.
+const lit = {
+  direction: vec3(-0.4, -0.6, -0.7),
+  specular: { strength: 0.6, shininess: 4, perVertex: true },
+};
+const slabLit = slab3d({
+  id: 'slab',
+  viewport,
+  width: 200,
+  height: 120,
+  depth: 20,
+  face: colors.lime,
+  back: colors.pink,
+  edge: colors.surface,
+  rotation: [
+    { at: 0, value: { rotateX: 0, rotateY: -30, rotateZ: 0 } },
+    { at: 1, value: { rotateX: 0, rotateY: 60, rotateZ: 0 } },
+  ],
+  camera: [{ at: 0, value: orbit(800) }],
+  light: lit,
+  floor: { y: -150, color: colors.ink },
+});
+const pageLit = pageCurl({
+  id: 'page',
+  viewport,
+  camera: { position: vec3(0, -500, 800), target: vec3(0, 0, 0), fov: 40 },
+  width: 260,
+  height: 340,
+  paper: colors.paper,
+  back: colors.muted,
+  ink: colors.ink,
+  shadow: withAlpha(colors.ink, 0.4),
+  contactShadow: withAlpha(colors.ink, 0.3),
+  rest: [{ x: 0, y: 4, blur: 10, color: withAlpha(colors.ink, 0.4) }],
+  corner: 'bottom-right',
+  reach: 100,
+  radius: 30,
+  wobble: 0.1,
+  period: 2,
+});
+const flightDust = flyThrough({
+  id: 'fly',
+  viewport,
+  seed: 1,
+  count: 20,
+  field: { width: 800, height: 500, length: 1600 },
+  clearance: 100,
+  size: [40, 80],
+  palette: [colors.lime, colors.blue],
+  loopDuration: 4,
+  fog: { color: colors.ink, near: 300, far: 1500 },
+  dust: { count: 40, color: colors.paper },
+});
 const ids = (node: Parameters<typeof flattenScene>[0]['world'][number]) =>
   flattenScene({ width: 640, height: 360, world: [node] }).map((item) => item.node.id);
 
@@ -81,6 +134,47 @@ describe('3D effects', () => {
         .map((t) => json(effect(t)))
         .reverse(),
     ).toEqual(times.map((t) => json(effect(t))));
+  });
+
+  it.each([
+    ['slab3d with floor and gloss', slabLit],
+    ['pageCurl with resting and contact shadows', pageLit],
+    ['flyThrough with dust', flightDust],
+  ] as const)('%s is a pure function of t', (_name, effect) => {
+    const times = [0, 0.4, 1.3, 2.2, 3.9];
+    expect(
+      [...times]
+        .reverse()
+        .map((t) => json(effect(t)))
+        .reverse(),
+    ).toEqual(times.map((t) => json(effect(t))));
+  });
+
+  it('the slab floor shadow turns with the slab', () => {
+    const shadowOf = (t: number) =>
+      flattenScene({ width: 640, height: 360, world: [slabLit(t)] })[0]!.node;
+    expect(shadowOf(0).id).toBe('slab-floor-shadow');
+    expect(json(shadowOf(0))).not.toBe(json(shadowOf(1)));
+  });
+
+  it('per-vertex gloss fills broad faces with a gradient', () => {
+    const fills = flattenScene({ width: 640, height: 360, world: [slabLit(0)] }).map(
+      (item) => item.node.type === 'shape' && item.node.fill,
+    );
+    expect(fills.some((fill) => typeof fill === 'object' && fill.type === 'linear')).toBe(true);
+  });
+
+  it('the page rests on soft shadows and its curl adds a contact shadow', () => {
+    const drawn = ids(pageLit(0.5));
+    expect(drawn[0]).toBe('page-rest');
+    expect(drawn).toContain('page-contact');
+  });
+
+  it('dust streaks loop with the flight and leave the objects unchanged', () => {
+    expect(json(flightDust(4))).toBe(json(flightDust(0)));
+    const [objects, dust] = flightDust(1.5).children;
+    expect(json(objects)).toBe(json(flight(1.5)));
+    expect(dust?.type === 'group' && dust.children.length).toBeGreaterThan(5);
   });
 
   it('shows the slab front plate only while the front faces the camera', () => {

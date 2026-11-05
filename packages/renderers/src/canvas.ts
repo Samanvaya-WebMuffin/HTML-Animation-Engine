@@ -2,8 +2,12 @@ import {
   flattenScene,
   fontString,
   geometryToPath,
+  shadowList,
   type Geometry,
   type Matrix,
+  type Paint,
+  type Shadow,
+  type Stroke,
   type Scene,
   type ShapeNode,
   type TextNode,
@@ -54,46 +58,82 @@ export function createCanvasRenderer(host: HTMLElement, options: RendererOptions
       pixelRatio * m[5],
     );
 
-  const drawShape = (node: ShapeNode, matrix: Matrix, opacity: number) => {
-    const path = path2d(node.geometry);
-    if (node.shadow && node.fill) {
+  const paint = (fill: Paint): string | CanvasGradient => {
+    if (typeof fill === 'string') return fill;
+    const gradient =
+      fill.type === 'linear'
+        ? context.createLinearGradient(fill.x1, fill.y1, fill.x2, fill.y2)
+        : context.createRadialGradient(fill.cx, fill.cy, 0, fill.cx, fill.cy, fill.r);
+    for (const stop of fill.stops) gradient.addColorStop(clampOffset(stop.offset), stop.color);
+    return gradient;
+  };
+
+  /** Draws `draw` once per shadow: offset, blurred, in the shadow colour. */
+  const drawShadows = (
+    shadows: readonly Shadow[],
+    matrix: Matrix,
+    opacity: number,
+    draw: (color: string) => void,
+  ) => {
+    for (const shadow of shadows) {
       context.save();
-      context.translate(node.shadow.x, node.shadow.y);
-      if (node.shadow.blur) {
-        context.filter = `blur(${(node.shadow.blur / 2) * matrixScale(matrix) * pixelRatio}px)`;
+      context.translate(shadow.x, shadow.y);
+      if (shadow.blur) {
+        context.filter = `blur(${(shadow.blur / 2) * matrixScale(matrix) * pixelRatio}px)`;
       }
       context.globalAlpha = opacity;
-      context.fillStyle = node.shadow.color;
-      context.fill(path);
+      draw(shadow.color);
       context.restore();
     }
+  };
+
+  const setStroke = (stroke: Stroke, color: string) => {
+    context.strokeStyle = color;
+    context.lineWidth = stroke.width;
+    context.lineCap = stroke.cap ?? 'butt';
+    context.lineJoin = stroke.join ?? 'miter';
+    context.setLineDash(stroke.dash ? [...stroke.dash] : []);
+    context.lineDashOffset = stroke.dashOffset ?? 0;
+  };
+
+  const drawShape = (node: ShapeNode, matrix: Matrix, opacity: number) => {
+    const path = path2d(node.geometry);
+    const stroke = node.stroke && node.stroke.width > 0 ? node.stroke : undefined;
+    // A shadow is a copy of everything the shape paints: fill and stroke.
+    drawShadows(shadowList(node.shadow), matrix, opacity, (color) => {
+      if (node.fill) {
+        context.fillStyle = color;
+        context.fill(path);
+      }
+      if (stroke) {
+        setStroke(stroke, color);
+        context.stroke(path);
+      }
+    });
+    context.globalAlpha = opacity;
     if (node.fill) {
-      context.globalAlpha = opacity;
-      context.fillStyle = node.fill;
+      context.fillStyle = paint(node.fill);
       context.fill(path);
     }
-    if (node.stroke && node.stroke.width > 0) {
-      const { stroke } = node;
-      context.globalAlpha = opacity;
-      context.strokeStyle = stroke.color;
-      context.lineWidth = stroke.width;
-      context.lineCap = stroke.cap ?? 'butt';
-      context.lineJoin = stroke.join ?? 'miter';
-      context.setLineDash(stroke.dash ? [...stroke.dash] : []);
-      context.lineDashOffset = stroke.dashOffset ?? 0;
+    if (stroke) {
+      setStroke(stroke, stroke.color);
       context.stroke(path);
     }
   };
 
-  const drawText = (node: TextNode, opacity: number) => {
+  const drawText = (node: TextNode, matrix: Matrix, opacity: number) => {
     const { layout, baseline } = text.layout(node);
-    context.globalAlpha = opacity;
     context.font = fontString(node.font);
     context.letterSpacing = `${node.font.letterSpacing ?? 0}px`;
-    context.fillStyle = node.fill ?? '#000';
     context.textBaseline = 'alphabetic';
     context.textAlign = 'left';
-    for (const line of layout.lines) context.fillText(line.text, line.x, line.y + baseline);
+    const lines = (color: string) => {
+      context.fillStyle = color;
+      for (const line of layout.lines) context.fillText(line.text, line.x, line.y + baseline);
+    };
+    drawShadows(shadowList(node.shadow), matrix, opacity, lines);
+    context.globalAlpha = opacity;
+    lines(node.fill ?? '#000');
   };
 
   return {
@@ -116,7 +156,7 @@ export function createCanvasRenderer(host: HTMLElement, options: RendererOptions
         }
         setMatrix(item.matrix);
         if (item.node.type === 'shape') drawShape(item.node, item.matrix, item.opacity);
-        else drawText(item.node, item.opacity);
+        else drawText(item.node, item.matrix, item.opacity);
         context.restore();
       }
     },
@@ -124,4 +164,8 @@ export function createCanvasRenderer(host: HTMLElement, options: RendererOptions
       canvas.remove();
     },
   };
+}
+
+function clampOffset(offset: number): number {
+  return Math.min(Math.max(offset, 0), 1);
 }

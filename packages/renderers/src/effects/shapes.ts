@@ -14,9 +14,12 @@ import {
   type Ease,
   type Geometry,
   type GroupNode,
+  type MorphFrame,
   type MorphKey,
+  type Paint,
   type SceneNode,
   type Shadow,
+  type Shadows,
   type ShapeNode,
   type Stroke,
 } from '@html-animation-engine/core';
@@ -29,7 +32,10 @@ export interface ShapeMorphOptions {
   readonly x: number;
   readonly y: number;
   readonly stroke?: Stroke;
-  readonly shadow?: Shadow;
+  /** Shadows, fixed or derived from the current form (e.g. a glow in its colour). */
+  readonly shadow?: Shadows | ((form: MorphFrame) => Shadows);
+  /** Turns the current form's colour into a paint (e.g. a lit gradient). Default: the solid colour. */
+  readonly paint?: (form: MorphFrame) => Paint;
   readonly samples?: number;
 }
 
@@ -38,11 +44,13 @@ export function shapeMorph(options: ShapeMorphOptions): (t: number) => ShapeNode
   const track = morph(options.keys, options.samples ? { samples: options.samples } : {});
   return (t) => {
     const form = track.at(t);
+    const fill = form.fill === undefined ? undefined : (options.paint?.(form) ?? form.fill);
+    const shadow = typeof options.shadow === 'function' ? options.shadow(form) : options.shadow;
     return shapeNode(options.id, {
       geometry: form.geometry,
-      ...(form.fill === undefined ? {} : { fill: form.fill }),
+      ...(fill === undefined ? {} : { fill }),
       ...(options.stroke ? { stroke: options.stroke } : {}),
-      ...(options.shadow ? { shadow: options.shadow } : {}),
+      ...(shadow ? { shadow } : {}),
       opacity: form.opacity,
       transform: { x: options.x, y: options.y, rotation: form.rotation },
     });
@@ -59,6 +67,8 @@ export interface PathDrawOptions extends Timing {
   readonly x?: number;
   readonly y?: number;
   readonly scale?: number;
+  /** Shadows or glows; they follow the drawn part of the stroke. */
+  readonly shadow?: Shadows;
 }
 
 /** Draws a path's stroke from start to end (animated stroke-dashoffset). */
@@ -80,6 +90,7 @@ export function pathDraw(options: PathDrawOptions): (t: number) => ShapeNode {
         dash: [length, length],
         dashOffset: length * (1 - p),
       },
+      ...(options.shadow ? { shadow: options.shadow } : {}),
       transform: { x: options.x ?? 0, y: options.y ?? 0, scale: options.scale ?? 1 },
     });
   };
@@ -104,6 +115,19 @@ export interface StaggerGridOptions {
   /** `'center'` ripples out radially; `'random'` uses `seed`. Default `'start'`. */
   readonly from?: 'start' | 'end' | 'center' | 'random';
   readonly seed?: number | string;
+  /** Turns a tile colour into a paint, in the tile's local space (centred on 0, 0). */
+  readonly paint?: (color: string) => Paint;
+  /** Each tile's shadows, given its eased entrance progress `p` (0 → 1). */
+  readonly shadow?: (p: number) => Shadows;
+  /**
+   * Extra node drawn over a tile, in the tile's local space (moving and
+   * scaling with it), e.g. a light sweep. `x`/`y` is the tile's resting centre.
+   */
+  readonly overlay?: (
+    index: number,
+    t: number,
+    tile: { readonly x: number; readonly y: number },
+  ) => SceneNode | null;
 }
 
 /** A grid of tiles that pop in one after another. */
@@ -129,6 +153,7 @@ export function staggerGrid(options: StaggerGridOptions): (t: number) => GroupNo
       color: options.colors[i % options.colors.length] ?? '',
     };
   });
+  const paints = tiles.map((tile) => options.paint?.(tile.color) ?? tile.color);
   return (t) =>
     groupNode(
       id,
@@ -139,13 +164,26 @@ export function staggerGrid(options: StaggerGridOptions): (t: number) => GroupNo
           options.duration,
           options.ease ?? linear,
         );
-        return shapeNode(`${id}-${i}`, {
+        const transform = { x: tile.x, y: tile.y, scale: p, rotation: lerp(-45, 0, clamp(p)) };
+        const body = shapeNode(`${id}-${i}`, {
           geometry: rect(0, 0, cell, cell, options.radius ?? 0),
-          fill: tile.color,
+          fill: paints[i] ?? tile.color,
+          ...(options.shadow && p > 0 ? { shadow: options.shadow(p) } : {}),
           opacity: clamp(p * 3),
           visible: p > 0,
-          transform: { x: tile.x, y: tile.y, scale: p, rotation: lerp(-45, 0, clamp(p)) },
+          transform,
         });
+        const extra = p > 0 ? options.overlay?.(i, t, tile) : null;
+        if (!extra) return body;
+        // The overlay rides on the tile: same transform and fade.
+        return groupNode(
+          `${id}-${i}-tile`,
+          [{ ...body, transform: undefined, opacity: 1 }, extra],
+          {
+            opacity: clamp(p * 3),
+            transform,
+          },
+        );
       }),
     );
 }
@@ -153,7 +191,7 @@ export function staggerGrid(options: StaggerGridOptions): (t: number) => GroupNo
 export interface LandingOptions extends Timing {
   readonly id: string;
   readonly geometry: Geometry;
-  readonly fill: string;
+  readonly fill: Paint;
   readonly shadowColor: string;
   /** Final position of the element's origin. */
   readonly x: number;
@@ -164,8 +202,13 @@ export interface LandingOptions extends Timing {
   readonly drop?: number;
   /** Scale at the start (lifted towards the viewer). Default 1.12. */
   readonly lift?: number;
+  /**
+   * Soft shadows beneath the hard one, given the height above the resting
+   * place (1 at the start, 0 once landed), e.g. a stacked elevation shadow.
+   */
+  readonly ambient?: (height: number) => readonly Shadow[];
   /** Extra nodes that ride on the element (e.g. a label), in its local space. */
-  readonly content?: readonly SceneNode[];
+  readonly content?: readonly SceneNode[] | ((t: number) => readonly SceneNode[]);
 }
 
 /**
@@ -184,13 +227,16 @@ export function landingShadow(options: LandingOptions): (t: number) => GroupNode
         shapeNode(`${options.id}-body`, {
           geometry: options.geometry,
           fill: options.fill,
-          shadow: {
-            x: options.shadow.x * shadow,
-            y: options.shadow.y * shadow,
-            color: options.shadowColor,
-          },
+          shadow: [
+            ...(options.ambient?.(clamp(1 - p, 0, 1)) ?? []),
+            {
+              x: options.shadow.x * shadow,
+              y: options.shadow.y * shadow,
+              color: options.shadowColor,
+            },
+          ],
         }),
-        ...(options.content ?? []),
+        ...(typeof options.content === 'function' ? options.content(t) : (options.content ?? [])),
       ],
       {
         opacity: clamp(p * 4),

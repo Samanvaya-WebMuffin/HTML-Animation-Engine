@@ -61,6 +61,8 @@ describe('encodeArgs', () => {
     const filters = args[args.indexOf('-vf') + 1] ?? '';
     expect(filters).toContain('out_color_matrix=bt709');
     expect(filters).toContain('format=yuv420p');
+    // Dithered down from 16 bits, so gradients don't band.
+    expect(filters).toMatch(/format=gbrp16le,scale=[^,]*sws_dither=ed/);
     expect(filters).toContain(
       'setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv',
     );

@@ -13,6 +13,7 @@ import {
   length3,
   lerpOrbit,
   orbitCamera,
+  parseColor,
   plane,
   polygonNormal,
   projectPoint,
@@ -157,6 +158,50 @@ describe('projectSpace', () => {
       VIEW,
     ).children;
     expect((face as { fill?: string }).fill).toBe(shadeColor('#000000', 0.55 + 0.55 * 0.35));
+  });
+
+  it('adds a specular highlight and rim light only when asked', () => {
+    const plain = projectSpace('s', space, VIEW).children.map((c) => (c as { fill?: string }).fill);
+    const glossy = projectSpace(
+      's',
+      {
+        ...space,
+        light: {
+          direction: vec3(-0.35, -0.6, -0.7),
+          specular: { strength: 0.8, shininess: 4 },
+          rim: { strength: 0.5 },
+        },
+      },
+      VIEW,
+    ).children.map((c) => (c as { fill?: string }).fill);
+    expect(glossy).toHaveLength(plain.length);
+    expect(glossy).not.toEqual(plain);
+    const lightness = (c: string | undefined) => {
+      const { r, g, b } = parseColor(c ?? '#000');
+      return r + g + b;
+    };
+    // Highlights only ever lighten (towards white).
+    glossy.forEach((fill, i) =>
+      expect(lightness(fill)).toBeGreaterThanOrEqual(lightness(plain[i]) - 0.01),
+    );
+  });
+
+  it('per-vertex specular fills a face with a gradient from its brightest corner', () => {
+    const [face] = projectSpace(
+      's',
+      {
+        camera: orbitCamera({ target: vec3(0, 0, 0), distance: 400, azimuth: 0, elevation: 0 }),
+        objects: [{ id: 'p', mesh: plane(600, 600, 1, 1, '#3d7cff') }],
+        light: {
+          direction: vec3(0.5, -0.5, -1),
+          specular: { strength: 0.6, shininess: 8, perVertex: true },
+        },
+      },
+      VIEW,
+    ).children;
+    const fill = (face as { fill?: unknown }).fill as { type: string; stops: unknown[] };
+    expect(fill.type).toBe('linear');
+    expect(fill.stops).toHaveLength(2);
   });
 
   it('is a pure function of its input', () => {

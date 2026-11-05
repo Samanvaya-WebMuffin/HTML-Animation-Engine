@@ -217,6 +217,68 @@ const effects: [string, (t: number) => unknown][] = [
     'pushIn',
     pushIn({ width: 100, height: 100, target: { x: 20, y: 20 }, zoom: 2, start: 0, duration: 1 }),
   ],
+  [
+    'particleBurst (lit streaks)',
+    particleBurst({
+      id: 'pl',
+      seed: 1,
+      x: 0,
+      y: 0,
+      start: 0,
+      count: 20,
+      colors: [colors.pink],
+      speed: [100, 200],
+      light: { core: colors.paper },
+    }),
+  ],
+  [
+    'confetti (lit)',
+    confetti({
+      id: 'cfl',
+      seed: 2,
+      x: 0,
+      y: 0,
+      start: 0,
+      count: 20,
+      colors: [colors.pink],
+      speed: [100, 200],
+      light: { core: colors.paper, shade: colors.ink },
+    }),
+  ],
+  [
+    'dotGrid (glow)',
+    dotGrid({
+      id: 'dg',
+      x: 0,
+      y: 0,
+      cols: 5,
+      rows: 4,
+      spacing: 10,
+      radius: 2,
+      color: colors.surface,
+      accent: colors.lime,
+      wavelength: 40,
+      period: 2,
+      glow: 6,
+    }),
+  ],
+  [
+    'nodeGraph (glow, depth)',
+    nodeGraph({
+      id: 'gg',
+      seed: 3,
+      count: 12,
+      bounds: { x: 0, y: 0, width: 200, height: 100 },
+      loopDuration: 4,
+      drift: 10,
+      linkDistance: 80,
+      nodeRadius: 2,
+      nodeColor: colors.blue,
+      linkColor: colors.violet,
+      glow: { core: colors.paper },
+      depth: 0.6,
+    }),
+  ],
 ];
 
 describe('every effect', () => {
@@ -228,6 +290,41 @@ describe('every effect', () => {
       .map((t) => json(effect(t)))
       .reverse();
     expect(backward).toEqual(forward);
+  });
+});
+
+describe('looping effects with light options', () => {
+  it('loop seamlessly', () => {
+    const grid = dotGrid({
+      id: 'dg',
+      x: 0,
+      y: 0,
+      cols: 5,
+      rows: 4,
+      spacing: 10,
+      radius: 2,
+      color: colors.surface,
+      accent: colors.lime,
+      wavelength: 40,
+      period: 2,
+      glow: 6,
+    });
+    expect(json(grid(2))).toEqual(json(grid(0)));
+    const graph = nodeGraph({
+      id: 'gg',
+      seed: 3,
+      count: 12,
+      bounds: { x: 0, y: 0, width: 200, height: 100 },
+      loopDuration: 4,
+      drift: 10,
+      linkDistance: 80,
+      nodeRadius: 2,
+      nodeColor: colors.blue,
+      linkColor: colors.violet,
+      glow: { core: colors.paper },
+      depth: 0.6,
+    });
+    expect(json(graph(4))).toEqual(json(graph(0)));
   });
 });
 
@@ -396,11 +493,36 @@ describe('effect behaviour', () => {
       duration: 1,
       content: [textNode('label', { text: 'hi', font, fill: colors.ink })],
     });
-    const shadowAt = (t: number) => (land(t).children[0] as { shadow: { x: number } }).shadow.x;
+    // The hard shadow is the last (topmost) in the list, above any ambient layers.
+    const shadowAt = (t: number) =>
+      (land(t).children[0] as { shadow: readonly { x: number }[] }).shadow.at(-1)?.x;
     expect(shadowAt(0)).toBe(0);
     expect(shadowAt(1)).toBe(10);
     expect(land(1).transform).toMatchObject({ y: 0, scale: 1 });
     expect(land(1).children).toHaveLength(2);
+  });
+
+  it('the landing ambient shadow is given the height above the resting place', () => {
+    const heights: number[] = [];
+    const land = landingShadow({
+      id: 'l',
+      geometry: rect(0, 0, 50, 50),
+      fill: colors.lime,
+      shadowColor: colors.paper,
+      x: 0,
+      y: 0,
+      shadow: { x: 10, y: 10 },
+      start: 0,
+      duration: 1,
+      ambient: (height) => {
+        heights.push(height);
+        return [{ x: 0, y: 4, blur: 8, color: colors.ink }];
+      },
+    });
+    const shadows = (t: number) => (land(t).children[0] as { shadow: readonly unknown[] }).shadow;
+    expect(shadows(0)).toHaveLength(2);
+    land(1);
+    expect(heights).toEqual([1, 0]);
   });
 
   it('stagger grid tiles finish at full size', () => {

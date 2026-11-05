@@ -3,6 +3,8 @@ export {
   defineTheme,
   type DurationTokens,
   type EasingTokens,
+  type LightingTokens,
+  type ShadowLayer,
   type Theme,
   type TypeToken,
 } from './theme.js';

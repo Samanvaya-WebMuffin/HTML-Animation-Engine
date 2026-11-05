@@ -49,7 +49,7 @@ function paint(ctx: CanvasRenderingContext2D, items: readonly DrawItem[]) {
     ctx.globalAlpha = item.opacity;
     const { node } = item;
     if (node.type === 'shape') {
-      if (node.fill) {
+      if (typeof node.fill === 'string') {
         ctx.fillStyle = node.fill;
         ctx.fill(new Path2D(geometryToPath(node.geometry)));
       }

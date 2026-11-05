@@ -6,7 +6,10 @@ import {
   circle,
   defaultTheme,
   groupNode,
+  linearGradient,
   pathGeometry,
+  radialGradient,
+  withAlpha,
   pill,
   rect,
   registerFontFaces,
@@ -97,7 +100,108 @@ export function scene(): Scene {
   };
 }
 
-export async function mountAll(): Promise<void> {
+/** Lighting features: gradients, stacked shadows, glows and text shadows. */
+export function lightScene(): Scene {
+  return {
+    width: W,
+    height: H,
+    camera: { x: W / 2, y: H / 2, zoom: 1.02, rotation: -1.5 },
+    world: [
+      shapeNode('backdrop', {
+        geometry: rect(W / 2, H / 2, W, H),
+        fill: radialGradient(W / 2, H * 0.4, W * 0.6, [
+          colors.surface,
+          withAlpha(colors.surface, 0.4),
+          colors.ink,
+        ]),
+      }),
+      shapeNode('card', {
+        geometry: rect(150, 130, 200, 130, 22),
+        fill: linearGradient(0, 65, 0, 195, [colors.blue, colors.violet]),
+        shadow: [
+          { x: 0, y: 2, blur: 4, color: withAlpha(colors.ink, 0.6) },
+          { x: 0, y: 18, blur: 36, color: withAlpha(colors.ink, 0.8) },
+        ],
+      }),
+      shapeNode('solid-stack', {
+        geometry: rect(400, 130, 160, 110, 18),
+        fill: colors.lime,
+        shadow: [
+          { x: 0, y: 0, blur: 30, color: withAlpha(colors.lime, 0.6) },
+          { x: 6, y: 6, color: colors.pink },
+        ],
+      }),
+      shapeNode('orb', {
+        geometry: circle(0, 0, 60),
+        fill: radialGradient(-20, -24, 90, [
+          { offset: 0, color: colors.paper },
+          { offset: 0.35, color: colors.pink },
+          { offset: 1, color: withAlpha(colors.violet, 0.9) },
+        ]),
+        shadow: { x: 0, y: 0, blur: 40, color: withAlpha(colors.pink, 0.7) },
+        transform: { x: 640, y: 130, scaleY: 0.8 },
+      }),
+      shapeNode('star-glow', {
+        geometry: pathGeometry(
+          'M0 -50 L12 -16 L48 -15 L19 7 L29 40 L0 20 L-29 40 L-19 7 L-48 -15 L-12 -16 Z',
+        ),
+        fill: linearGradient(-50, -50, 50, 50, [colors.orange, colors.pink]),
+        shadow: [
+          { x: 0, y: 0, blur: 24, color: withAlpha(colors.orange, 0.8) },
+          { x: 0, y: 14, blur: 10, color: withAlpha(colors.ink, 0.7) },
+        ],
+        transform: { x: 140, y: 360, rotation: -12 },
+      }),
+      shapeNode('neon-line', {
+        geometry: pathGeometry('M560 330 C620 260 680 420 760 340'),
+        stroke: { color: colors.lime, width: 6, cap: 'round' },
+        shadow: { x: 0, y: 0, blur: 18, color: withAlpha(colors.lime, 0.9) },
+      }),
+      shapeNode('neon-ring', {
+        geometry: rect(660, 440, 160, 60, 30),
+        fill: withAlpha(colors.blue, 0.25),
+        stroke: { color: colors.blue, width: 4 },
+        shadow: [
+          { x: 0, y: 0, blur: 20, color: colors.blue },
+          { x: 0, y: 10, blur: 6, color: withAlpha(colors.ink, 0.8) },
+        ],
+      }),
+      // A zero-height line and a tiny dot with a wide glow: the glow must not be clipped.
+      shapeNode('neon-rule', {
+        geometry: pathGeometry('M300 470 H520'),
+        stroke: { color: colors.pink, width: 10, cap: 'round' },
+        shadow: [
+          { x: 0, y: 0, blur: 12, color: colors.pink },
+          { x: 0, y: 0, blur: 12, color: colors.pink },
+        ],
+      }),
+      shapeNode('spark', {
+        geometry: circle(250, 430, 8),
+        fill: colors.paper,
+        shadow: [
+          { x: 0, y: 0, blur: 24, color: colors.orange },
+          { x: 0, y: 0, blur: 24, color: colors.orange },
+          { x: 0, y: 0, blur: 24, color: colors.orange },
+        ],
+      }),
+      textNode('glow-title', {
+        text: 'Light and\nshadow',
+        font: display,
+        fill: colors.paper,
+        align: 'center',
+        shadow: [
+          { x: 0, y: 0, blur: 24, color: withAlpha(colors.lime, 0.8) },
+          { x: 0, y: 6, blur: 8, color: withAlpha(colors.ink, 0.9) },
+        ],
+        transform: { x: 470, y: 290 },
+      }),
+    ],
+  };
+}
+
+const SCENES = { basic: scene, light: lightScene } as const;
+
+export async function mountAll(which: keyof typeof SCENES = 'basic'): Promise<void> {
   await registerFontFaces(fontFaces);
   await loadFonts([display, body]);
   document.body.style.margin = '0';
@@ -114,7 +218,9 @@ export async function mountAll(): Promise<void> {
       overflow: 'hidden',
     });
     document.body.append(host);
-    createRenderer(kind, host, { width: W, height: H, background: colors.ink }).render(scene());
+    createRenderer(kind, host, { width: W, height: H, background: colors.ink }).render(
+      SCENES[which](),
+    );
   });
 }
 

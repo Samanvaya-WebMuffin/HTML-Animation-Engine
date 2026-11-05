@@ -51,7 +51,7 @@ tests/visual         Playwright tests; goldens in tests/visual/__goldens__/<plat
 | `text/`             | `registerFontFaces`, `loadFonts`, `createCanvasMeasurer`, `layoutText`, `baselineOffset`                                                                |
 | `spatial/`          | 3D: vectors, matrices, perspective `Camera3D`/`orbitCamera`, meshes (`box`, `plane`, `sphere`, `cylinder`, `pyramid`), `curlVertex`, **`projectSpace`** |
 | `safety/`           | `createFlashDetector`: WCAG 2.3.1 flash analysis on RGBA frames                                                                                         |
-| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations                                                        |
+| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations, lighting (shadow colour, elevation, sheen, glow)      |
 
 Conventions the code relies on:
 
@@ -83,9 +83,12 @@ The three renderers draw the same `flattenScene` output and are tested for pixel
 
 - **Text** is laid out once by core `layoutText` (identical line breaks), and the baseline is placed with `baselineOffset` (CSS half-leading model). Letter spacing is applied after every character.
 - **Opacity is per primitive** (fill, stroke, shadow, each text line), as in Canvas, not group opacity.
-- **Shadows** are an offset copy of the shape in local coordinates; `blur` is a Gaussian with σ = blur / 2 (Canvas `filter`, SVG `feGaussianBlur` in sRGB, CSS `blur()`).
+- **Shadows** are an offset copy of everything the node paints (fill and stroke, or text) in local coordinates; `blur` is a Gaussian with σ = blur / 2 (Canvas `filter`, SVG `feGaussianBlur` in sRGB, CSS `blur()`). `shadow` takes one shadow or a list (painted in order beneath the node); a zero offset with a blur is a glow.
+- **Gradients:** a shape's `fill` is a colour or a `linearGradient`/`radialGradient` (core helpers) in the node's local px. Stops must be ascending. For a gradient fading to transparent, fade the same colour's alpha (`withAlpha(c, 0)`), not `transparent`. DOM draws gradient-filled shapes as inline SVG.
 - **Canvas** paints the composition background into the bitmap; DOM/SVG rely on the stage background.
 - **DOM:** rects are `div`s (a centred stroke is a border on an enlarged box), paths and dashed strokes are inline SVG, clips are nested wrappers with `clip-path: path()`.
+
+**Light and shadow** (`effects/light.ts`, tokens in `theme.lighting`; examples import `lighting` from `examples/index.ts`). Light comes from above. `backdrop` (radial lift + vignette + optional coloured light pools; draw it first), `litFill`/`litGradient` (surface lighter at the top, darker at the bottom), `elevationShadows(lighting, 'low' | 'mid' | 'high', { lift, strength })` (contact + key + ambient layers), `glowShadows`, `lightSweep` (a specular band crossing a shape once), `groundShadow` (soft ellipse under floating or 3D objects). Use them for depth and light rather than flat fills; keep glints slow and small (flash safety).
 
 Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`, in 3D `slab3d`, `pageCurl`, `flyThrough`, and as a shader layer `candleFlame`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
 
@@ -188,7 +191,7 @@ How export works (`packages/export`):
 
 - The CLI starts a Vite server for `apps/playground` and drives `capture.html` (isolated frames) in headless Chromium, with the viewport at the composition's size and `deviceScaleFactor` = output scale. DOM and SVG rasterise natively at 4K, and canvases and shaders render at `scale` × size; nothing is upscaled.
 - Each frame is captured as PNG through the DevTools protocol (`optimizeForSpeed`, lossless) and **piped** into ffmpeg; no frames touch the disk.
-- Encoding: libx264, 8-bit 4:2:0, the Rec. 709 matrix in limited range, Rec. 709 tags set with `setparams` (ffmpeg 9 ignores `-color_primaries`/`-color_trc` here), `+faststart`. Output goes to `<out>.partial-<pid>` and is renamed only when ffmpeg exits 0; failures leave nothing behind.
+- Encoding: libx264, 8-bit 4:2:0, the Rec. 709 matrix in limited range (converted through 16 bits with error-diffusion dither, so dark gradients don't band), Rec. 709 tags set with `setparams` (ffmpeg 9 ignores `-color_primaries`/`-color_trc` here), `+faststart`. Output goes to `<out>.partial-<pid>` and is renamed only when ffmpeg exits 0; failures leave nothing behind.
 - Colour accuracy: capture is exact (PNG stills match theme hex values); the MP4 is within ±1–2 levels, normal for 8-bit 4:2:0.
 - Speed on an M-series Mac at 4K: DOM/SVG/Canvas examples run at 15–30 fps; the WebGL flame at about 3 fps, because headless WebGL runs on SwiftShader (CPU), which is what keeps it deterministic.
 - Deferred (see Current scope): segmented or parallel encoding (not needed: x264 already uses every core, and capture is ~10–30 ms a frame), other formats, and the audio synth.

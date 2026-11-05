@@ -6,6 +6,7 @@ import {
   IDENTITY,
   invert,
   multiply,
+  shadowList,
   type DrawItem,
   type Matrix,
   type Scene,
@@ -14,7 +15,15 @@ import {
 } from '@html-animation-engine/core';
 import { fixed, matrixString, type Renderer, type RendererOptions } from './renderer.js';
 import { Slots } from './slots.js';
-import { createSvgShadow, SVG_NS, updateSvgShape, type SvgShapeParts } from './svg.js';
+import {
+  createSvgShapeParts,
+  paints,
+  shadowSignature,
+  shapeSignature,
+  SVG_NS,
+  updateSvgShape,
+  type SvgShapeParts,
+} from './svg.js';
 import { TextLayouter } from './text.js';
 
 let instances = 0;
@@ -27,16 +36,19 @@ interface DomSlot {
   readonly mode: Mode;
   readonly wrappers: HTMLElement[];
   readonly content: HTMLElement;
-  readonly shadowBox?: HTMLElement;
+  readonly shadowBoxes: HTMLElement[];
   readonly box?: HTMLElement;
   readonly svgParts?: SvgShapeParts;
   readonly lines: HTMLElement[];
+  /** One set of line copies per text shadow. */
+  readonly lineShadows: HTMLElement[][];
 }
 
 function modeOf(node: ShapeNode | TextNode): Mode {
   if (node.type === 'text') return 'text';
   const dashed = Boolean(node.stroke?.dash?.length);
-  return node.geometry.kind === 'rect' && !dashed ? 'rect' : 'svg';
+  const gradient = node.fill !== undefined && typeof node.fill !== 'string';
+  return node.geometry.kind === 'rect' && !dashed && !gradient ? 'rect' : 'svg';
 }
 
 /**
@@ -76,12 +88,8 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
     const { node } = item;
     const extra =
       node.type === 'text'
-        ? text.layout(node).layout.lines.length
-        : node.shadow && node.fill
-          ? node.shadow.blur
-            ? 'blur'
-            : 'hard'
-          : 'none';
+        ? `${text.layout(node).layout.lines.length}|${shadowSignature(node.shadow)}`
+        : shapeSignature(node);
     return `${modeOf(node)}|${item.clips.length}|${extra}`;
   };
 
@@ -105,28 +113,33 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
       mode,
       wrappers,
       content,
+      shadowBoxes: [],
       lines: [],
+      lineShadows: [],
     };
 
     if (node.type === 'text') {
-      const lines = text.layout(node).layout.lines.map(() => {
-        const line = positioned();
-        line.style.whiteSpace = 'pre';
-        content.append(line);
-        return line;
-      });
-      return { ...base, lines };
+      const count = text.layout(node).layout.lines.length;
+      const makeLines = () =>
+        Array.from({ length: count }, () => {
+          const line = positioned();
+          line.style.whiteSpace = 'pre';
+          content.append(line);
+          return line;
+        });
+      const lineShadows = shadowList(node.shadow).map(makeLines);
+      return { ...base, lines: makeLines(), lineShadows };
     }
     if (mode === 'rect') {
-      let shadowBox: HTMLElement | undefined;
-      if (node.shadow && node.fill) {
-        shadowBox = positioned();
+      const shadowBoxes = (paints(node) ? shadowList(node.shadow) : []).map(() => {
+        const shadowBox = positioned();
         content.append(shadowBox);
-      }
+        return shadowBox;
+      });
       const box = positioned();
       box.style.boxSizing = 'border-box';
       content.append(box);
-      return { ...base, box, ...(shadowBox ? { shadowBox } : {}) };
+      return { ...base, box, shadowBoxes };
     }
     const svg = doc.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('width', String(width));
@@ -134,16 +147,12 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
     Object.assign(svg.style, { position: 'absolute', left: '0', top: '0', overflow: 'visible' });
     const defs = doc.createElementNS(SVG_NS, 'defs');
     svg.append(defs);
-    let parts: SvgShapeParts = {};
-    if (node.shadow && node.fill) {
-      const shadow = createSvgShadow(doc, defs, `${prefix}-${key}-blur`, Boolean(node.shadow.blur));
-      svg.append(shadow.shadow);
-      parts = { shadow: shadow.shadow, ...(shadow.blur ? { blur: shadow.blur } : {}) };
-    }
-    const shape = doc.createElementNS(SVG_NS, 'path');
-    svg.append(shape);
+    // The defs live inside this slot's own svg, so they go with it.
+    const parts = createSvgShapeParts(doc, defs, `${prefix}-${key}`, node);
+    for (const shadow of parts.shadows) svg.append(shadow.path);
+    svg.append(parts.shape);
     content.append(svg);
-    return { ...base, svgParts: { ...parts, shape } };
+    return { ...base, svgParts: parts };
   };
 
   const updateRect = (slot: DomSlot, node: ShapeNode, local: Matrix, opacity: number) => {
@@ -154,46 +163,60 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
     const r = effectiveRadius(g);
     const sw = node.stroke && node.stroke.width > 0 ? node.stroke.width : 0;
     const transform = matrixString(local);
-    if (slot.shadowBox && node.shadow) {
-      Object.assign(slot.shadowBox.style, {
-        width: `${fixed(w)}px`,
-        height: `${fixed(h)}px`,
-        transform: `${transform} translate(${fixed(g.x - w / 2 + node.shadow.x)}px, ${fixed(g.y - h / 2 + node.shadow.y)}px)`,
-        borderRadius: `${fixed(r)}px`,
-        background: node.shadow.color,
-        filter: node.shadow.blur ? `blur(${fixed(node.shadow.blur / 2)}px)` : 'none',
-        opacity: fixed(opacity),
-      });
-    }
-    Object.assign(slot.box.style, {
+    // Shadows copy the box exactly (fill and border) in the shadow colour.
+    const boxStyle = (dx: number, dy: number, fill: string, border: string) => ({
       width: `${fixed(w + sw)}px`,
       height: `${fixed(h + sw)}px`,
-      transform: `${transform} translate(${fixed(g.x - w / 2 - sw / 2)}px, ${fixed(g.y - h / 2 - sw / 2)}px)`,
+      transform: `${transform} translate(${fixed(g.x - w / 2 - sw / 2 + dx)}px, ${fixed(g.y - h / 2 - sw / 2 + dy)}px)`,
       borderRadius: r > 0 ? `${fixed(r + sw / 2)}px` : '0',
-      background: node.fill ?? 'transparent',
+      background: fill,
       backgroundClip: 'padding-box',
-      border: sw > 0 && node.stroke ? `${fixed(sw)}px solid ${node.stroke.color}` : 'none',
+      border: sw > 0 ? `${fixed(sw)}px solid ${border}` : 'none',
       opacity: fixed(opacity),
     });
+    shadowList(paints(node) ? node.shadow : undefined).forEach((shadow, i) => {
+      const shadowBox = slot.shadowBoxes[i];
+      if (!shadowBox) return;
+      Object.assign(shadowBox.style, {
+        boxSizing: 'border-box',
+        ...boxStyle(shadow.x, shadow.y, node.fill ? shadow.color : 'transparent', shadow.color),
+        filter: shadow.blur ? `blur(${fixed(shadow.blur / 2)}px)` : 'none',
+      });
+    });
+    Object.assign(
+      slot.box.style,
+      boxStyle(
+        0,
+        0,
+        typeof node.fill === 'string' ? node.fill : 'transparent',
+        node.stroke?.color ?? 'transparent',
+      ),
+    );
   };
 
   const updateText = (slot: DomSlot, node: TextNode, local: Matrix, opacity: number) => {
     const { layout } = text.layout(node);
     slot.content.style.transform = matrixString(local);
-    layout.lines.forEach((line, i) => {
-      const element = slot.lines[i];
-      if (!element) return;
-      element.textContent = line.text;
-      Object.assign(element.style, {
-        transform: `translate(${fixed(line.x)}px, ${fixed(line.y)}px)`,
-        font: fontString(node.font),
-        lineHeight: `${fixed(layout.lineHeight)}px`,
-        height: `${fixed(layout.lineHeight)}px`,
-        letterSpacing: `${node.font.letterSpacing ?? 0}px`,
-        color: node.fill ?? '#000',
-        opacity: fixed(opacity),
+    const write = (elements: HTMLElement[], color: string, dx: number, dy: number, blur = 0) =>
+      layout.lines.forEach((line, i) => {
+        const element = elements[i];
+        if (!element) return;
+        element.textContent = line.text;
+        Object.assign(element.style, {
+          transform: `translate(${fixed(line.x + dx)}px, ${fixed(line.y + dy)}px)`,
+          font: fontString(node.font),
+          lineHeight: `${fixed(layout.lineHeight)}px`,
+          height: `${fixed(layout.lineHeight)}px`,
+          letterSpacing: `${node.font.letterSpacing ?? 0}px`,
+          color,
+          filter: blur ? `blur(${fixed(blur / 2)}px)` : 'none',
+          opacity: fixed(opacity),
+        });
       });
+    shadowList(node.shadow).forEach((shadow, i) => {
+      write(slot.lineShadows[i] ?? [], shadow.color, shadow.x, shadow.y, shadow.blur);
     });
+    write(slot.lines, node.fill ?? '#000', 0, 0);
   };
 
   return {

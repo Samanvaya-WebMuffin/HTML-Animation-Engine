@@ -1,6 +1,9 @@
 export { cameraMatrix, defaultCamera, lerpCamera, screenToWorld, worldToScreen } from './camera.js';
 export { flattenScene, transformMatrix, type ClipRegion, type DrawItem } from './flatten.js';
 export {
+  linearGradient,
+  radialGradient,
+  shadowList,
   groupNode,
   shapeNode,
   textNode,
@@ -10,6 +13,12 @@ export {
   type SceneNode,
   type ShapeNode,
   type Shadow,
+  type Shadows,
+  type Gradient,
+  type GradientStop,
+  type LinearGradient,
+  type RadialGradient,
+  type Paint,
   type Stroke,
   type TextNode,
   type Transform,

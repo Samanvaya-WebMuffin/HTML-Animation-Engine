@@ -18,8 +18,8 @@ export interface EncodeOptions {
 
 /**
  * ffmpeg arguments: PNG frames on stdin → H.264 MP4, 8-bit 4:2:0, converted
- * with the Rec. 709 matrix in limited range and tagged as Rec. 709 so players
- * show the colours that were rendered.
+ * with the Rec. 709 matrix in limited range (dithered, so gradients don't
+ * band) and tagged as Rec. 709 so players show the colours that were rendered.
  */
 export function encodeArgs(options: EncodeOptions, target: string): string[] {
   const crf = options.crf ?? 18;
@@ -39,7 +39,11 @@ export function encodeArgs(options: EncodeOptions, target: string): string[] {
     '-vf',
     [
       'pad=ceil(iw/2)*2:ceil(ih/2)*2',
-      'scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int',
+      // Convert through 16 bits and dither (error diffusion) back to 8: mapping
+      // 256 RGB levels straight onto limited-range YUV re-quantises them and
+      // turns smooth dark gradients (backdrops, glows) into visible contour rings.
+      'format=gbrp16le',
+      'scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int:sws_dither=ed',
       'format=yuv420p',
       // Tag the frames so the encoder writes Rec. 709 into the stream.
       'setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv',
@@ -98,11 +102,21 @@ export function startEncoder(options: EncodeOptions): Encoder {
     failure ??= error;
   });
 
+  /** ffmpeg stopped reading (e.g. bad options): report its exit and stderr, not a bare EPIPE. */
+  const earlyExit = async (cause: unknown) => {
+    const [code] = await exited;
+    return new Error(`ffmpeg exited early (exit ${code}):\n${stderr}`, { cause });
+  };
+
   return {
     async write(png) {
-      if (failure) throw failure;
-      if (child.exitCode !== null) throw new Error(`ffmpeg exited early:\n${stderr}`);
-      if (!child.stdin.write(png)) await once(child.stdin, 'drain');
+      try {
+        if (failure) throw failure;
+        if (child.exitCode !== null) throw new Error('ffmpeg is not running');
+        if (!child.stdin.write(png)) await once(child.stdin, 'drain');
+      } catch (error) {
+        throw await earlyExit(error);
+      }
     },
     async finish() {
       child.stdin.end();

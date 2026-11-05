@@ -1,6 +1,22 @@
 export { candleFlame, FLAME_FRAGMENT, type CandleFlameOptions } from './flame.js';
 export { cameraPath, pullBack, pushIn, type CameraMoveOptions } from './camera.js';
 export {
+  backdrop,
+  elevationShadows,
+  glowShadows,
+  groundShadow,
+  lightSweep,
+  litFill,
+  litGradient,
+  type BackdropLight,
+  type BackdropOptions,
+  type Elevation,
+  type ElevationOptions,
+  type GlowOptions,
+  type GroundShadowOptions,
+  type SweepOptions,
+} from './light.js';
+export {
   confetti,
   dotGrid,
   nodeGraph,
@@ -35,10 +51,12 @@ export {
   pageCurl,
   slab3d,
   type Corner,
+  type FlyThroughDust,
   type FlyThroughOptions,
   type PageCurlOptions,
   type Rotation3D,
   type Slab3DOptions,
+  type SlabFloor,
 } from './space.js';
 export {
   counterRoll,

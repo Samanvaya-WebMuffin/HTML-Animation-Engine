@@ -24,6 +24,7 @@ export {
 export {
   circle,
   effectiveRadius,
+  geometryBounds,
   geometryToPath,
   pathGeometry,
   pill,

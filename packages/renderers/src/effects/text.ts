@@ -13,6 +13,7 @@ import {
   type FontSpec,
   type GroupNode,
   type SceneNode,
+  type Shadows,
   type TextMeasurer,
 } from '@html-animation-engine/core';
 import type { Timing } from './reveal.js';
@@ -22,6 +23,8 @@ export interface TypeOnOptions {
   readonly text: string;
   readonly font: FontSpec;
   readonly fill: string;
+  /** Shadows or glows beneath the text. */
+  readonly shadow?: Shadows;
   /** Top-left of the line box. */
   readonly x: number;
   readonly y: number;
@@ -36,6 +39,8 @@ export interface TypeOnOptions {
     readonly width?: number;
     /** Blinks per second once typing has finished (and before it starts). Default 1. */
     readonly blinkRate?: number;
+    /** Shadows or glows beneath the caret. */
+    readonly glow?: Shadows;
   };
   readonly measurer: TextMeasurer;
 }
@@ -66,6 +71,7 @@ export function typeOn(options: TypeOnOptions): (t: number) => GroupNode {
         text: chars.slice(0, count).join(''),
         font,
         fill: options.fill,
+        ...(options.shadow ? { shadow: options.shadow } : {}),
         transform: { x: options.x, y: options.y },
       }),
     ];
@@ -79,6 +85,7 @@ export function typeOn(options: TypeOnOptions): (t: number) => GroupNode {
         shapeNode(`${id}-caret`, {
           geometry: rect(caretX, options.y + lineHeight / 2, width, caretHeight),
           fill: caret.color,
+          ...(caret.glow ? { shadow: caret.glow } : {}),
           opacity: blinkOn ? 1 : 0,
         }),
       );
@@ -102,6 +109,13 @@ export interface CounterOptions extends Timing {
   readonly separator?: string;
   readonly prefix?: string;
   readonly suffix?: string;
+  /** Shadows or glows beneath every character. */
+  readonly shadow?: Shadows;
+  /**
+   * Extra room above and below each digit's clip, px, so glows are not cut
+   * off. With padding, the incoming digit is drawn only while rolling. Default 0.
+   */
+  readonly clipPad?: number;
   readonly measurer: TextMeasurer;
 }
 
@@ -111,6 +125,8 @@ export interface CounterOptions extends Timing {
  */
 export function counterRoll(options: CounterOptions): (t: number) => GroupNode {
   const { id, font, measurer, fill } = options;
+  const shadow = options.shadow ? { shadow: options.shadow } : {};
+  const pad = options.clipPad ?? 0;
   const decimals = options.decimals ?? 0;
   const scale = 10 ** decimals;
   const maxValue = Math.max(Math.abs(options.from), Math.abs(options.to));
@@ -182,6 +198,7 @@ export function counterRoll(options: CounterOptions): (t: number) => GroupNode {
             text: cell.text,
             font,
             fill,
+            ...shadow,
             transform: { x: originX + cell.x, y: options.y },
           }),
         );
@@ -204,6 +221,7 @@ export function counterRoll(options: CounterOptions): (t: number) => GroupNode {
           text: String(d),
           font,
           fill,
+          ...shadow,
           align: 'center',
           transform: { x: digitWidth / 2, y: dy },
         });
@@ -212,11 +230,13 @@ export function counterRoll(options: CounterOptions): (t: number) => GroupNode {
           `${id}-col${cell.place}`,
           [
             digitNode('a', leading ? '' : digit, -offset),
-            digitNode('b', (digit + 1) % 10, lineHeight - offset),
+            ...(pad > 0 && offset === 0
+              ? []
+              : [digitNode('b', (digit + 1) % 10, lineHeight - offset)]),
           ],
           {
             transform: { x: columnX, y: options.y },
-            clip: rect(digitWidth / 2, lineHeight / 2, digitWidth, lineHeight),
+            clip: rect(digitWidth / 2, lineHeight / 2, digitWidth + pad * 2, lineHeight + pad * 2),
           },
         ),
       );
@@ -244,6 +264,8 @@ export interface MarqueeOptions {
    */
   readonly loopDuration?: number;
   readonly direction?: 'left' | 'right';
+  /** Shadows or glows beneath the text. */
+  readonly shadow?: Shadows;
   readonly measurer: TextMeasurer;
 }
 
@@ -269,6 +291,7 @@ export function marquee(options: MarqueeOptions): (t: number) => GroupNode {
           text: options.text,
           font,
           fill,
+          ...(options.shadow ? { shadow: options.shadow } : {}),
           transform: { x: offset + i * unit, y: options.y },
         }),
       ),

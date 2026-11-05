@@ -27,6 +27,10 @@ for (const name of exampleNames()) {
         await renderAt(page, t);
         await expect(page).toHaveScreenshot(`${name}-${t}.png`, {
           clip: { x: 0, y: 0, width: info.width, height: info.height },
+          // Frames are deterministic per platform, so the per-pixel colour
+          // tolerance is tight: Playwright's default (0.2) let subtle changes
+          // such as a new backdrop gradient or a soft shadow pass unnoticed.
+          threshold: 0.05,
           maxDiffPixelRatio: 0.002,
         });
       }

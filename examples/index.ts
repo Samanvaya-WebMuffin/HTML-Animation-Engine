@@ -6,6 +6,9 @@ export { fontFaces };
 /** The theme every example uses. Import tokens from here; never hard-code colours. */
 export const theme = defaultTheme;
 
+/** The theme's light and shadow tokens (always present in the default theme). */
+export const lighting = theme.lighting;
+
 /** A theme type token at a given size. */
 export function font(token: keyof typeof theme.type, size: number): FontSpec {
   return { ...theme.type[token], size };

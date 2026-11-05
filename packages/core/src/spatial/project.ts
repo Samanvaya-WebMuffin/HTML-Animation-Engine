@@ -1,19 +1,37 @@
 import { mixColors, oklchToRgb, parseColor, rgbToOklch, formatColor } from '../color/color.js';
 import { pathGeometry } from '../geometry/shape.js';
+import type { Point } from '../tween.js';
 import { polygonPath } from '../geometry/path.js';
 import { clamp, lerp } from '../math.js';
-import { groupNode, shapeNode, type GroupNode, type SceneNode } from '../scene/nodes.js';
+import {
+  groupNode,
+  linearGradient,
+  shapeNode,
+  type GroupNode,
+  type Paint,
+  type SceneNode,
+} from '../scene/nodes.js';
 import {
   cameraBasis,
   clipNear,
   projectCameraPoint,
+  projectPoint,
   toCameraSpace,
   type Camera3D,
   type Viewport,
 } from './camera.js';
 import type { Mesh } from './mesh.js';
 import { apply3D, transform3DMatrix, type Transform3D } from './transform.js';
-import { centroid3, dot3, normalize3, polygonNormal, scale3, sub3, type Vec3 } from './vec.js';
+import {
+  add3,
+  centroid3,
+  dot3,
+  normalize3,
+  polygonNormal,
+  scale3,
+  sub3,
+  type Vec3,
+} from './vec.js';
 
 export interface Object3D {
   readonly id: string;
@@ -21,11 +39,41 @@ export interface Object3D {
   readonly transform?: Transform3D;
 }
 
+/** A glossy highlight on faces that reflect the light towards the camera (Blinn–Phong). */
+export interface Specular3D {
+  /** Peak mix towards `color`, 0–1. */
+  readonly strength: number;
+  /** Higher is a tighter, more mirror-like highlight. Default 24. */
+  readonly shininess?: number;
+  /** Highlight colour. Default white. */
+  readonly color?: string;
+  /**
+   * Evaluate the highlight at each corner and fill the face with a gradient
+   * from its brightest to its darkest corner, so broad faces show a sweep of
+   * gloss rather than one flat tone. Costs a gradient per face. Default false.
+   */
+  readonly perVertex?: boolean;
+}
+
+/** Rim light: faces seen edge-on brighten (a Fresnel-like edge glint). */
+export interface Rim3D {
+  /** Peak mix towards `color`, 0–1. */
+  readonly strength: number;
+  /** Higher keeps the rim to faces closer to edge-on. Default 3. */
+  readonly power?: number;
+  /** Rim colour. Default white. */
+  readonly color?: string;
+}
+
 export interface Light3D {
   /** Direction the light travels (from the light into the scene). */
   readonly direction: Vec3;
   /** Light on faces turned away from it, 0–1. Default 0.35. */
   readonly ambient?: number;
+  /** Optional glossy highlight. */
+  readonly specular?: Specular3D;
+  /** Optional rim light on faces seen edge-on. */
+  readonly rim?: Rim3D;
 }
 
 export interface Fog3D {
@@ -70,12 +118,31 @@ export function shadeColor(color: string, factor: number): string {
   return shaded;
 }
 
+const mixCache = new Map<string, string>();
+
+/** `mixColors` with the amount rounded to 1/200, memoised (highlights repeat a lot). */
+function mixCached(from: string, to: string, amount: number): string {
+  const p = Math.round(clamp(amount) * 200) / 200;
+  if (p <= 0) return from;
+  const key = `${from}|${to}|${p}`;
+  let mixed = mixCache.get(key);
+  if (mixed === undefined) {
+    mixed = mixColors(from, to, p);
+    if (mixCache.size > 20000) mixCache.clear();
+    mixCache.set(key, mixed);
+  }
+  return mixed;
+}
+
+const WHITE = '#ffffff';
+
 interface ProjectedFace {
   readonly id: string;
   readonly depth: number;
   readonly order: number;
   readonly points: { x: number; y: number }[];
   readonly color: string;
+  readonly fill: Paint;
 }
 
 /**
@@ -115,11 +182,57 @@ export function projectSpace(id: string, space: Space, viewport: Viewport): Grou
         front ? face.color : (face.backColor ?? face.color),
         lerp(0.55, 1.1, ambient + (1 - ambient) * diffuse),
       );
+      const base = color;
+      let gloss: { from: Point; to: Point; bright: number; dim: number } | undefined;
+      if (light.specular || light.rim) {
+        const toCamera = normalize3(sub3(basis.position, center));
+        if (light.specular) {
+          const { specular } = light;
+          const shine = (eye: Vec3) =>
+            specular.strength *
+            Math.max(0, dot3(facing, normalize3(add3(toLight, eye)))) ** (specular.shininess ?? 24);
+          color = mixCached(color, specular.color ?? WHITE, shine(toCamera));
+          if (specular.perVertex && camera.length === points.length) {
+            const corners = points.map((p) => ({
+              amount: shine(normalize3(sub3(basis.position, p))),
+              screen: projectPoint(basis, p),
+            }));
+            const bright = corners.reduce((a, b) => (b.amount > a.amount ? b : a));
+            const dim = corners.reduce((a, b) => (b.amount < a.amount ? b : a));
+            if (bright.screen && dim.screen && bright.amount - dim.amount > 0.01) {
+              gloss = {
+                from: bright.screen,
+                to: dim.screen,
+                bright: bright.amount,
+                dim: dim.amount,
+              };
+            }
+          }
+        }
+        if (light.rim) {
+          const edge = 1 - Math.max(0, dot3(facing, toCamera));
+          const amount = light.rim.strength * edge ** (light.rim.power ?? 3);
+          color = mixCached(color, light.rim.color ?? WHITE, amount);
+        }
+      }
       const depth = centroid3(camera).z;
+      let fogAmount = 0;
       if (space.fog) {
-        const amount = clamp((depth - space.fog.near) / (space.fog.far - space.fog.near));
-        if (amount >= 1) return;
-        if (amount > 0) color = mixColors(color, space.fog.color, amount);
+        fogAmount = clamp((depth - space.fog.near) / (space.fog.far - space.fog.near));
+        if (fogAmount >= 1) return;
+        if (fogAmount > 0) color = mixColors(color, space.fog.color, fogAmount);
+      }
+      let fill: Paint = color;
+      if (gloss && light.specular) {
+        const highlight = light.specular.color ?? WHITE;
+        const finish = (amount: number) => {
+          const lit = mixCached(base, highlight, amount);
+          return space.fog && fogAmount > 0 ? mixColors(lit, space.fog.color, fogAmount) : lit;
+        };
+        fill = linearGradient(gloss.from.x, gloss.from.y, gloss.to.x, gloss.to.y, [
+          finish(gloss.bright),
+          finish(gloss.dim),
+        ]);
       }
       faces.push({
         id: `${id}-${object.id}-${index}`,
@@ -127,6 +240,7 @@ export function projectSpace(id: string, space: Space, viewport: Viewport): Grou
         order: order++,
         points: camera.map((c) => projectCameraPoint(basis, c)),
         color,
+        fill,
       });
     });
   }
@@ -135,7 +249,7 @@ export function projectSpace(id: string, space: Space, viewport: Viewport): Grou
   const nodes: SceneNode[] = faces.map((face) =>
     shapeNode(face.id, {
       geometry: pathGeometry(polygonPath(face.points, 2)),
-      fill: face.color,
+      fill: face.fill,
       ...(seam > 0 ? { stroke: { color: face.color, width: seam, join: 'round' as const } } : {}),
     }),
   );

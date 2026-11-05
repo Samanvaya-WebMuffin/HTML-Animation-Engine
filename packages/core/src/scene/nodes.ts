@@ -26,13 +26,49 @@ export interface Stroke {
   readonly join?: 'miter' | 'round' | 'bevel';
 }
 
-/** Drop shadow; with `blur` 0 it is a hard offset shadow. */
+/** Drop shadow; with `blur` 0 it is a hard offset shadow. With `x = y = 0` and a blur it is a glow. */
 export interface Shadow {
   readonly x: number;
   readonly y: number;
   readonly blur?: number;
   readonly color: string;
 }
+
+/** One or more shadows, painted in order beneath the node (first is lowest). */
+export type Shadows = Shadow | readonly Shadow[];
+
+export interface GradientStop {
+  /** 0–1 along the gradient. */
+  readonly offset: number;
+  readonly color: string;
+}
+
+/** Linear gradient from (x1, y1) to (x2, y2), in the node's local px. */
+export interface LinearGradient {
+  readonly type: 'linear';
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+  readonly stops: readonly GradientStop[];
+}
+
+/**
+ * Circular radial gradient centred on (cx, cy) with radius `r`, in the node's
+ * local px. Scale the node (or a parent group) for an elliptical one.
+ */
+export interface RadialGradient {
+  readonly type: 'radial';
+  readonly cx: number;
+  readonly cy: number;
+  readonly r: number;
+  readonly stops: readonly GradientStop[];
+}
+
+export type Gradient = LinearGradient | RadialGradient;
+
+/** A solid CSS colour or a gradient. */
+export type Paint = string | Gradient;
 
 interface NodeBase {
   /** Unique within the scene; renderers use it to reuse elements between frames. */
@@ -55,9 +91,10 @@ export interface GroupNode extends NodeBase {
 export interface ShapeNode extends NodeBase {
   readonly type: 'shape';
   readonly geometry: Geometry;
-  readonly fill?: string;
+  readonly fill?: Paint;
   readonly stroke?: Stroke;
-  readonly shadow?: Shadow;
+  /** Drawn only when the shape has a fill. */
+  readonly shadow?: Shadows;
 }
 
 /**
@@ -69,6 +106,8 @@ export interface TextNode extends NodeBase {
   readonly text: string;
   readonly font: FontSpec;
   readonly fill?: string;
+  /** Shadows or glows beneath the text, in the text's own shape. */
+  readonly shadow?: Shadows;
   readonly align?: 'left' | 'center' | 'right';
   /** Wrap width in px. Default: no wrapping. */
   readonly maxWidth?: number;
@@ -113,4 +152,43 @@ export function shapeNode(id: string, props: Props<ShapeNode>): ShapeNode {
 
 export function textNode(id: string, props: Props<TextNode>): TextNode {
   return { id, type: 'text', ...props };
+}
+
+/** A node's shadows as a list (empty when it has none). */
+export function shadowList(shadow: Shadows | undefined): readonly Shadow[] {
+  if (!shadow) return [];
+  return isShadowArray(shadow) ? shadow : [shadow];
+}
+
+function isShadowArray(shadow: Shadows): shadow is readonly Shadow[] {
+  return Array.isArray(shadow);
+}
+
+/** Linear gradient helper. */
+export function linearGradient(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  stops: readonly GradientStop[] | readonly string[],
+): LinearGradient {
+  return { type: 'linear', x1, y1, x2, y2, stops: toStops(stops) };
+}
+
+/** Radial gradient helper. */
+export function radialGradient(
+  cx: number,
+  cy: number,
+  r: number,
+  stops: readonly GradientStop[] | readonly string[],
+): RadialGradient {
+  return { type: 'radial', cx, cy, r, stops: toStops(stops) };
+}
+
+function toStops(stops: readonly GradientStop[] | readonly string[]): readonly GradientStop[] {
+  return stops.map((stop, i) =>
+    typeof stop === 'string'
+      ? { offset: stops.length > 1 ? i / (stops.length - 1) : 0, color: stop }
+      : stop,
+  );
 }

@@ -30,12 +30,45 @@ export interface DurationTokens {
   readonly [name: string]: number;
 }
 
+/** One layer of a shadow stack: offset straight down by `y`, blurred, at `alpha` of the shadow colour. */
+export interface ShadowLayer {
+  readonly y: number;
+  readonly blur: number;
+  readonly alpha: number;
+}
+
+/**
+ * Light and shadow tokens. Light comes from above: lit surfaces are lighter
+ * at the top, shadows fall straight down.
+ */
+export interface LightingTokens {
+  /** Colour shadows are cast in. */
+  readonly shadow: string;
+  /** Colour of highlights, sheens and specular sweeps. */
+  readonly highlight: string;
+  /** Shadow stacks by height above the surface (contact, key and ambient layers). */
+  readonly elevation: {
+    readonly low: readonly ShadowLayer[];
+    readonly mid: readonly ShadowLayer[];
+    readonly high: readonly ShadowLayer[];
+  };
+  /** How far the top of a lit surface moves toward `highlight` (OKLCH mix, 0–1). */
+  readonly sheen: number;
+  /** How far the bottom of a lit surface moves toward `shadow` (OKLCH mix, 0–1). */
+  readonly shade: number;
+  /** Opacity of coloured glows. */
+  readonly glow: number;
+  /** Backdrop: the lifted centre and the darker (vignetted) edge. */
+  readonly backdrop: { readonly centre: string; readonly edge: string };
+}
+
 export interface Theme {
   readonly name: string;
   readonly colors: Readonly<Record<string, string>>;
   readonly type: Readonly<Record<string, TypeToken>>;
   readonly easing: EasingTokens;
   readonly durations: DurationTokens;
+  readonly lighting?: LightingTokens;
 }
 
 /** Identity helper that keeps the theme's literal keys in its type. */

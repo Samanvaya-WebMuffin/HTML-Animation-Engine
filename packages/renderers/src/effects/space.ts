@@ -16,6 +16,7 @@ import {
   orbitCamera,
   pathGeometry,
   polygonPath,
+  projectCameraPoint,
   projectPoint,
   projectSpace,
   pyramid,
@@ -27,6 +28,7 @@ import {
   sub3,
   toCameraSpace,
   vec3,
+  withAlpha,
   type Camera3D,
   type Ease,
   type Face,
@@ -37,6 +39,7 @@ import {
   type Object3D,
   type OrbitOptions,
   type Point,
+  type Shadow,
   type Vec3,
   type Viewport,
 } from '@html-animation-engine/core';
@@ -64,6 +67,50 @@ export interface Slab3DOptions {
   /** Orbit-camera keyframes; distance changes are the zoom ins and outs. */
   readonly camera: readonly { at: number; value: OrbitOptions; ease?: Ease }[];
   readonly light?: Light3D;
+  /**
+   * A floor at height `y` (below the slab) that receives a soft shadow from
+   * light straight above: the slab's footprint, so it turns and stretches
+   * with the slab. Not drawn itself.
+   */
+  readonly floor?: SlabFloor;
+}
+
+export interface SlabFloor {
+  /** Floor height in world units (negative is below the slab's centre). */
+  readonly y: number;
+  /** Shadow colour, usually translucent. */
+  readonly color: string;
+  /** Blur in world units for the soft outer shadow. Default 70. */
+  readonly softness?: number;
+  /**
+   * Minimum front-to-back depth of the shadow, as a fraction of its width.
+   * Light is never a perfect point overhead, so even an upright slab casts
+   * some pool of shadow. Default 0.35.
+   */
+  readonly minDepth?: number;
+}
+
+/** Convex hull of 2D points (monotone chain), counter-clockwise. */
+function convexHull(points: readonly Point[]): Point[] {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (sorted.length < 3) return sorted;
+  const cross = (o: Point, a: Point, b: Point) =>
+    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const chain = (points: readonly Point[]) => {
+    const out: Point[] = [];
+    for (const p of points) {
+      while (out.length >= 2) {
+        const [a, b] = [out[out.length - 2] as Point, out[out.length - 1] as Point];
+        if (cross(a, b, p) > 0) break;
+        out.pop();
+      }
+      out.push(p);
+    }
+    return out;
+  };
+  const lower = chain(sorted);
+  const upper = chain([...sorted].reverse());
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
 }
 
 const lerpRotation = (a: Rotation3D, b: Rotation3D, p: number): Rotation3D => ({
@@ -102,12 +149,58 @@ export function slab3d(options: Slab3DOptions): (t: number) => GroupNode {
     if (plate && dot3(frontNormal, toCamera) > 0) {
       objects.push({ id: 'plate', mesh: plate, transform: { ...r, ...plateOffset } });
     }
-    return projectSpace(
+    const slab = projectSpace(
       options.id,
       { camera: view, objects, ...(options.light ? { light: options.light } : {}) },
       options.viewport,
     );
+    if (!options.floor) return slab;
+    return groupNode(`${options.id}-scene`, [floorShadow(options.floor, view, r), slab]);
   };
+
+  function floorShadow(floor: SlabFloor, view: Camera3D, r: Rotation3D) {
+    const basis = cameraBasis(view, options.viewport);
+    // The slab's 8 corners, dropped straight down onto the floor.
+    const corners = [-1, 1].flatMap((x) =>
+      [-1, 1].flatMap((y) =>
+        [-1, 1].map((z) =>
+          rotateOffset(vec3((x * width) / 2, (y * height) / 2, (z * depth) / 2), r),
+        ),
+      ),
+    );
+    const footprint = corners.map((c) => ({ x: c.x, y: c.z }));
+    const xs = footprint.map((p) => p.x);
+    const zs = footprint.map((p) => p.y);
+    const [x0, x1, z0, z1] = [Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)];
+    // Stretch thin footprints front to back, about their centre.
+    const want = Math.max(x1 - x0, z1 - z0) * (floor.minDepth ?? 0.35);
+    const stretch = z1 - z0 > 1e-6 ? Math.max(1, want / (z1 - z0)) : 1;
+    const zc = (z0 + z1) / 2;
+    const projected = convexHull(
+      footprint.map((p) => ({ x: p.x, y: zc + (p.y - zc) * stretch })),
+    ).map((p) => projectPoint(basis, vec3(p.x, floor.y, p.y)));
+    const visible = projected.every((p) => p !== null) && projected.length >= 3;
+    // Screen px per world unit at the shadow, to keep the blur in world units.
+    const centre = projectPoint(basis, vec3(0, floor.y, 0));
+    const aside = projectPoint(basis, vec3(100, floor.y, 0));
+    const scale = centre && aside ? Math.hypot(aside.x - centre.x, aside.y - centre.y) / 100 : 1;
+    const softness = (floor.softness ?? 70) * scale;
+    // The higher the slab stands above the floor, the softer and fainter its shadow.
+    const lowest = Math.min(...corners.map((c) => c.y));
+    const gap = Math.max(lowest - floor.y, 0);
+    const fade = 1 / (1 + gap / 300);
+    const polygon = visible ? (projected as Point[]) : [];
+    return shapeNode(`${options.id}-floor-shadow`, {
+      geometry: polygon.length
+        ? pathGeometry(polygonPath(signedArea(polygon) < 0 ? [...polygon].reverse() : polygon, 2))
+        : rect(0, 0, 0, 0),
+      fill: 'transparent',
+      shadow: [
+        { x: 0, y: 0, blur: softness, color: withAlpha(floor.color, 0.75 * fade) },
+        { x: 0, y: 0, blur: softness * 0.3, color: withAlpha(floor.color, 0.6 * fade) },
+      ],
+    });
+  }
 }
 
 /** Where a local offset ends up after an X-then-Y-then-Z rotation. */
@@ -136,6 +229,13 @@ export interface PageCurlOptions {
   readonly lines?: number;
   /** Shadow cast by the lifted part (use a translucent colour); drawn softly blurred. */
   readonly shadow: string;
+  /**
+   * A second, tighter and darker layer of the lifted part's shadow, close to
+   * the fold where the paper is nearest the desk. Optional.
+   */
+  readonly contactShadow?: string;
+  /** Shadows under the flat part of the page (it rests on the desk). Optional. */
+  readonly rest?: readonly Shadow[];
   readonly corner: Corner;
   /** Distance from the corner to the fold line, along the diagonal. */
   readonly reach: number;
@@ -283,24 +383,46 @@ export function pageCurl(options: PageCurlOptions): (t: number) => GroupNode {
 
     // Shadow: clearly lifted strips projected along the light onto the desk,
     // merged into one path (overlaps don't darken twice) and blurred.
-    const shadowPaths = strips
-      .filter((strip) => strip.lift > radius * 0.25)
-      .flatMap((strip) => {
-        const outline = strip.polys[0]?.points ?? [];
-        const points = outline.map((p) => {
-          const v = curlVertex(vec3(p.x, p.y, 0), curl);
-          return projectPoint(
-            basis,
-            vec3(v.x - (lightDir.x * v.z) / lightDir.z, v.y - (lightDir.y * v.z) / lightDir.z, 0),
-          );
+    const castPaths = (keep: (lift: number) => boolean) =>
+      strips
+        .filter((strip) => keep(strip.lift))
+        .flatMap((strip) => {
+          const outline = strip.polys[0]?.points ?? [];
+          const points = outline.map((p) => {
+            const v = curlVertex(vec3(p.x, p.y, 0), curl);
+            return projectPoint(
+              basis,
+              vec3(v.x - (lightDir.x * v.z) / lightDir.z, v.y - (lightDir.y * v.z) / lightDir.z, 0),
+            );
+          });
+          if (points.length < 3 || points.some((p) => p === null)) return [];
+          const polygon = points as Point[];
+          return [polygonPath(signedArea(polygon) < 0 ? [...polygon].reverse() : polygon, 2)];
         });
-        if (points.length < 3 || points.some((p) => p === null)) return [];
-        const polygon = points as Point[];
-        return [polygonPath(signedArea(polygon) < 0 ? [...polygon].reverse() : polygon, 2)];
-      });
+    const shadowPaths = castPaths((lift) => lift > radius * 0.25);
+    // Paper close to the desk casts a sharper, darker shadow.
+    const contactPaths = options.contactShadow
+      ? castPaths((lift) => lift > radius * 0.1 && lift < radius * 1.1)
+      : [];
 
     const space = { camera: options.camera, light, sort: false };
+    const restOutline = options.rest
+      ? clipBand(page, fold, direction, -Infinity, 0).map((p) =>
+          projectPoint(basis, vec3(p.x, p.y, 0)),
+        )
+      : [];
+    const rest =
+      options.rest && restOutline.length >= 3 && restOutline.every((p) => p !== null)
+        ? [
+            shapeNode(`${options.id}-rest`, {
+              geometry: pathGeometry(polygonPath(restOutline as Point[], 2)),
+              fill: 'transparent',
+              shadow: options.rest,
+            }),
+          ]
+        : [];
     return groupNode(options.id, [
+      ...rest,
       projectSpace(
         `${options.id}-flat`,
         { ...space, objects: [{ id: 'p', mesh: flat }] },
@@ -312,6 +434,15 @@ export function pageCurl(options: PageCurlOptions): (t: number) => GroupNode {
         fill: 'transparent',
         shadow: { x: 0, y: 0, blur: options.radius * 0.6, color: options.shadow },
       }),
+      ...(options.contactShadow && contactPaths.length
+        ? [
+            shapeNode(`${options.id}-contact`, {
+              geometry: pathGeometry(contactPaths.join('')),
+              fill: 'transparent',
+              shadow: { x: 0, y: 0, blur: options.radius * 0.2, color: options.contactShadow },
+            }),
+          ]
+        : []),
       projectSpace(
         `${options.id}-lift`,
         { ...space, objects: [{ id: 'p', mesh: lifted }] },
@@ -340,6 +471,22 @@ export interface FlyThroughOptions {
   /** Camera sway (roll in degrees, drift in units). */
   readonly sway?: { readonly roll: number; readonly drift: number };
   readonly light?: Light3D;
+  /**
+   * Fine dust in the flight path, drawn as short motion streaks on top: it
+   * sells the speed. Fades with the fog and loops with the flight.
+   */
+  readonly dust?: FlyThroughDust;
+}
+
+export interface FlyThroughDust {
+  readonly count: number;
+  readonly color: string;
+  /** Streak length as seconds of travel. Default 0.05. */
+  readonly streak?: number;
+  /** Streak width in px at 100 units from the camera. Default 3. */
+  readonly width?: number;
+  /** Peak opacity. Default 0.7. */
+  readonly opacity?: number;
 }
 
 /** The camera flies forward through a field of 3D objects; loops exactly. */
@@ -374,6 +521,13 @@ export function flyThrough(options: FlyThroughOptions): (t: number) => GroupNode
   });
   const speed = field.length / loopDuration;
   const sway = options.sway ?? { roll: 3, drift: 30 };
+  // A separate stream, so adding dust leaves the objects where they were.
+  const dustRng = createRng(`${options.seed}-dust`);
+  const motes = Array.from({ length: options.dust?.count ?? 0 }, () => ({
+    x: dustRng.range(-options.clearance * 1.8, options.clearance * 1.8),
+    y: dustRng.range(-options.clearance * 1.8, options.clearance * 1.8),
+    z: dustRng.range(0, field.length),
+  }));
 
   return (t) => {
     const local = mod(t, loopDuration);
@@ -397,10 +551,44 @@ export function flyThrough(options: FlyThroughOptions): (t: number) => GroupNode
       fov: options.fov ?? 60,
       near: 5,
     };
-    return projectSpace(
+    const scene = projectSpace(
       options.id,
       { camera, objects, fog: options.fog, ...(options.light ? { light: options.light } : {}) },
       options.viewport,
     );
+    if (!options.dust) return scene;
+    return groupNode(`${options.id}-flight`, [scene, dustStreaks(options.dust, camera, local)]);
   };
+
+  function dustStreaks(dust: FlyThroughDust, camera: Camera3D, local: number): GroupNode {
+    const basis = cameraBasis(camera, options.viewport);
+    const travel = speed * (dust.streak ?? 0.05);
+    const { fog } = options;
+    const nodes = motes.flatMap((mote, i) => {
+      const z = -mod(mote.z - speed * local, field.length);
+      const head = toCameraSpace(basis, vec3(mote.x, mote.y, z));
+      const tail = toCameraSpace(basis, vec3(mote.x, mote.y, z - travel));
+      // Skip motes about to pass the camera (or behind it) and beyond the fog.
+      if (head.z < basis.near * 8 || tail.z < basis.near) return [];
+      const haze = Math.min(Math.max((head.z - fog.near) / (fog.far - fog.near), 0), 1);
+      const close = Math.min(head.z / 120, 1); // fade the last moment before passing
+      const alpha = (dust.opacity ?? 0.7) * (1 - haze) * close;
+      if (alpha <= 0.01) return [];
+      const a = projectCameraPoint(basis, head);
+      const b = projectCameraPoint(basis, tail);
+      return [
+        shapeNode(`${options.id}-dust${i}`, {
+          geometry: pathGeometry(
+            `M${a.x.toFixed(2)} ${a.y.toFixed(2)}L${b.x.toFixed(2)} ${b.y.toFixed(2)}`,
+          ),
+          stroke: {
+            color: withAlpha(dust.color, alpha),
+            width: Math.max(0.6, ((dust.width ?? 3) * 100) / head.z),
+            cap: 'round',
+          },
+        }),
+      ];
+    });
+    return groupNode(`${options.id}-dust`, nodes);
+  }
 }

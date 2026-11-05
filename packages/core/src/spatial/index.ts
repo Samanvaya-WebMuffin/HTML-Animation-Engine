@@ -30,7 +30,9 @@ export {
   type Fog3D,
   type Light3D,
   type Object3D,
+  type Rim3D,
   type Space,
+  type Specular3D,
 } from './project.js';
 export {
   apply3D,

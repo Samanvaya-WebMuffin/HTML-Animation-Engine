@@ -96,3 +96,32 @@ export function sampleOutline(g: Geometry, count: number): Point[] {
   if (signedArea(points) < 0) points = [...points].reverse();
   return resampleClosed(points, count);
 }
+
+/** Axis-aligned bounds of a geometry in its own coordinates (curves sampled). */
+export function geometryBounds(g: Geometry): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
+  if (g.kind === 'rect') {
+    const w = Math.abs(g.width) / 2;
+    const h = Math.abs(g.height) / 2;
+    return { minX: g.x - w, minY: g.y - h, maxX: g.x + w, maxY: g.y + h };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const contour of flattenPath(parsePath(g.d))) {
+    for (const point of contour.points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+  return Number.isFinite(minX)
+    ? { minX, minY, maxX, maxY }
+    : { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+}

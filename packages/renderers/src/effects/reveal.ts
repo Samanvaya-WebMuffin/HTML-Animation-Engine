@@ -7,7 +7,9 @@ import {
   shapeNode,
   type Ease,
   type GroupNode,
+  type Paint,
   type SceneNode,
+  type Shadows,
   type ShapeNode,
 } from '@html-animation-engine/core';
 
@@ -48,6 +50,10 @@ export interface HighlighterOptions extends Box, Timing {
   /** Tilt in degrees, for a hand-drawn feel. Default -1.5. */
   readonly tilt?: number;
   readonly radius?: number;
+  /** Paint for the stroke (e.g. a gradient across the box); default `color`. */
+  readonly fill?: Paint;
+  /** Shadows or glows beneath the stroke. */
+  readonly shadow?: Shadows;
 }
 
 /** A highlighter stroke that wipes across a box (place it behind text). */
@@ -58,7 +64,8 @@ export function highlighterWipe(options: HighlighterOptions): (t: number) => Sha
     const { x, y, w, h } = wipeRect({ ...options, x: 0, y: 0 }, from, p);
     return shapeNode(id, {
       geometry: rect(x, y, w, h, Math.min(radius, w / 2)),
-      fill: color,
+      fill: options.fill ?? color,
+      ...(options.shadow ? { shadow: options.shadow } : {}),
       transform: { x: options.x, y: options.y, rotation: tilt },
     });
   };
