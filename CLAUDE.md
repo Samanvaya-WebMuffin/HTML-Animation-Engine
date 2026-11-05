@@ -1,6 +1,12 @@
 # CLAUDE.md
 
-HTML-Animation-Engine is a TypeScript library for HTML motion graphics. It works on its own (DOM, SVG, Canvas 2D) and can optionally drive GSAP, Three.js, Framer Motion and Remotion. Every animation renders to video and image files with exact, repeatable frames.
+HTML-Animation-Engine is a TypeScript library for HTML motion graphics. It works on its own (DOM, SVG, Canvas 2D) and can optionally run inside Remotion. Every animation renders to MP4 with exact, repeatable frames.
+
+## Current scope
+
+We are deliberately keeping this small. **In scope:** the core engine, DOM/SVG/Canvas renderers and effects, **one adapter (Remotion)**, and **one export format (MP4, H.264)**, plus PNG stills for checking frames.
+
+**Deferred; don't build these unless asked:** GSAP, Three.js and Framer Motion adapters; WebM, ProRes, GIF, APNG, PNG-sequence, H.265 and HTML-embed export; segmented and parallel encoding; the audio synth helper. The architecture should still allow them: adapters are separate subpath exports with optional peer dependencies, and the encoder is one module behind the capture loop.
 
 ## The core principle (never break this)
 
@@ -8,7 +14,7 @@ Every animation is a **pure function of time**. `render(t, ctx)` draws the frame
 
 - No wall-clock reads (`Date.now()`, `new Date()`, `performance.now()`), no `requestAnimationFrame`, no `setTimeout`/`setInterval`, no `Math.random()`, and no state carried over from the previous `render` call.
 - Randomness comes only from the seeded RNG in `@html-animation-engine/core`, so render N and render N+1 are identical.
-- Third-party libraries are **seeked** to `t` (`tl.seek(t)`, set `MotionValue`s, pass `t` to the Three.js update). Never let them run on their own clock.
+- Third-party libraries are **seeked** to `t` (for Remotion, frame = `useCurrentFrame()`, t = frame / fps). Never let them run on their own clock.
 - Playback in the browser calls `render(t)` on a clock. Export calls `render(frame / fps)` for each frame. The clock lives only in `apps/playground/src/player.ts`, and it only picks the frame index.
 - CSS `transition`, `@keyframes` animations and the Web Animations API run on the browser's own clock. Don't use them in compositions. The stage disables them, so they can't leak into a render (planned for Phase 3).
 - Building DOM or canvas structure once in `setup()` is fine. `render(t)` must then set **every** time-dependent property from `t`, so any frame can be rendered first, in any order.
@@ -20,7 +26,7 @@ ESLint enforces the banned APIs in `packages/{core,renderers,adapters}/src` and 
 ```
 packages/core        timeline, easing, tweens, scene graph, RNG, colour, tokens. ZERO runtime deps.
 packages/renderers   DOM / SVG / Canvas 2D renderers; mountStage() mounts a composition at exact size.
-packages/adapters    one subpath export per library: ./gsap ./three ./framer-motion ./remotion
+packages/adapters    one subpath export per library; currently only ./remotion
                      (each library is an OPTIONAL peer dependency; never a hard dependency)
 packages/export      Node CLI (`hae`) + API: Playwright capture, ffmpeg encode, environment check
 apps/playground      Vite app: example list, scrubber, play/pause, frame step, fps + resolution
@@ -57,7 +63,7 @@ Don't call the env check `pnpm doctor`: that is a pnpm built-in and shadows the 
 - pnpm 12 via Corepack (`packageManager` in `package.json`).
 - pnpm blocks dependency install scripts unless they are listed under `allowBuilds` in `pnpm-workspace.yaml`. It also refuses releases younger than its minimum release age. Don't add `minimumReleaseAgeExclude` entries; pin the previous release instead.
 - TypeScript is pinned to `~6.0`, because typescript-eslint supports `<6.1`. TypeScript 6 defaults `types` to `[]`, so a package that needs Node or Vite types lists them in its own `tsconfig.json`.
-- Rendering needs `ffmpeg`/`ffprobe` with libx264, libx265, libvpx-vp9, prores_ks, gif, apng and png, plus Playwright's Chromium (`pnpm exec playwright install chromium`). `FFMPEG_PATH`/`FFPROBE_PATH` override the binaries. Run `pnpm check-env` first.
+- Rendering needs `ffmpeg`/`ffprobe` with the libx264 encoder, plus Playwright's Chromium (`pnpm exec playwright install chromium`). `FFMPEG_PATH`/`FFPROBE_PATH` override the binaries. Run `pnpm check-env` first.
 
 ## Adding an example
 
@@ -75,10 +81,10 @@ Always render **stills first** and look at them before a full render.
 
 ```sh
 pnpm stills <example> --at 1.5,4,9.2     # requested frames + contact sheet
-pnpm render <example> --fps 60 --scale 2  # full render (formats/options: see packages/export)
+pnpm render <example> --fps 60 --scale 2  # full render to MP4 (H.264)
 ```
 
-Both commands currently exit with "not implemented yet"; capture and encoding are still to come. Planned options: `--fps --scale --from --to --segments --workers --crf --transparent --audio <file>`. Capture loads the composition in headless Chromium at the exact output size, waits for `document.fonts.ready`, then renders and captures frame by frame (reading Canvas/WebGL pixels directly). Frames are piped into ffmpeg, never written to disk as thousands of PNGs.
+Both commands currently exit with "not implemented yet"; capture and encoding are still to come. Planned options: `--fps --scale --from --to --crf --audio <file>`. Capture loads the composition in headless Chromium at the exact output size, waits for `document.fonts.ready`, then renders and captures frame by frame (reading Canvas/WebGL pixels directly). Frames are piped into ffmpeg, never written to disk as thousands of PNGs. The MP4 is written to a temporary name and renamed only when ffmpeg exits successfully.
 
 ## House rules
 
@@ -94,7 +100,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 - [x] Phase 1: repo setup (workspace, tooling, playground shell, `Composition` contract, `mountStage`, env check, CI)
 - [ ] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text)
 - [ ] Phase 3: renderers and effects, reduced-motion mode, flash-safety check; `mountStage` disables CSS transitions/animations and Web Animations inside the stage
-- [ ] Phase 4: adapters (GSAP, Three.js, Framer Motion, Remotion)
-- [ ] Phase 5: export (capture, encode, formats, stills, audio helper)
+- [ ] Phase 4: Remotion adapter (both directions)
+- [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)
 - [ ] Phase 6: visual regression goldens, performance budgets
-- [ ] Phase 7: starter examples
+- [ ] Phase 7: starter examples (a Remotion example replaces the Three.js and GSAP ones)

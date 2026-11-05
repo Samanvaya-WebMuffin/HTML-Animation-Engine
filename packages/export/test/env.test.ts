@@ -59,12 +59,12 @@ describe('checkEnvironment', () => {
   it('reports missing encoders', async () => {
     const run: EnvironmentProbes['run'] = (_c, args) =>
       args.includes('-encoders')
-        ? { ok: true, stdout: ' V....D libx264   libx264 H.264\n' }
+        ? { ok: true, stdout: ' V....D libx265   libx265 H.265\n' }
         : { ok: true, stdout: 'ffmpeg version 8.0' };
     const report = await checkEnvironment(probes({ run }), {});
     expect(report.ok).toBe(false);
-    expect(report.ffmpeg.missingEncoders).toContain('prores_ks');
-    expect(report.ffmpeg.missingEncoders).not.toContain('libx264');
+    expect(report.ffmpeg.missingEncoders).toEqual(['libx264']);
+    expect(report.ffmpeg.problem).toMatch(/libx264/);
   });
 
   it('reports a missing Chromium with install instructions', async () => {

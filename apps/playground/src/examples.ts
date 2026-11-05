@@ -3,7 +3,7 @@ import type { ExampleConfig } from '@html-animation-engine/examples';
 
 /**
  * Every example under `examples/<name>/composition.ts`. Modules load on
- * demand, so a heavy example (e.g. Three.js) only loads when selected.
+ * demand, so a heavy example (e.g. one using Remotion) only loads when selected.
  */
 const compositionModules = import.meta.glob<{ default: Composition }>(
   '../../../examples/*/composition.ts',

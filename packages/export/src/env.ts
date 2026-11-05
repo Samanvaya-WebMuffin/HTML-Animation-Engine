@@ -4,12 +4,6 @@ import { existsSync } from 'node:fs';
 /** ffmpeg encoders that the export formats depend on. */
 export const REQUIRED_ENCODERS = {
   libx264: 'MP4 (H.264)',
-  libx265: 'MP4 (H.265)',
-  'libvpx-vp9': 'WebM (VP9, alpha)',
-  prores_ks: 'ProRes 4444 (alpha)',
-  gif: 'GIF',
-  apng: 'APNG',
-  png: 'PNG sequence and stills',
 } as const;
 
 export type EncoderName = keyof typeof REQUIRED_ENCODERS;

@@ -1,6 +1,6 @@
 # HTML Animation Engine
 
-A TypeScript library for HTML motion graphics, animations and effects. It works on its own with plain DOM, SVG and Canvas, and can optionally drive GSAP, Three.js, Framer Motion and Remotion. Every animation renders to video and image files with exact, repeatable frames.
+A TypeScript library for HTML motion graphics, animations and effects. It works on its own with plain DOM, SVG and Canvas, and can optionally run inside Remotion. Every animation renders to MP4 with exact, repeatable frames.
 
 Every animation is a **pure function of time**: `render(t)` draws the frame at `t` seconds from scratch. Playback and export call the same function, so what you scrub in the browser is exactly what ends up in the video.
 
@@ -8,12 +8,12 @@ Every animation is a **pure function of time**: `render(t)` draws the frame at `
 
 ## Requirements
 
-| Tool                | Version                         | Needed for                                     |
-| ------------------- | ------------------------------- | ---------------------------------------------- |
-| Node.js             | 22.18 or newer (24 in `.nvmrc`) | everything                                     |
-| pnpm                | 12 (via Corepack)               | everything                                     |
-| Playwright Chromium | matches `@playwright/test`      | visual tests, rendering                        |
-| ffmpeg + ffprobe    | 6 or newer, full build          | rendering video, GIF, APNG and image sequences |
+| Tool                | Version                         | Needed for              |
+| ------------------- | ------------------------------- | ----------------------- |
+| Node.js             | 22.18 or newer (24 in `.nvmrc`) | everything              |
+| pnpm                | 12 (via Corepack)               | everything              |
+| Playwright Chromium | matches `@playwright/test`      | visual tests, rendering |
+| ffmpeg + ffprobe    | 6 or newer, full build          | rendering MP4           |
 
 ### Install pnpm
 
@@ -33,7 +33,7 @@ pnpm exec playwright install --with-deps chromium
 
 ### Install ffmpeg
 
-ffmpeg must include the `libx264`, `libx265`, `libvpx-vp9`, `prores_ks`, `gif`, `apng` and `png` encoders. Homebrew and the usual distro builds include them all.
+ffmpeg must include the `libx264` encoder. Homebrew and the usual distro builds include it.
 
 ```sh
 brew install ffmpeg                 # macOS
@@ -47,7 +47,7 @@ To use a specific build, set `FFMPEG_PATH` and `FFPROBE_PATH`.
 
 ```sh
 pnpm install
-pnpm check-env    # reports ffmpeg, ffprobe, missing encoders and Chromium, with fixes
+pnpm check-env    # reports ffmpeg, ffprobe, the H.264 encoder and Chromium, with fixes
 ```
 
 ## Scripts
@@ -60,20 +60,20 @@ pnpm check-env    # reports ffmpeg, ffprobe, missing encoders and Chromium, with
 | `pnpm test:visual` | Visual tests (Playwright)                                |
 | `pnpm lint`        | ESLint and Prettier                                      |
 | `pnpm typecheck`   | TypeScript across the workspace                          |
-| `pnpm render`      | Render an example to video or images (in progress)       |
+| `pnpm render`      | Render an example to MP4 (in progress)                   |
 | `pnpm stills`      | Render selected frames and a contact sheet (in progress) |
 | `pnpm check-env`   | Check the rendering toolchain                            |
 
 ## Layout
 
-| Path                 | Package                            | Contents                                                          |
-| -------------------- | ---------------------------------- | ----------------------------------------------------------------- |
-| `packages/core`      | `@html-animation-engine/core`      | Timeline, easing, tweens, scene graph, RNG, colour, tokens        |
-| `packages/renderers` | `@html-animation-engine/renderers` | DOM, SVG and Canvas 2D renderers                                  |
-| `packages/adapters`  | `@html-animation-engine/adapters`  | `/gsap`, `/three`, `/framer-motion`, `/remotion` (optional peers) |
-| `packages/export`    | `@html-animation-engine/export`    | `hae` CLI and Node API for capture and encoding                   |
-| `apps/playground`    | (private)                          | Scrubber, play/pause, frame stepping, fps and resolution          |
-| `examples/`          | (private)                          | One folder per animation                                          |
+| Path                 | Package                            | Contents                                                   |
+| -------------------- | ---------------------------------- | ---------------------------------------------------------- |
+| `packages/core`      | `@html-animation-engine/core`      | Timeline, easing, tweens, scene graph, RNG, colour, tokens |
+| `packages/renderers` | `@html-animation-engine/renderers` | DOM, SVG and Canvas 2D renderers                           |
+| `packages/adapters`  | `@html-animation-engine/adapters`  | `/remotion` (optional peer)                                |
+| `packages/export`    | `@html-animation-engine/export`    | `hae` CLI and Node API for capture and encoding            |
+| `apps/playground`    | (private)                          | Scrubber, play/pause, frame stepping, fps and resolution   |
+| `examples/`          | (private)                          | One folder per animation                                   |
 
 See [CLAUDE.md](CLAUDE.md) for the core rules, how to add an example and the house style.
 

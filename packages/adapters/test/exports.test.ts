@@ -8,7 +8,7 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
   peerDependenciesMeta: Record<string, { optional?: boolean }>;
 };
 
-const ADAPTED = ['gsap', 'three', 'framer-motion', 'remotion'];
+const ADAPTED = ['remotion'];
 
 describe('adapters package', () => {
   it.each(ADAPTED)('exposes ./%s as its own subpath with an optional peer', (name) => {
@@ -18,7 +18,7 @@ describe('adapters package', () => {
   });
 
   it('has no hard dependency on any adapted library', () => {
-    for (const name of [...ADAPTED, 'react']) {
+    for (const name of [...ADAPTED, 'react', 'react-dom']) {
       expect(pkg.dependencies?.[name]).toBeUndefined();
     }
   });
