@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { encodeArgs, frameRange, outputSize, RESOLUTIONS, scaleFor } from '../src/index.js';
+import {
+  DEFAULT_EXPORT_FPS,
+  encodeArgs,
+  exportFps,
+  frameRange,
+  outputSize,
+  RESOLUTIONS,
+  scaleFor,
+} from '../src/index.js';
 
 describe('resolution presets', () => {
   it('fits a 16:9 composition to UHD 4K exactly', () => {
@@ -25,6 +33,23 @@ describe('resolution presets', () => {
 
   it('has the expected presets', () => {
     expect(Object.keys(RESOLUTIONS)).toEqual(['4k', '1440p', '1080p', '720p']);
+  });
+});
+
+describe('exportFps', () => {
+  it('samples compositions at 60 fps unless told otherwise', () => {
+    expect(DEFAULT_EXPORT_FPS).toBe(60);
+    expect(exportFps(undefined, { fps: 30 })).toEqual({ fps: 60 });
+    expect(exportFps(24, { fps: 30 })).toEqual({ fps: 24 });
+  });
+
+  it('keeps a fixed-rate composition on its own frame grid', () => {
+    const remotion = { fps: 30, nativeFps: 30, fixedFps: true };
+    expect(exportFps(undefined, remotion)).toEqual({ fps: 30 });
+    expect(exportFps(30, remotion)).toEqual({ fps: 30 });
+    const forced = exportFps(60, remotion);
+    expect(forced.fps).toBe(60);
+    expect(forced.warning).toMatch(/repeated/);
   });
 });
 

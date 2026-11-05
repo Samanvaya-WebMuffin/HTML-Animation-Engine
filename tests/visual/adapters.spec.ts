@@ -30,14 +30,16 @@ test.describe('Remotion adapter', () => {
     await roundtrip.close();
   });
 
-  test('Remotion code sees the exact frame: a <Sequence> starts on frame 45', async ({ page }) => {
+  test('Remotion code sees the exact frame: a <Sequence> starts on frame 90 (1.5 s at 60 fps)', async ({
+    page,
+  }) => {
     await openCapture(page, 'remotion-title');
     const subtitle = page.getByTestId('subtitle');
-    await renderAt(page, 44 / 30);
+    await renderAt(page, 89 / 60);
     await expect(subtitle).toHaveCount(0);
-    await renderAt(page, 45 / 30);
+    await renderAt(page, 90 / 60);
     await expect(subtitle).toHaveCSS('opacity', '0');
-    await renderAt(page, 60 / 30);
+    await renderAt(page, 120 / 60);
     await expect(subtitle).toHaveCSS('opacity', '1');
     await renderAt(page, 0); // and back again: seeking, not playing
     await expect(subtitle).toHaveCount(0);

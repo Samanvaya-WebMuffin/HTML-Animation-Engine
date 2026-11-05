@@ -27,6 +27,31 @@ export interface RenderVideoOptions extends CaptureTarget, SizeOptions {
   readonly audio?: string;
   readonly browser?: Browser;
   readonly onProgress?: (done: number, total: number) => void;
+  /** Non-fatal notes, e.g. a frame rate that does not suit the composition. */
+  readonly onWarning?: (message: string) => void;
+}
+
+/** Frame rate videos are exported at unless `fps` is given. */
+export const DEFAULT_EXPORT_FPS = 60;
+
+/**
+ * The frame rate to export at. Compositions are pure functions of time, so
+ * they are sampled at `requested` or 60 fps; a `fixedFps` composition (e.g.
+ * Remotion code, written in frames) keeps its own rate unless overridden.
+ */
+export function exportFps(
+  requested: number | undefined,
+  info: Pick<CaptureInfo, 'fps' | 'nativeFps' | 'fixedFps'>,
+): { fps: number; warning?: string } {
+  const native = info.nativeFps ?? info.fps;
+  if (!info.fixedFps) return { fps: requested ?? DEFAULT_EXPORT_FPS };
+  if (requested === undefined || requested === native) return { fps: native };
+  return {
+    fps: requested,
+    warning:
+      `This composition only changes on its own ${native} fps frame grid; at ${requested} fps ` +
+      `frames will be ${requested > native ? 'repeated' : 'skipped'}.`,
+  };
 }
 
 export interface RenderResult {
@@ -83,7 +108,8 @@ export async function renderVideo(options: RenderVideoOptions): Promise<RenderRe
   const started = Date.now();
   return withBrowser(options.browser, async (browser) => {
     const probe = await probeComposition(browser, options);
-    const fps = options.fps ?? probe.fps;
+    const { fps, warning } = exportFps(options.fps, probe);
+    if (warning) options.onWarning?.(warning);
     const scale = resolveScale(probe, options);
     const { first, count } = frameRange(probe, fps, options.from, options.to);
     const size = outputSize(probe.width, probe.height, scale);

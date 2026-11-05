@@ -13,6 +13,9 @@ export interface CaptureInfo {
   readonly width: number;
   readonly height: number;
   readonly fps: number;
+  /** The composition's own frame rate, and whether export must keep it. */
+  readonly nativeFps: number;
+  readonly fixedFps: boolean;
   readonly duration: number;
   readonly stills: readonly number[];
   readonly background: string;
@@ -56,6 +59,8 @@ async function mount(): Promise<CaptureInfo> {
     width: composition.width,
     height: composition.height,
     fps,
+    nativeFps: composition.fps,
+    fixedFps: composition.fixedFps ?? false,
     duration: composition.duration,
     stills: config?.stills ?? [],
     background: composition.background,

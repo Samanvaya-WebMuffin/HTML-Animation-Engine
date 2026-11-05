@@ -11,6 +11,9 @@ import {
   updatingGoldens,
 } from './helpers.js';
 
+/** Export's default frame rate (kept in step with `DEFAULT_EXPORT_FPS` in packages/export). */
+const DEFAULT_EXPORT_FPS = 60;
+
 /** Downscale for the flash check: luminance is averaged per region anyway. */
 const FLASH_SCALE = 0.1;
 
@@ -57,7 +60,10 @@ for (const name of exampleNames()) {
     });
 
     test('is flash-safe (WCAG 2.3.1)', async ({ page }) => {
-      const info = await openCapture(page, name);
+      // Checked at the export frame rate: every frame a video will contain.
+      // That is a few hundred screenshots, so allow more than the default 30 s.
+      test.setTimeout(120_000);
+      const info = await openCapture(page, name, { fps: DEFAULT_EXPORT_FPS });
       const cdp = await page.context().newCDPSession(page);
       const frames = Math.round(info.duration * info.fps);
       let detector: FlashDetector | undefined;

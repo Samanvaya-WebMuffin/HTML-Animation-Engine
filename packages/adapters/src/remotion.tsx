@@ -233,6 +233,8 @@ export function fromRemotion<Props extends Record<string, unknown> = Record<stri
     width,
     height,
     fps,
+    // Remotion code is written in frames: other export rates would repeat or skip them.
+    fixedFps: true,
     duration: durationInFrames / fps,
     background: options.background ?? 'transparent',
     ...(options.seed === undefined ? {} : { seed: options.seed }),

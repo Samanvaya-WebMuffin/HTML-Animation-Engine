@@ -6,6 +6,9 @@ export interface CaptureInfo {
   readonly width: number;
   readonly height: number;
   readonly fps: number;
+  /** The composition's own frame rate, and whether export must keep it. */
+  readonly nativeFps?: number;
+  readonly fixedFps?: boolean;
   readonly duration: number;
   readonly stills: readonly number[];
   readonly background: string;

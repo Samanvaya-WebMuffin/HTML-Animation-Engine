@@ -39,7 +39,18 @@ export interface Composition {
   readonly title?: string;
   readonly width: number;
   readonly height: number;
+  /**
+   * Authoring frame rate: playback in the playground, and `ctx.frame`. A
+   * composition is a pure function of time, so export may sample it at any
+   * rate (60 fps by default) unless `fixedFps` is set.
+   */
   readonly fps: number;
+  /**
+   * True when the content only changes on its own `fps` grid (e.g. wrapped
+   * Remotion code, which is written in frames). Export then keeps `fps`, since
+   * any other rate would repeat or skip frames.
+   */
+  readonly fixedFps?: boolean;
   /** Duration in seconds. */
   readonly duration: number;
   /** CSS colour painted behind the frame, or `'transparent'`. */

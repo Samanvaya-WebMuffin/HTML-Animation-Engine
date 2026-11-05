@@ -30,8 +30,13 @@ export interface CaptureInfo {
 }
 
 /** Opens the capture page for `name` at its exact size and waits until it is ready. */
-export async function openCapture(page: Page, name: string): Promise<CaptureInfo> {
-  await page.goto(`/capture.html?example=${encodeURIComponent(name)}`);
+export async function openCapture(
+  page: Page,
+  name: string,
+  options: { fps?: number } = {},
+): Promise<CaptureInfo> {
+  const fps = options.fps ? `&fps=${options.fps}` : '';
+  await page.goto(`/capture.html?example=${encodeURIComponent(name)}${fps}`);
   const info = await page.evaluate(() => window.haeCapture.ready);
   await page.setViewportSize({ width: info.width, height: info.height });
   return { ...info, stills: [...info.stills] };

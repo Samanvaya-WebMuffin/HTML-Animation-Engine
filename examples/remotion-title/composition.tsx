@@ -14,6 +14,12 @@ import {
 import { exampleDefaults, lighting, theme } from '../index.js';
 
 const { colors } = theme;
+/**
+ * Remotion code is written in frames, so this composition has a fixed frame
+ * rate. 60 fps matches the export default; timings below are in seconds
+ * (`seconds × fps`), so the motion would be the same at any rate.
+ */
+const FPS = 60;
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 
 /** Engine shadows as CSS: same model (σ = blur / 2), so they match the renderers. */
@@ -34,13 +40,13 @@ const barFill = `linear-gradient(180deg, ${mixColors(colors.lime, lighting.highl
 function Title() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = spring({ frame: frame - 6, fps, config: { damping: 12, stiffness: 160 } });
-  const bar = interpolate(frame, [20, 40], [0, 1], {
+  const enter = spring({ frame: frame - 0.2 * fps, fps, config: { damping: 12, stiffness: 160 } });
+  const bar = interpolate(frame, [(2 / 3) * fps, (4 / 3) * fps], [0, 1], {
     ...clamp,
     easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
   // A specular glint crosses the title once it has settled (100 % → 0 % moves it left to right).
-  const glint = interpolate(frame, [28, 62], [100, 0], {
+  const glint = interpolate(frame, [(14 / 15) * fps, (31 / 15) * fps], [100, 0], {
     ...clamp,
     easing: Easing.bezier(0.65, 0, 0.35, 1),
   });
@@ -90,7 +96,7 @@ function Title() {
           marginTop: 24,
         }}
       />
-      <Sequence from={45} layout="none">
+      <Sequence from={Math.round(1.5 * fps)} layout="none">
         <Subtitle />
       </Sequence>
     </AbsoluteFill>
@@ -99,7 +105,8 @@ function Title() {
 
 function Subtitle() {
   const frame = useCurrentFrame(); // relative to the Sequence start
-  const lit = interpolate(frame, [0, 30], [0, 1], clamp);
+  const { fps } = useVideoConfig();
+  const lit = interpolate(frame, [0, fps], [0, 1], clamp);
   return (
     <div
       data-testid="subtitle"
@@ -108,9 +115,9 @@ function Subtitle() {
         top: 470,
         fontFamily: theme.type.body.family,
         fontSize: 30,
-        color: interpolateColors(frame, [0, 30], [colors.muted, colors.lime]),
+        color: interpolateColors(frame, [0, fps], [colors.muted, colors.lime]),
         textShadow: css(glowShadows(lighting, colors.lime, { radius: 18, strength: 0.6 * lit })),
-        opacity: interpolate(frame, [0, 15], [0, 1], clamp),
+        opacity: interpolate(frame, [0, 0.5 * fps], [0, 1], clamp),
       }}
     >
       rendered frame-exactly by the engine
@@ -124,8 +131,8 @@ export default fromRemotion({
   component: Title,
   width: exampleDefaults.width,
   height: exampleDefaults.height,
-  fps: exampleDefaults.fps,
-  durationInFrames: 120,
+  fps: FPS,
+  durationInFrames: 4 * FPS,
   background: colors.ink,
   fontFaces: exampleDefaults.fontFaces,
   fonts: exampleDefaults.fonts,

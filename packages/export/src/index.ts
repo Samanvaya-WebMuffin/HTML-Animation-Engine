@@ -21,6 +21,8 @@ export {
 } from './env.js';
 export { frameHashes, probeVideo, type VideoProbe } from './probe.js';
 export {
+  DEFAULT_EXPORT_FPS,
+  exportFps,
   frameRange,
   renderStills,
   renderVideo,

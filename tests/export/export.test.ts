@@ -34,9 +34,10 @@ const render = (example: string, output: string, options: Record<string, unknown
   renderVideo({ url: server.url, browser, example, output: join(dir, output), ...options });
 
 describe('4K MP4 export', () => {
-  it('writes H.264 at 3840 × 2160 with exact frame count, fps, duration and Rec. 709 tags', async () => {
+  it('writes 4K 60 fps H.264 by default, with exact frame count, duration and Rec. 709 tags', async () => {
+    // shape-morph is authored at 30 fps; export samples it at 60 by default.
     const result = await render('shape-morph', 'a.mp4', { to: 1 });
-    expect(result).toMatchObject({ width: 3840, height: 2160, fps: 30, frames: 30 });
+    expect(result).toMatchObject({ width: 3840, height: 2160, fps: 60, frames: 60 });
     const probe = await probeVideo(result.output);
     expect(probe).toMatchObject({
       codec: 'h264',
@@ -44,8 +45,8 @@ describe('4K MP4 export', () => {
       width: 3840,
       height: 2160,
       pixelFormat: 'yuv420p',
-      fps: 30,
-      frames: 30,
+      fps: 60,
+      frames: 60,
       colorSpace: 'bt709',
       colorPrimaries: 'bt709',
       colorTransfer: 'bt709',
@@ -59,7 +60,7 @@ describe('4K MP4 export', () => {
       frameHashes(join(dir, 'a.mp4')),
       render('shape-morph', 'b.mp4', { to: 1 }).then((r) => frameHashes(r.output)),
     ]);
-    expect(a).toHaveLength(30);
+    expect(a).toHaveLength(60); // 1 s at 60 fps
     expect(b).toEqual(a);
   });
 
@@ -72,8 +73,8 @@ describe('4K MP4 export', () => {
       resolution: '1080p',
     });
     const [all, slice] = await Promise.all([frameHashes(full.output), frameHashes(part.output)]);
-    expect(slice).toHaveLength(15);
-    expect(slice).toEqual(all.slice(15));
+    expect(slice).toHaveLength(30); // 0.5 s at 60 fps
+    expect(slice).toEqual(all.slice(30));
   });
 
   it('muxes audio without touching the video stream', async () => {
@@ -112,7 +113,7 @@ describe('every composition type exports deterministically', () => {
   ])('%s (%s)', async (example) => {
     const a = await render(example, `${example}-1.mp4`, { from: 1, to: 1.5, resolution: '1080p' });
     const b = await render(example, `${example}-2.mp4`, { from: 1, to: 1.5, resolution: '1080p' });
-    expect((await probeVideo(a.output)).frames).toBe(15);
+    expect((await probeVideo(a.output)).frames).toBe(30); // 0.5 s at 60 fps
     expect(await frameHashes(b.output)).toEqual(await frameHashes(a.output));
   });
 });

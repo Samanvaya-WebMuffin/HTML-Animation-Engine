@@ -18,7 +18,7 @@ Render options:
   --out <file>              Output file (default: out/<example>.mp4)
   --resolution <name>       Fit inside ${Object.keys(RESOLUTIONS).join(' | ')} (default: 4k = 3840×2160)
   --scale <n>               Exact scale factor instead of --resolution
-  --fps <n>                 Frame rate (default: the composition's)
+  --fps <n>                 Frame rate (default: 60; Remotion compositions keep their own)
   --from <s> --to <s>       Render only part of the composition
   --crf <n>                 x264 quality: 0 lossless, 18 visually lossless (default), 23 smaller
   --preset <name>           x264 preset (default: medium)
@@ -159,6 +159,7 @@ export async function main(argv: string[]): Promise<number> {
       example,
       output,
       onProgress: progressLine(`rendering ${example}`),
+      onWarning: (message: string) => process.stderr.write(`warning: ${message}\n`),
       ...size,
       ...(fps === undefined ? {} : { fps }),
       ...(values.from === undefined ? {} : { from: number('from', values.from) }),

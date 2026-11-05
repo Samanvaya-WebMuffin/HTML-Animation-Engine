@@ -111,7 +111,7 @@ For per-pixel effects (realistic fire, light, volumetrics), `defineSceneComposit
 Both directions seek; nothing runs on Remotion's or React's clock.
 
 - **Engine → Remotion:** `<HaeComposition composition={c} />` plays an engine composition at t = `useCurrentFrame()` / fps, holding Remotion's renderer with `delayRender` until fonts and setup are done. Register one in a Remotion project with `<Composition {...remotionCompositionProps(c)} />`.
-- **Remotion → engine:** `fromRemotion({ id, component, width, height, fps, durationInFrames, fontFaces?, fonts? })` wraps Remotion-style React code as an engine composition. Each `render(t)` shows frame `floor(t × fps)` through `@remotion/player`'s `<Thumbnail frameToDisplay>` inside `flushSync`, so it is synchronous. Supported: code driven by `useCurrentFrame()` (`interpolate`, `spring`, `Sequence`, `Series`, `AbsoluteFill`, `Easing`, `interpolateColors`). Not supported: `<Video>`/`<Audio>`/`<OffthreadVideo>`, or assets that load after setup.
+- **Remotion → engine:** `fromRemotion({ id, component, width, height, fps, durationInFrames, fontFaces?, fonts? })` wraps Remotion-style React code as an engine composition. Each `render(t)` shows frame `floor(t × fps)` through `@remotion/player`'s `<Thumbnail frameToDisplay>` inside `flushSync`, so it is synchronous. Remotion code is written in frames, so these compositions set `fixedFps` and export keeps their own rate; author them at **60 fps** (the export default) with timings as `seconds × fps`. Supported: code driven by `useCurrentFrame()` (`interpolate`, `spring`, `Sequence`, `Series`, `AbsoluteFill`, `Easing`, `interpolateColors`). Not supported: `<Video>`/`<Audio>`/`<OffthreadVideo>`, or assets that load after setup.
 - Nested asynchronous work (an engine composition inside a Remotion component inside `fromRemotion`) is awaited during setup through a readiness context, so no frame is blank. `remotion-roundtrip` proves both directions: it is pixel-identical to `shape-morph`.
 - `remotion` and `@remotion/player` must be the **same exact version** (pinned to 4.0.540 here). Remotion needs a company licence for companies of more than 3 people.
 - Compositions may be `composition.tsx`; JSX uses the automatic runtime (`"jsx": "react-jsx"`).
@@ -128,9 +128,9 @@ The per-example test "renders identical frames regardless of what was drawn befo
 ### Accessibility
 
 - **Reduced motion:** the playground toggle defaults to the OS `prefers-reduced-motion` setting. Playback then holds each key moment (`config.stills`) for 2 s and cuts between them, and compositions receive `ctx.reducedMotion = true` to drop non-essential motion.
-- **Flash safety:** every example is checked by `tests/visual/examples.spec.ts` with `createFlashDetector` (WCAG 2.3.1: more than 3 flashes in any second, in a region a third of the frame in each dimension, sliding by a sixth). A failing example must be changed; don't loosen the detector.
+- **Flash safety:** every example is checked at the export frame rate (60 fps) by `tests/visual/examples.spec.ts` with `createFlashDetector` (WCAG 2.3.1: more than 3 flashes in any second, in a region a third of the frame in each dimension, sliding by a sixth). A failing example must be changed; don't loosen the detector.
 
-Package names are `@html-animation-engine/<name>`. The composition contract is `Composition` in `packages/core/src/composition.ts`.
+Package names are `@html-animation-engine/<name>`. The composition contract is `Composition` in `packages/core/src/composition.ts`. Its `fps` is the authoring rate (playground playback, `ctx.frame`), not the export rate.
 
 **Workspace resolution:** each package's `exports` has a `"source"` condition that points at `src/*.ts`. TypeScript (`customConditions`), Vite, Vitest and `tsx --conditions=source` all resolve through it. Dev, test and typecheck therefore never need a build. `dist/` is only for publishing.
 
@@ -147,7 +147,7 @@ Package names are `@html-animation-engine/<name>`. The composition contract is `
 | `pnpm format`                         | Prettier write                                                     |
 | `pnpm typecheck`                      | `tsc` for every package and the root configs/tests                 |
 | `pnpm check-env`                      | Checks ffmpeg, ffprobe, required encoders and Playwright Chromium  |
-| `pnpm render <ex> ...`                | Render an example to a 4K H.264 MP4 (see below)                    |
+| `pnpm render <ex> ...`                | Render an example to a 4K 60 fps H.264 MP4 (see below)             |
 | `pnpm stills <ex> ...`                | Render chosen frames as 4K PNGs + a contact sheet                  |
 | `pnpm test:export`                    | End-to-end export tests (Chromium + ffmpeg)                        |
 | `pnpm changeset`                      | Record a version bump for published packages                       |
@@ -181,11 +181,11 @@ Always render **stills first** and look at them before a full render.
 ```sh
 pnpm stills <example>                      # the example's config stills, as 4K PNGs + contact sheet
 pnpm stills <example> --at 1.5,4,9.2       # chosen times
-pnpm render <example>                      # 4K H.264 MP4 → out/<example>.mp4
+pnpm render <example>                      # 4K 60 fps H.264 MP4 → out/<example>.mp4
 pnpm render <example> --from 2 --to 4 --resolution 1080p --crf 12 --audio music.wav
 ```
 
-Render options: `--out`, `--resolution 4k|1440p|1080p|720p` (default **4k**: fit inside 3840 × 2160), `--scale` (exact factor instead), `--fps`, `--from`/`--to`, `--crf` (0 lossless, **18** default, 23 smaller), `--preset` (x264, default medium), `--tune` (e.g. `animation`), `--audio` (muxed with `-c:v copy`), `--root`. Output under `out/` is git-ignored.
+Render options: `--out`, `--resolution 4k|1440p|1080p|720p` (default **4k**: fit inside 3840 × 2160), `--scale` (exact factor instead), `--fps` (default **60**: compositions are pure functions of time, so they are sampled at any rate whatever their authoring `fps`; a `fixedFps` composition keeps its own rate, with a warning if overridden), `--from`/`--to`, `--crf` (0 lossless, **18** default, 23 smaller), `--preset` (x264, default medium), `--tune` (e.g. `animation`), `--audio` (muxed with `-c:v copy`), `--root`. Output under `out/` is git-ignored.
 
 How export works (`packages/export`):
 
@@ -193,7 +193,7 @@ How export works (`packages/export`):
 - Each frame is captured as PNG through the DevTools protocol (`optimizeForSpeed`, lossless) and **piped** into ffmpeg; no frames touch the disk.
 - Encoding: libx264, 8-bit 4:2:0, the Rec. 709 matrix in limited range (converted through 16 bits with error-diffusion dither, so dark gradients don't band), Rec. 709 tags set with `setparams` (ffmpeg 9 ignores `-color_primaries`/`-color_trc` here), `+faststart`. Output goes to `<out>.partial-<pid>` and is renamed only when ffmpeg exits 0; failures leave nothing behind.
 - Colour accuracy: capture is exact (PNG stills match theme hex values); the MP4 is within ±1–2 levels, normal for 8-bit 4:2:0.
-- Speed on an M-series Mac at 4K: DOM/SVG/Canvas examples run at 15–30 fps; the WebGL flame at about 3 fps, because headless WebGL runs on SwiftShader (CPU), which is what keeps it deterministic.
+- Speed on an M-series Mac at 4K: DOM/SVG/Canvas examples render at roughly 4–20 frames a second (blurred shadows and glows are the main cost; slab-rotate, 6.5 s at 60 fps, takes about 1.5 minutes); the WebGL flame at about 3 fps, because headless WebGL runs on SwiftShader (CPU), which is what keeps it deterministic.
 - Deferred (see Current scope): segmented or parallel encoding (not needed: x264 already uses every core, and capture is ~10–30 ms a frame), other formats, and the audio synth.
 
 `pnpm test:export` (also run in CI) checks a 4K render with ffprobe (codec, profile, size, pixel format, fps, exact frame count, duration, Rec. 709 tags), that re-renders are frame-identical (`framemd5`), that a `--from/--to` range equals the same frames of a full render (lossless), that audio muxing doesn't touch the video stream, that a failed encode leaves no files, and that WebGL, Remotion, Canvas 3D and DOM examples each export deterministically.
