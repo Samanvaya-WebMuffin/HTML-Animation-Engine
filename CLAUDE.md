@@ -26,7 +26,7 @@ ESLint enforces the banned APIs in `packages/{core,renderers,adapters}/src` and 
 ```
 packages/core        timeline, easing, tweens, scene graph, RNG, colour, tokens. ZERO runtime deps.
 packages/renderers   DOM / SVG / Canvas 2D renderers, effects library, defineSceneComposition, mountStage
-packages/adapters    one subpath export per library; currently only ./remotion
+packages/adapters    one subpath export per library; currently ./remotion (both directions)
                      (each library is an OPTIONAL peer dependency; never a hard dependency)
 packages/export      Node CLI (`hae`) + API: Playwright capture, ffmpeg encode, environment check
 apps/playground      Vite app: example list, scrubber, play/pause, frame step, fps, resolution,
@@ -103,6 +103,25 @@ For per-pixel effects (realistic fire, light, volumetrics), `defineSceneComposit
 
 `candleFlame` (`effects/flame.ts`) is the reference example. Its model, from flame-structure and photographic references: soot glow as blackbody colour through a filmic tone map, a blue CH/C₂ reaction rim at the base, an oxygen-starved dark zone above the wick, steady sway and breathing (a single candle in still air doesn't really flicker), turbulence that drifts upward and grows towards the tip (`turbulence` ≈ 0.06 for a candle, 0.3+ for wild fire), a halo, wax lit from above with light glowing through it near the top, and a wick with an ember tip.
 
+### Remotion adapter (`@html-animation-engine/adapters/remotion`)
+
+Both directions seek; nothing runs on Remotion's or React's clock.
+
+- **Engine → Remotion:** `<HaeComposition composition={c} />` plays an engine composition at t = `useCurrentFrame()` / fps, holding Remotion's renderer with `delayRender` until fonts and setup are done. Register one in a Remotion project with `<Composition {...remotionCompositionProps(c)} />`.
+- **Remotion → engine:** `fromRemotion({ id, component, width, height, fps, durationInFrames, fontFaces?, fonts? })` wraps Remotion-style React code as an engine composition. Each `render(t)` shows frame `floor(t × fps)` through `@remotion/player`'s `<Thumbnail frameToDisplay>` inside `flushSync`, so it is synchronous. Supported: code driven by `useCurrentFrame()` (`interpolate`, `spring`, `Sequence`, `Series`, `AbsoluteFill`, `Easing`, `interpolateColors`). Not supported: `<Video>`/`<Audio>`/`<OffthreadVideo>`, or assets that load after setup.
+- Nested asynchronous work (an engine composition inside a Remotion component inside `fromRemotion`) is awaited during setup through a readiness context, so no frame is blank. `remotion-roundtrip` proves both directions: it is pixel-identical to `shape-morph`.
+- `remotion` and `@remotion/player` must be the **same exact version** (pinned to 4.0.540 here). Remotion needs a company licence for companies of more than 3 people.
+- Compositions may be `composition.tsx`; JSX uses the automatic runtime (`"jsx": "react-jsx"`).
+
+### Capture determinism (read before touching capture or export)
+
+A frame's pixels must not depend on which frames were drawn before it. Two Chrome behaviours break that, and both are handled:
+
+- **Compositing history:** Chrome keeps per-element compositing decisions. An element that once had a transform _and_ opacity below 1 (even 0.9999997 from a settled spring) can rasterise differently on later frames. `mountStage(..., { isolateFrames: true })` detaches and re-attaches the stage after every render, which discards that state while keeping DOM, React roots, canvas bitmaps and WebGL contexts. `capture.html` always uses it; export must too.
+- **Screencasting:** Playwright's trace recorder (and any screencast) forces extra compositor frames mid-capture. Tracing is off in `playwright.config.ts`; never capture with a screencast running.
+
+The per-example test "renders identical frames regardless of what was drawn before" captures after every frame (as export does) and compares against a reverse-order pass. Keep it that way: scrubbing without capturing does not exercise this.
+
 ### Accessibility
 
 - **Reduced motion:** the playground toggle defaults to the OS `prefers-reduced-motion` setting. Playback then holds each key moment (`config.stills`) for 2 s and cuts between them, and compositions receive `ctx.reducedMotion = true` to drop non-essential motion.
@@ -178,7 +197,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 - [x] Phase 3: DOM/SVG/Canvas renderers (pixel parity tested), effects library with 13 examples (goldens, determinism, flash safety each), reduced-motion playback, WCAG flash detector, stage blocks CSS/Web Animations, bundled Inter font, capture page
 - [x] Phase 3b: 3D via projection (`spatial/`): slab rotating with zooms, lifted page corner, fly-through past 3D objects; examples `slab-rotate`, `page-curl`, `fly-through`. Also: chroma-weighted OKLCH hue, bundled JetBrains Mono
 - [x] Flame: WebGL2 shader layer + `candleFlame` (example `candle-flame`), researched against flame-structure and photographic references
-- [ ] Phase 4: Remotion adapter (both directions)
+- [x] Phase 4: Remotion adapter, both directions (`HaeComposition`, `remotionCompositionProps`, `fromRemotion`); examples `remotion-title`, `remotion-roundtrip`; capture made order-independent (`isolateFrames`, no tracing)
 - [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)
 - [ ] Phase 6: visual regression goldens, performance budgets
 - [ ] Phase 7: starter examples (a Remotion example replaces the Three.js and GSAP ones)

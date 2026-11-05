@@ -10,7 +10,12 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 /** Every example folder that has a composition. */
 export function exampleNames(): string[] {
   return readdirSync(`${ROOT}examples`, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && existsSync(`${ROOT}examples/${d.name}/composition.ts`))
+    .filter(
+      (d) =>
+        d.isDirectory() &&
+        (existsSync(`${ROOT}examples/${d.name}/composition.ts`) ||
+          existsSync(`${ROOT}examples/${d.name}/composition.tsx`)),
+    )
     .map((d) => d.name)
     .sort();
 }

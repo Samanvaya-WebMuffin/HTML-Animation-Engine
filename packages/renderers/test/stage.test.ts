@@ -103,3 +103,23 @@ describe('mountStage seeds and fonts', () => {
     }
   });
 });
+
+describe('mountStage isolateFrames', () => {
+  it('re-attaches the stage after each frame, in the same place, keeping its content', async () => {
+    const host = document.createElement('div');
+    const before = document.createElement('span');
+    const after = document.createElement('span');
+    document.body.append(host);
+    host.append(before, after);
+    const { composition } = makeComposition();
+    const stage = await mountStage(host, composition, { isolateFrames: true });
+    host.insertBefore(stage.element, after);
+    const marker = document.createElement('i');
+    stage.element.append(marker);
+    stage.render(0.5);
+    expect([...host.children]).toEqual([before, stage.element, after]);
+    expect(stage.element.isConnected).toBe(true);
+    expect(marker.parentElement).toBe(stage.element);
+    expect(stage.element.dataset['t']).toBe('0.5');
+  });
+});

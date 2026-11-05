@@ -1,13 +1,13 @@
 {
   "name": "@html-animation-engine/adapters",
   "version": "0.0.0",
-  "description": "Seek-driven adapters for third-party animation libraries. Currently: Remotion. Each library is an optional peer dependency.",
+  "description": "Seek-driven adapters for third-party animation libraries. Currently: Remotion (both directions). Each library is an optional peer dependency.",
   "license": "UNLICENSED",
   "type": "module",
   "sideEffects": false,
   "exports": {
     "./remotion": {
-      "source": "./src/remotion.ts",
+      "source": "./src/remotion.tsx",
       "types": "./dist/remotion.d.ts",
       "import": "./dist/remotion.js"
     },
@@ -22,15 +22,20 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@html-animation-engine/core": "workspace:^"
+    "@html-animation-engine/core": "workspace:^",
+    "@html-animation-engine/renderers": "workspace:^"
   },
   "peerDependencies": {
     "remotion": "^4.0.0",
+    "@remotion/player": "^4.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   },
   "peerDependenciesMeta": {
     "remotion": {
+      "optional": true
+    },
+    "@remotion/player": {
       "optional": true
     },
     "react": {
@@ -41,6 +46,12 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "remotion": "4.0.540",
+    "@remotion/player": "4.0.540",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   }
 }

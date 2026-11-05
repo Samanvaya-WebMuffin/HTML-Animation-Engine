@@ -8,11 +8,14 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
   peerDependenciesMeta: Record<string, { optional?: boolean }>;
 };
 
-const ADAPTED = ['remotion'];
+const ADAPTED = ['remotion', '@remotion/player'];
 
 describe('adapters package', () => {
-  it.each(ADAPTED)('exposes ./%s as its own subpath with an optional peer', (name) => {
-    expect(pkg.exports[`./${name}`]).toBeDefined();
+  it('exposes ./remotion as its own subpath', () => {
+    expect(pkg.exports['./remotion']).toBeDefined();
+  });
+
+  it.each(ADAPTED)('%s is an optional peer dependency', (name) => {
     expect(pkg.peerDependencies[name]).toBeDefined();
     expect(pkg.peerDependenciesMeta[name]?.optional).toBe(true);
   });

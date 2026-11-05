@@ -20,8 +20,10 @@ async function renderHashes(page: Page, times: number[]): Promise<string[]> {
 }
 
 test.describe('core engine determinism (Canvas 2D pixels)', () => {
+  // The bare capture page: no example mounts in the background, so nothing
+  // (such as a font finishing loading) changes underneath the fixture.
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/capture.html');
   });
 
   test('the same frame renders to identical bytes twice', async ({ page }) => {
@@ -43,7 +45,7 @@ test.describe('core engine determinism (Canvas 2D pixels)', () => {
     const [here] = await renderHashes(page, [2.4]);
     const context = await browser.newContext();
     const other = await context.newPage();
-    await other.goto('/');
+    await other.goto('/capture.html');
     const [there] = await renderHashes(other, [2.4]);
     await context.close();
     expect(there).toBe(here);

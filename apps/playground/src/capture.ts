@@ -47,6 +47,8 @@ async function mount(): Promise<CaptureInfo> {
     fps,
     pixelRatio: Number(params.get('scale')) || 1,
     reducedMotion: params.get('reduced') === '1',
+    // Frames must not depend on which frames were drawn before them.
+    isolateFrames: true,
   });
   renderFrame = (t) => stage.render(t);
   return {
@@ -61,6 +63,7 @@ async function mount(): Promise<CaptureInfo> {
 }
 
 window.haeCapture = {
-  ready: mount(),
+  // Without ?example= the page is a blank, isolated host (used by test fixtures).
+  ready: params.has('example') ? mount() : new Promise<CaptureInfo>(() => undefined),
   render: (t) => renderFrame(t),
 };

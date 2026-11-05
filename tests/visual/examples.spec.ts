@@ -32,19 +32,23 @@ for (const name of exampleNames()) {
       }
     });
 
-    test('renders identical frames after scrubbing', async ({ page }) => {
+    test('renders identical frames regardless of what was drawn before', async ({ page }) => {
+      // Capture after every frame, as export does: a frame's pixels must not
+      // depend on which frames were drawn (and captured) before it.
       const info = await openCapture(page, name);
       const first: Buffer[] = [];
       for (const t of info.stills) {
         await renderAt(page, t);
         first.push(await frameShot(page, info));
       }
-      for (const t of scrubTimes(info.duration, info.fps, 12)) await renderAt(page, t);
-      for (const [i, t] of info.stills.entries()) {
+      for (const t of scrubTimes(info.duration, info.fps, 12)) {
         await renderAt(page, t);
-        expect((await frameShot(page, info)).equals(first[i] as Buffer), `frame at ${t}s`).toBe(
-          true,
-        );
+        await frameShot(page, info);
+      }
+      for (const [i, t] of [...info.stills.entries()].reverse()) {
+        await renderAt(page, t);
+        const same = (await frameShot(page, info)).equals(first[i] as Buffer);
+        expect(same, `frame at ${t}s`).toBe(true);
       }
     });
 

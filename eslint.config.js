@@ -10,10 +10,10 @@ const PURE_TIME_MESSAGE =
 
 /** Code that runs inside (or builds) a `render(t)` path. */
 const RENDER_PATHS = [
-  'packages/core/src/**/*.ts',
-  'packages/renderers/src/**/*.ts',
-  'packages/adapters/src/**/*.ts',
-  'examples/**/*.ts',
+  'packages/core/src/**/*.{ts,tsx}',
+  'packages/renderers/src/**/*.{ts,tsx}',
+  'packages/adapters/src/**/*.{ts,tsx}',
+  'examples/**/*.{ts,tsx}',
 ];
 
 export default defineConfig(

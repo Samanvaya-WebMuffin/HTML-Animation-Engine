@@ -2,11 +2,11 @@ import type { Composition } from '@html-animation-engine/core';
 import type { ExampleConfig } from '@html-animation-engine/examples';
 
 /**
- * Every example under `examples/<name>/composition.ts`. Modules load on
+ * Every example under `examples/<name>/composition.ts` (or `.tsx`). Modules load on
  * demand, so a heavy example (e.g. one using Remotion) only loads when selected.
  */
 const compositionModules = import.meta.glob<{ default: Composition }>(
-  '../../../examples/*/composition.ts',
+  '../../../examples/*/composition.{ts,tsx}',
 );
 const configModules = import.meta.glob<{ default: ExampleConfig }>('../../../examples/*/config.ts');
 
@@ -21,7 +21,7 @@ function nameOf(path: string): string {
 
 export const examples: readonly ExampleEntry[] = Object.entries(compositionModules)
   .map(([path, loadComposition]): ExampleEntry => {
-    const loadConfig = configModules[path.replace(/composition\.ts$/, 'config.ts')];
+    const loadConfig = configModules[path.replace(/composition\.tsx?$/, 'config.ts')];
     return {
       name: nameOf(path),
       async load() {

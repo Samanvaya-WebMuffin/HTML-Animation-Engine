@@ -18,6 +18,7 @@ import {
   pathGeometry,
   pill,
   random,
+  registerFontFaces,
   rect,
   shapeNode,
   staggerProgress,
@@ -26,6 +27,7 @@ import {
   type Matrix,
   type Scene,
 } from '../../../packages/core/src/index.js';
+import { fontFaces } from '../../../examples/fonts.js';
 
 const { colors, easing, type } = defaultTheme;
 const W = 640;
@@ -65,6 +67,7 @@ function paint(ctx: CanvasRenderingContext2D, items: readonly DrawItem[]) {
 
 export async function createFixture() {
   const font = { ...type.display, size: 40 };
+  await registerFontFaces(fontFaces);
   await loadFonts([font]);
   const title = layoutText('Pure function of time', font, {
     measurer: createCanvasMeasurer(),

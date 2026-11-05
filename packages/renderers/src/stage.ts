@@ -15,6 +15,16 @@ export interface StageOptions {
   pixelRatio?: number;
   /** Passed to the composition as `ctx.reducedMotion`. Defaults to false. */
   reducedMotion?: boolean;
+  /**
+   * Give every frame fresh layout, paint and compositing state (for capture).
+   * Chrome keeps compositing decisions per element: an element that once had
+   * a transform and opacity below 1 can be rasterised differently on later
+   * frames than if it had never faded, so a frame's pixels would depend on
+   * which frames were drawn before it. Detaching and re-attaching the stage
+   * after each render discards that state; DOM, React roots, canvas bitmaps
+   * and WebGL contexts survive. Costs a relayout per frame. Default false.
+   */
+  isolateFrames?: boolean;
 }
 
 /**
@@ -90,6 +100,12 @@ export async function mountStage(
       const ctx: RenderContext = { ...setupContext, frame: timeToFrame(t, fps) };
       composition.render(t, ctx);
       stopClockDrivenAnimation(element, composition.id);
+      if (options.isolateFrames) {
+        const parent = element.parentNode;
+        const next = element.nextSibling;
+        element.remove();
+        parent?.insertBefore(element, next);
+      }
     },
     destroy() {
       composition.teardown?.(setupContext);

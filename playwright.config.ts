@@ -12,7 +12,11 @@ export default defineConfig({
   reporter: process.env['CI'] ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${PORT}`,
-    trace: 'retain-on-failure',
+    // No tracing: the trace recorder's screencast forces extra compositor
+    // frames, which can capture DOM text rasterised under a previous frame's
+    // transform and break byte-identical frames. Pass `--trace on` only when
+    // debugging, and expect determinism tests to be unreliable while it is on.
+    trace: 'off',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
