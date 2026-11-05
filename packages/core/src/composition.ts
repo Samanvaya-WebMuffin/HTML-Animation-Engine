@@ -1,3 +1,6 @@
+import { seedToInt, type Seed } from './random/hash.js';
+import type { FontSpec } from './text/font.js';
+
 /**
  * A composition is a pure function of time. `render(t, ctx)` must draw the
  * frame at `t` seconds from scratch: no wall-clock reads, no
@@ -16,6 +19,11 @@ export interface RenderContext {
   readonly frame: number;
   /** Device pixel ratio the output is rendered at (e.g. 2 for `--scale 2`). */
   readonly pixelRatio: number;
+  /**
+   * The composition's random seed as a 32-bit integer. Use it for all
+   * randomness: `random(ctx.seed, 'star', i)` or `createRng(ctx.seed)`.
+   */
+  readonly seed: number;
 }
 
 export type SetupContext = Omit<RenderContext, 'frame'>;
@@ -31,6 +39,10 @@ export interface Composition {
   readonly duration: number;
   /** CSS colour painted behind the frame, or `'transparent'`. */
   readonly background: string;
+  /** Random seed. Default: the composition `id`. Change it to reshuffle all randomness. */
+  readonly seed?: Seed;
+  /** Fonts to load before `setup` runs, so text is measured with the real font. */
+  readonly fonts?: readonly FontSpec[];
   /**
    * Optional one-off setup: build DOM/canvas structure, load fonts and
    * textures. May be async. It must not start timers or animation loops.
@@ -59,6 +71,11 @@ export function defineComposition<C extends Composition>(composition: C): C {
     throw new Error(`Composition "${id}": duration must be a positive number, got ${duration}.`);
   }
   return composition;
+}
+
+/** The numeric seed for a composition: its `seed`, or a hash of its `id`. */
+export function compositionSeed(composition: Pick<Composition, 'id' | 'seed'>): number {
+  return seedToInt(composition.seed ?? composition.id);
 }
 
 /**

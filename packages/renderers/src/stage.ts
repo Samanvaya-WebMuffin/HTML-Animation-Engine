@@ -1,4 +1,6 @@
 import {
+  compositionSeed,
+  loadFonts,
   timeToFrame,
   type Composition,
   type RenderContext,
@@ -30,8 +32,9 @@ export interface Stage {
 }
 
 /**
- * Mounts `composition` inside `host`, runs its `setup`, and waits for web
- * fonts so that text is measured with the real font before the first frame.
+ * Mounts `composition` inside `host`: loads its declared fonts, runs its
+ * `setup`, and waits for `document.fonts.ready`, so text is measured with the
+ * real font before the first frame.
  */
 export async function mountStage(
   host: HTMLElement,
@@ -55,7 +58,20 @@ export async function mountStage(
   });
   host.append(element);
 
-  const setupContext: SetupContext = { root: element, width, height, fps, pixelRatio };
+  const setupContext: SetupContext = {
+    root: element,
+    width,
+    height,
+    fps,
+    pixelRatio,
+    seed: compositionSeed(composition),
+  };
+  if (composition.fonts?.length) {
+    const missing = await loadFonts(composition.fonts, doc);
+    for (const font of missing) {
+      console.warn(`[hae] Font not available, a fallback will be used: ${font.family}`);
+    }
+  }
   await composition.setup?.(setupContext);
   await doc.fonts?.ready;
 

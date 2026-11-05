@@ -35,6 +35,32 @@ tests/unit           repo-wide unit tests (e.g. the purity lint rule)
 tests/visual         Playwright tests; goldens in tests/visual/__goldens__
 ```
 
+### Core engine (`packages/core/src`)
+
+| Module              | What it gives you                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `composition.ts`    | `Composition`, `defineComposition`, frame/time conversion, `compositionSeed`                                       |
+| `easing/`           | `cubicBezier` (Newton + bisection fallback), closed-form `spring` (`.duration` = settle time), CSS `steps`         |
+| `tween.ts`          | `progress(t, start, duration, ease)`, `keyframes`, `staggerProgress`, `lerpRect`, `holdFor(text)`                  |
+| `color/`            | CSS colour parsing, OKLCH conversion with gamut mapping, `mixColors` (OKLCH, shortest hue arc)                     |
+| `timeline/`         | `timeline([...])` from `clip`/`gap`/`label`/`seq`/`par`/`stagger`, `at(label, offset)`; `tempo({ bpm })` beat grid |
+| `geometry/`         | matrices, SVG path parse/flatten/length, `rect`/`pill`/`circle`/`pathGeometry`, **`morph`**                        |
+| `scene/`            | scene nodes (group/shape/text), camera, `flattenScene` → paint-ordered draw list                                   |
+| `random/`           | stateless `random(seed, ...keys)`, seeded `createRng`, seeded simplex `createNoise` (with seamless `loop`)         |
+| `text/`             | `loadFonts`, `createCanvasMeasurer`, `layoutText` (lines + words for stagger)                                      |
+| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations                   |
+
+Conventions the code relies on:
+
+- **Units:** seconds for time, px for space, **degrees** for rotation (clockwise on screen, y down).
+- **Rects are centred:** `rect(x, y, w, h, radius)` and `Rect.x/y` are the **centre**, so scaling and morphs stay centred. Pills and circles are rects with a large radius, which is why rect → pill → circle interpolates exactly.
+- **Eases belong to the arriving key** in `keyframes` and `morph`: `{ at: 2, ..., ease }` eases the segment that ends at t = 2.
+- **Timeline placement:** items in a `seq` follow the cursor. An item placed with `{ at }` is absolute and does **not** move the cursor. Labels must be defined before they are referenced.
+- **Randomness in `render`:** use `random(ctx.seed, 'name', i)` (stateless), or create `createRng(ctx.seed)` **inside** `render`/`setup`. Never keep an RNG at module scope.
+- **Scenes are rebuilt every frame** as plain data: `render(t)` builds a `Scene` and a renderer draws `flattenScene(scene)`. Node `id`s must be unique; renderers use them to reuse elements.
+- **Morph shapes must be single closed contours** (multi-contour paths throw). Outline matching happens when `morph()` is called, so call it once in setup or at module scope, not per frame.
+- **Text:** declare `fonts` on the composition so the stage loads them before `setup`, then measure with `createCanvasMeasurer()`. Renderers must apply `letterSpacing` exactly as the measurer does (after every character), or word gaps shrink.
+
 Package names are `@html-animation-engine/<name>`. The composition contract is `Composition` in `packages/core/src/composition.ts`.
 
 **Workspace resolution:** each package's `exports` has a `"source"` condition that points at `src/*.ts`. TypeScript (`customConditions`), Vite, Vitest and `tsx --conditions=source` all resolve through it. Dev, test and typecheck therefore never need a build. `dist/` is only for publishing.
@@ -98,7 +124,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 ## Status
 
 - [x] Phase 1: repo setup (workspace, tooling, playground shell, `Composition` contract, `mountStage`, env check, CI)
-- [ ] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text)
+- [x] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text, theme tokens). Determinism is proven in `packages/core/test/determinism.test.ts` (pinned output) and `tests/visual/determinism.spec.ts` (byte-identical Canvas pixels)
 - [ ] Phase 3: renderers and effects, reduced-motion mode, flash-safety check; `mountStage` disables CSS transitions/animations and Web Animations inside the stage
 - [ ] Phase 4: Remotion adapter (both directions)
 - [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)

@@ -68,5 +68,10 @@ export default defineConfig(
       ],
     },
   },
+  {
+    // Non-null assertions are fine in tests: a wrong assumption fails the test.
+    files: ['**/test/**/*.ts', 'tests/**/*.ts'],
+    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
+  },
   prettier,
 );

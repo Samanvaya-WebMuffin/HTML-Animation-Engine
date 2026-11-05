@@ -1,5 +1,9 @@
 // @vitest-environment happy-dom
-import { defineComposition, type RenderContext } from '@html-animation-engine/core';
+import {
+  compositionSeed,
+  defineComposition,
+  type RenderContext,
+} from '@html-animation-engine/core';
 import { describe, expect, it, vi } from 'vitest';
 import { mountStage } from '../src/index.js';
 
@@ -39,7 +43,12 @@ describe('mountStage', () => {
 
     stage.render(0.5);
     expect(calls.at(-1)?.t).toBe(0.5);
-    expect(calls.at(-1)?.ctx).toMatchObject({ frame: 30, fps: 60, pixelRatio: 2 });
+    expect(calls.at(-1)?.ctx).toMatchObject({
+      frame: 30,
+      fps: 60,
+      pixelRatio: 2,
+      seed: compositionSeed({ id: 'stage-test' }),
+    });
     expect(stage.element.dataset['t']).toBe('0.5');
   });
 
@@ -50,5 +59,47 @@ describe('mountStage', () => {
     stage.destroy();
     expect(composition.teardown).toHaveBeenCalledTimes(1);
     expect(stage.element.isConnected).toBe(false);
+  });
+});
+
+describe('mountStage seeds and fonts', () => {
+  it('derives ctx.seed from `seed`, falling back to the id', async () => {
+    const { composition } = makeComposition();
+    const seeds: number[] = [];
+    const record = (_t: number, ctx: RenderContext) => void seeds.push(ctx.seed);
+    for (const variant of [composition, { ...composition, seed: 'other' }]) {
+      const stage = await mountStage(document.body, { ...variant, render: record });
+      stage.render(0);
+    }
+    expect(seeds).toEqual([
+      compositionSeed({ id: 'stage-test' }),
+      compositionSeed({ id: 'ignored', seed: 'other' }),
+    ]);
+  });
+
+  it('loads declared fonts before setup runs', async () => {
+    const order: string[] = [];
+    const fonts = {
+      load: vi.fn((font: string) => {
+        order.push(`load ${font}`);
+        return Promise.resolve([]);
+      }),
+      check: vi.fn(() => true),
+      ready: Promise.resolve(),
+    };
+    const original = Object.getOwnPropertyDescriptor(document, 'fonts');
+    Object.defineProperty(document, 'fonts', { value: fonts, configurable: true });
+    try {
+      const { composition } = makeComposition();
+      await mountStage(document.body, {
+        ...composition,
+        fonts: [{ family: 'Inter', size: 48, weight: 700 }],
+        setup: () => void order.push('setup'),
+      });
+      expect(order).toEqual(['load 700 48px Inter', 'setup']);
+    } finally {
+      if (original) Object.defineProperty(document, 'fonts', original);
+      else Reflect.deleteProperty(document, 'fonts');
+    }
   });
 });
