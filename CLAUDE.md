@@ -87,9 +87,21 @@ The three renderers draw the same `flattenScene` output and are tested for pixel
 - **Canvas** paints the composition background into the bitmap; DOM/SVG rely on the stage background.
 - **DOM:** rects are `div`s (a centred stroke is a border on an enlarged box), paths and dashed strokes are inline SVG, clips are nested wrappers with `clip-path: path()`.
 
-Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`, and in 3D `slab3d`, `pageCurl`, `flyThrough`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
+Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`, in 3D `slab3d`, `pageCurl`, `flyThrough`, and as a shader layer `candleFlame`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
 
 The **stage** (`mountStage`) blocks CSS transitions and animations inside it, cancels Web Animations and pauses SMIL after every frame (with a console warning), and passes `ctx.reducedMotion`.
+
+### Shader layers (WebGL2)
+
+For per-pixel effects (realistic fire, light, volumetrics), `defineSceneComposition({ shader: { fragment, uniforms(t, ctx, state) } })` draws a full-frame WebGL2 fragment shader beneath the scene (`packages/renderers/src/shader.ts`). Rules:
+
+- **Uniforms only:** the shader may read nothing but its uniforms (plus `uResolution`), and `uniforms` must be a pure function of `t`. Compute slow motion on the CPU with core's seeded noise and pass it in.
+- **Integer hashing:** build noise on an integer hash (PCG, see `flame.ts`), never `fract(sin(x) * 43758.5)`, whose precision differs between GPUs.
+- **Light in linear space,** then tone-map and convert to sRGB, and dither the output (dark gradients band in 8-bit).
+- Headless Chromium runs WebGL on SwiftShader (CPU), which is deterministic. The console message "GPU stall due to ReadPixels" during capture is a harmless performance note.
+- The shader's colours may be physical (blackbody light) rather than theme tokens.
+
+`candleFlame` (`effects/flame.ts`) is the reference example. Its model, from flame-structure and photographic references: soot glow as blackbody colour through a filmic tone map, a blue CH/C₂ reaction rim at the base, an oxygen-starved dark zone above the wick, steady sway and breathing (a single candle in still air doesn't really flicker), turbulence that drifts upward and grows towards the tip (`turbulence` ≈ 0.06 for a candle, 0.3+ for wild fire), a halo, wax lit from above with light glowing through it near the top, and a wick with an ember tip.
 
 ### Accessibility
 
@@ -165,6 +177,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 - [x] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text, theme tokens). Determinism is proven in `packages/core/test/determinism.test.ts` (pinned output) and `tests/visual/determinism.spec.ts` (byte-identical Canvas pixels)
 - [x] Phase 3: DOM/SVG/Canvas renderers (pixel parity tested), effects library with 13 examples (goldens, determinism, flash safety each), reduced-motion playback, WCAG flash detector, stage blocks CSS/Web Animations, bundled Inter font, capture page
 - [x] Phase 3b: 3D via projection (`spatial/`): slab rotating with zooms, lifted page corner, fly-through past 3D objects; examples `slab-rotate`, `page-curl`, `fly-through`. Also: chroma-weighted OKLCH hue, bundled JetBrains Mono
+- [x] Flame: WebGL2 shader layer + `candleFlame` (example `candle-flame`), researched against flame-structure and photographic references
 - [ ] Phase 4: Remotion adapter (both directions)
 - [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)
 - [ ] Phase 6: visual regression goldens, performance budgets

@@ -9,4 +9,11 @@ export {
   type SceneContent,
 } from './scene-composition.js';
 export { mountStage, type Stage, type StageOptions } from './stage.js';
+export {
+  createShaderLayer,
+  type ShaderLayer,
+  type ShaderLayerOptions,
+  type UniformValue,
+  type Uniforms,
+} from './shader.js';
 export { createSvgRenderer } from './svg.js';

@@ -1,3 +1,4 @@
+export { candleFlame, FLAME_FRAGMENT, type CandleFlameOptions } from './flame.js';
 export { cameraPath, pullBack, pushIn, type CameraMoveOptions } from './camera.js';
 export {
   confetti,
