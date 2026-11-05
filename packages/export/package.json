@@ -1,0 +1,37 @@
+{
+  "name": "@html-animation-engine/export",
+  "version": "0.0.0",
+  "description": "Frame-exact capture (Playwright) and encoding (ffmpeg) for HTML-Animation-Engine compositions.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "bin": {
+    "hae": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@html-animation-engine/core": "workspace:^",
+    "playwright": "^1.64.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "html-animation-engine-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @html-animation-engine/playground dev",
+    "build": "pnpm -r --filter \"./packages/*\" --filter \"./apps/*\" build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:visual": "playwright test",
+    "lint": "eslint . --max-warnings 0 && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
+    "render": "tsx --conditions=source packages/export/src/cli.ts render",
+    "stills": "tsx --conditions=source packages/export/src/cli.ts stills",
+    "check-env": "tsx --conditions=source packages/export/src/cli.ts doctor",
+    "changeset": "changeset"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.3",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.14.0",
+    "happy-dom": "^21.0.4",
+    "prettier": "^3.9.10",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  }
+}

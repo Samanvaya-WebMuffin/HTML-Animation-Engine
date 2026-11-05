@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HTML-Animation-Engine Playground</title>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <h1>HTML-Animation-Engine</h1>
+      <h2>Examples</h2>
+      <nav id="example-list" aria-label="Examples"></nav>
+    </aside>
+    <main class="main">
+      <section id="viewport" class="viewport" aria-label="Preview">
+        <div id="stage-frame" class="stage-frame"></div>
+        <p id="empty" class="empty" hidden>
+          No examples yet. Add one at <code>examples/&lt;name&gt;/composition.ts</code>.
+        </p>
+      </section>
+      <footer class="controls" aria-label="Playback controls">
+        <button id="play" type="button" title="Play / pause (Space)">Play</button>
+        <button id="prev" type="button" title="Previous frame (←, Shift+← for 10)">◀ Frame</button>
+        <button id="next" type="button" title="Next frame (→, Shift+→ for 10)">Frame ▶</button>
+        <input
+          id="scrubber"
+          type="range"
+          min="0"
+          max="0"
+          step="1"
+          value="0"
+          aria-label="Scrubber"
+        />
+        <output id="timecode" class="timecode">0.000 s · 0 / 0</output>
+        <label>
+          FPS
+          <select id="fps"></select>
+        </label>
+        <label>
+          Resolution
+          <select id="scale"></select>
+        </label>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

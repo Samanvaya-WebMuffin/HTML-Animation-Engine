@@ -1,0 +1,143 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e0f12;
+  --panel: #16181d;
+  --line: #262a33;
+  --text: #e8e9ec;
+  --muted: #8a8f9c;
+  --accent: #7c9cff;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px 12px;
+  overflow: auto;
+}
+
+.sidebar h1 {
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.sidebar h2 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+#example-list a {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+#example-list a:hover {
+  background: var(--line);
+}
+
+#example-list a[aria-current='page'] {
+  background: var(--accent);
+  color: #000;
+}
+
+.main {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.viewport {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: repeating-conic-gradient(#15171b 0% 25%, #1b1d22 0% 50%) 0 0 / 16px 16px;
+}
+
+.stage-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: 0 0;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.controls button,
+.controls select {
+  font: inherit;
+  color: var(--text);
+  background: var(--line);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+
+.controls button:focus-visible,
+.controls select:focus-visible,
+.controls input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.controls :disabled {
+  opacity: 0.4;
+}
+
+#play {
+  min-width: 64px;
+}
+
+#scrubber {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--accent);
+}
+
+.timecode {
+  font-variant-numeric: tabular-nums;
+  min-width: 150px;
+  color: var(--muted);
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@html-animation-engine/examples",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@html-animation-engine/adapters": "workspace:^",
+    "@html-animation-engine/core": "workspace:^",
+    "@html-animation-engine/renderers": "workspace:^"
+  }
+}

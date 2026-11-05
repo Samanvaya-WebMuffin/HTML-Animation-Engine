@@ -1,0 +1,27 @@
+{
+  "name": "@html-animation-engine/renderers",
+  "version": "0.0.0",
+  "description": "DOM, SVG and Canvas 2D renderers for the HTML-Animation-Engine scene graph.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@html-animation-engine/core": "workspace:^"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+out
+renders
+.render-tmp
+test-results
+playwright-report
+tests/visual/__goldens__
+.changeset/*.md
+!.changeset/README.md

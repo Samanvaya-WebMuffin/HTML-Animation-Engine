@@ -1,0 +1,69 @@
+{
+  "name": "@html-animation-engine/adapters",
+  "version": "0.0.0",
+  "description": "Seek-driven adapters for GSAP, Three.js, Framer Motion and Remotion. Each library is an optional peer dependency.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./gsap": {
+      "source": "./src/gsap.ts",
+      "types": "./dist/gsap.d.ts",
+      "import": "./dist/gsap.js"
+    },
+    "./three": {
+      "source": "./src/three.ts",
+      "types": "./dist/three.d.ts",
+      "import": "./dist/three.js"
+    },
+    "./framer-motion": {
+      "source": "./src/framer-motion.ts",
+      "types": "./dist/framer-motion.d.ts",
+      "import": "./dist/framer-motion.js"
+    },
+    "./remotion": {
+      "source": "./src/remotion.ts",
+      "types": "./dist/remotion.d.ts",
+      "import": "./dist/remotion.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@html-animation-engine/core": "workspace:^"
+  },
+  "peerDependencies": {
+    "gsap": "^3.12.0",
+    "three": ">=0.160.0",
+    "framer-motion": ">=11.0.0",
+    "remotion": "^4.0.0",
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "gsap": {
+      "optional": true
+    },
+    "three": {
+      "optional": true
+    },
+    "framer-motion": {
+      "optional": true
+    },
+    "remotion": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}
