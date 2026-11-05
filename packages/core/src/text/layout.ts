@@ -1,8 +1,27 @@
 import { fontString, type FontSpec } from './font.js';
 
-/** Measures the advance width of `text` in px. */
+export interface FontMetrics {
+  /** Distance from the alphabetic baseline up to the font's ascent line, px. */
+  readonly ascent: number;
+  /** Distance from the alphabetic baseline down to the descent line, px. */
+  readonly descent: number;
+}
+
+/** Measures text. `measure` returns the advance width of `text` in px. */
 export interface TextMeasurer {
   measure(text: string, font: FontSpec): number;
+  /** Font ascent/descent, used to place baselines. */
+  metrics?(font: FontSpec): FontMetrics;
+}
+
+/**
+ * Offset from the top of a line box to the alphabetic baseline, using the
+ * CSS model: half the leading above, then the ascent. Every renderer places
+ * text with this, so DOM, SVG and Canvas text lines up.
+ */
+export function baselineOffset(font: FontSpec, metrics: FontMetrics): number {
+  const lineHeight = font.size * (font.lineHeight ?? 1.2);
+  return (lineHeight - (metrics.ascent + metrics.descent)) / 2 + metrics.ascent;
 }
 
 /**
@@ -13,7 +32,22 @@ export function createCanvasMeasurer(doc: Document = document): TextMeasurer {
   const context = doc.createElement('canvas').getContext('2d');
   if (!context) throw new Error('createCanvasMeasurer: Canvas 2D is unavailable.');
   const cache = new Map<string, number>();
+  const metricsCache = new Map<string, FontMetrics>();
   return {
+    metrics(font) {
+      const key = fontString(font);
+      let metrics = metricsCache.get(key);
+      if (!metrics) {
+        context.font = key;
+        const m = context.measureText('Hg');
+        metrics = {
+          ascent: m.fontBoundingBoxAscent ?? m.actualBoundingBoxAscent,
+          descent: m.fontBoundingBoxDescent ?? m.actualBoundingBoxDescent,
+        };
+        metricsCache.set(key, metrics);
+      }
+      return metrics;
+    },
     measure(text, font) {
       const key = `${fontString(font)}|${font.letterSpacing ?? 0}|${text}`;
       let width = cache.get(key);

@@ -4,7 +4,8 @@ const PORT = 5173;
 
 export default defineConfig({
   testDir: 'tests/visual',
-  snapshotPathTemplate: '{testDir}/__goldens__/{testFilePath}/{arg}{ext}',
+  // Goldens differ by OS (font rasterisation), so each platform keeps its own set.
+  snapshotPathTemplate: '{testDir}/__goldens__/{platform}/{testFilePath}/{arg}{ext}',
   fullyParallel: true,
   forbidOnly: Boolean(process.env['CI']),
   retries: 0,

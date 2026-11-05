@@ -1,0 +1,38 @@
+name: Update goldens
+
+# Regenerates the Linux golden frames for the visual tests and commits them to
+# the branch this is run on. Run it after an intentional visual change, or
+# once to create the Linux set. (Goldens are per platform because font
+# rasterisation differs between operating systems.)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Regenerate goldens
+        run: pnpm test:visual --update-snapshots
+      - name: Commit goldens
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/visual/__goldens__/linux
+          if git diff --cached --quiet; then
+            echo "Goldens unchanged."
+          else
+            git commit -m "Update Linux visual goldens"
+            git push
+          fi

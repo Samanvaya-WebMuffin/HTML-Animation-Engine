@@ -64,6 +64,20 @@ pnpm check-env    # reports ffmpeg, ffprobe, the H.264 encoder and Chromium, wit
 | `pnpm stills`      | Render selected frames and a contact sheet (in progress) |
 | `pnpm check-env`   | Check the rendering toolchain                            |
 
+## Visual tests and goldens
+
+`pnpm test:visual` checks every example in headless Chromium:
+
+- its key moments against golden frames (`tests/visual/__goldens__/<platform>/`),
+- that frames are byte-identical after scrubbing, and
+- that it is flash-safe (WCAG 2.3.1).
+
+Goldens are per platform because operating systems rasterise fonts differently. After an intentional visual change, run `pnpm test:visual --update-snapshots` and commit the result. For Linux (CI), run the **Update goldens** workflow from the Actions tab; it regenerates and commits them.
+
+## Fonts
+
+Examples use [Inter](https://rsms.me/inter/) (SIL Open Font License 1.1), bundled through `@fontsource-variable/inter`, so text measures and wraps the same on every machine.
+
 ## Layout
 
 | Path                 | Package                            | Contents                                                   |

@@ -25,13 +25,25 @@ const ui = {
   timecode: $<HTMLOutputElement>('timecode'),
   fps: $<HTMLSelectElement>('fps'),
   scale: $<HTMLSelectElement>('scale'),
+  reduced: $<HTMLInputElement>('reduced-motion'),
 };
+
+/** Hold per key moment in reduced-motion playback, seconds. */
+const REDUCED_HOLD = 2;
+
+/** Reduced motion: from the URL if set, otherwise from the OS preference. */
+function prefersReducedMotion(): boolean {
+  const fromUrl = params.get('reduced');
+  if (fromUrl !== null) return fromUrl === '1';
+  return matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 /** Playground state that is mirrored into the URL so views can be shared. */
 const params = new URLSearchParams(location.search);
 let stage: Stage | undefined;
 let player: Player | undefined;
 let mountToken = 0;
+let keyTimes: readonly number[] = [];
 
 function writeUrl(state?: PlayerState): void {
   if (state) params.set('frame', String(state.frame));
@@ -43,6 +55,7 @@ function render(state: PlayerState): void {
   ui.scrubber.max = String(state.frameCount - 1);
   ui.scrubber.value = String(state.frame);
   ui.play.textContent = state.playing ? 'Pause' : 'Play';
+  ui.reduced.checked = state.reducedMotion;
   ui.timecode.value = `${state.t.toFixed(3)} s · ${state.frame} / ${state.frameCount - 1}`;
   if (!state.playing) writeUrl(state);
 }
@@ -61,7 +74,7 @@ function fitStage(): void {
 }
 
 function setControlsEnabled(enabled: boolean): void {
-  for (const control of [ui.play, ui.prev, ui.next, ui.scrubber, ui.fps, ui.scale]) {
+  for (const control of [ui.play, ui.prev, ui.next, ui.scrubber, ui.fps, ui.scale, ui.reduced]) {
     control.disabled = !enabled;
   }
 }
@@ -89,8 +102,9 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
     params.delete('frame');
   }
 
-  const { composition } = await entry.load();
+  const { composition, config } = await entry.load();
   if (token !== mountToken) return;
+  keyTimes = config?.stills ?? [composition.duration - 1 / composition.fps];
 
   const fps = Number(params.get('fps')) || composition.fps;
   const scale = Number(params.get('scale')) || 1;
@@ -113,7 +127,12 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
     String(scale),
   );
 
-  const mounted = await mountStage(ui.frame, composition, { fps, pixelRatio: scale });
+  const reducedMotion = prefersReducedMotion();
+  const mounted = await mountStage(ui.frame, composition, {
+    fps,
+    pixelRatio: scale,
+    reducedMotion,
+  });
   if (token !== mountToken) {
     mounted.destroy();
     return;
@@ -121,6 +140,7 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
   stage = mounted;
   player = new Player({ fps, duration: composition.duration, onChange: render });
   player.seek(Number(params.get('frame')) || 0);
+  player.setReducedMotion(reducedMotion ? { keyTimes, hold: REDUCED_HOLD } : null);
   render(player.state);
   fitStage();
   setControlsEnabled(true);
@@ -158,6 +178,11 @@ function bindControls(): void {
     params.set('fps', String(fps));
     if (player) params.set('frame', String(timeToFrame(player.state.t, fps)));
     remount();
+  });
+  ui.reduced.addEventListener('change', () => {
+    params.set('reduced', ui.reduced.checked ? '1' : '0');
+    if (player) params.set('frame', String(player.state.frame));
+    remount(); // the composition also receives ctx.reducedMotion
   });
   ui.scale.addEventListener('change', () => {
     params.set('scale', ui.scale.value);

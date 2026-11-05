@@ -1,4 +1,24 @@
-import type { Composition } from '@html-animation-engine/core';
+import { defaultTheme, type Composition, type FontSpec } from '@html-animation-engine/core';
+import { fontFaces } from './fonts.js';
+
+export { fontFaces };
+
+/** The theme every example uses. Import tokens from here; never hard-code colours. */
+export const theme = defaultTheme;
+
+/** A theme type token at a given size. */
+export function font(token: keyof typeof theme.type, size: number): FontSpec {
+  return { ...theme.type[token], size };
+}
+
+/** Shared defaults: 1280 × 720 at 30 fps with the bundled fonts. */
+export const exampleDefaults = {
+  width: 1280,
+  height: 720,
+  fps: 30,
+  fontFaces,
+  fonts: [font('display', 64), font('body', 24)],
+} as const;
 
 /**
  * Per-example settings, in `examples/<name>/config.ts`. The composition itself

@@ -25,14 +25,15 @@ ESLint enforces the banned APIs in `packages/{core,renderers,adapters}/src` and 
 
 ```
 packages/core        timeline, easing, tweens, scene graph, RNG, colour, tokens. ZERO runtime deps.
-packages/renderers   DOM / SVG / Canvas 2D renderers; mountStage() mounts a composition at exact size.
+packages/renderers   DOM / SVG / Canvas 2D renderers, effects library, defineSceneComposition, mountStage
 packages/adapters    one subpath export per library; currently only ./remotion
                      (each library is an OPTIONAL peer dependency; never a hard dependency)
 packages/export      Node CLI (`hae`) + API: Playwright capture, ffmpeg encode, environment check
-apps/playground      Vite app: example list, scrubber, play/pause, frame step, fps + resolution
+apps/playground      Vite app: example list, scrubber, play/pause, frame step, fps, resolution,
+                     reduced motion. capture.html = one example at exact size (for headless capture)
 examples/<name>/     one folder per animation (see "Adding an example")
 tests/unit           repo-wide unit tests (e.g. the purity lint rule)
-tests/visual         Playwright tests; goldens in tests/visual/__goldens__
+tests/visual         Playwright tests; goldens in tests/visual/__goldens__/<platform>/
 ```
 
 ### Core engine (`packages/core/src`)
@@ -47,7 +48,8 @@ tests/visual         Playwright tests; goldens in tests/visual/__goldens__
 | `geometry/`         | matrices, SVG path parse/flatten/length, `rect`/`pill`/`circle`/`pathGeometry`, **`morph`**                        |
 | `scene/`            | scene nodes (group/shape/text), camera, `flattenScene` → paint-ordered draw list                                   |
 | `random/`           | stateless `random(seed, ...keys)`, seeded `createRng`, seeded simplex `createNoise` (with seamless `loop`)         |
-| `text/`             | `loadFonts`, `createCanvasMeasurer`, `layoutText` (lines + words for stagger)                                      |
+| `text/`             | `registerFontFaces`, `loadFonts`, `createCanvasMeasurer`, `layoutText`, `baselineOffset`                           |
+| `safety/`           | `createFlashDetector`: WCAG 2.3.1 flash analysis on RGBA frames                                                    |
 | `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations                   |
 
 Conventions the code relies on:
@@ -59,7 +61,28 @@ Conventions the code relies on:
 - **Randomness in `render`:** use `random(ctx.seed, 'name', i)` (stateless), or create `createRng(ctx.seed)` **inside** `render`/`setup`. Never keep an RNG at module scope.
 - **Scenes are rebuilt every frame** as plain data: `render(t)` builds a `Scene` and a renderer draws `flattenScene(scene)`. Node `id`s must be unique; renderers use them to reuse elements.
 - **Morph shapes must be single closed contours** (multi-contour paths throw). Outline matching happens when `morph()` is called, so call it once in setup or at module scope, not per frame.
-- **Text:** declare `fonts` on the composition so the stage loads them before `setup`, then measure with `createCanvasMeasurer()`. Renderers must apply `letterSpacing` exactly as the measurer does (after every character), or word gaps shrink.
+- **Text:** declare `fontFaces` (font files) and `fonts` (specs to load) on the composition; the stage registers and loads them before `setup`, then measure with `createCanvasMeasurer()`. Examples get both from `exampleDefaults`; the bundled font is Inter (`examples/fonts.ts`). Never rely on system fonts: line breaks would differ between machines.
+
+### Renderers and effects (`packages/renderers/src`)
+
+Write examples with **`defineSceneComposition({ renderer: 'canvas' | 'svg' | 'dom', setup?, scene(t, ctx, state) })`**. `setup` runs once after fonts load (create effects and measurers there) and its return value is passed to every `scene` call. `scene` returns `{ camera?, world, screen? }`.
+
+The three renderers draw the same `flattenScene` output and are tested for pixel parity (`tests/visual/renderers.spec.ts`). Rules they share; keep them when changing any renderer:
+
+- **Text** is laid out once by core `layoutText` (identical line breaks), and the baseline is placed with `baselineOffset` (CSS half-leading model). Letter spacing is applied after every character.
+- **Opacity is per primitive** (fill, stroke, shadow, each text line), as in Canvas, not group opacity.
+- **Shadows** are an offset copy of the shape in local coordinates; `blur` is a Gaussian with σ = blur / 2 (Canvas `filter`, SVG `feGaussianBlur` in sRGB, CSS `blur()`).
+- **Canvas** paints the composition background into the bitmap; DOM/SVG rely on the stage background.
+- **DOM:** rects are `div`s (a centred stroke is a border on an enlarged box), paths and dashed strokes are inline SVG, clips are nested wrappers with `clip-path: path()`.
+
+Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
+
+The **stage** (`mountStage`) blocks CSS transitions and animations inside it, cancels Web Animations and pauses SMIL after every frame (with a console warning), and passes `ctx.reducedMotion`.
+
+### Accessibility
+
+- **Reduced motion:** the playground toggle defaults to the OS `prefers-reduced-motion` setting. Playback then holds each key moment (`config.stills`) for 2 s and cuts between them, and compositions receive `ctx.reducedMotion = true` to drop non-essential motion.
+- **Flash safety:** every example is checked by `tests/visual/examples.spec.ts` with `createFlashDetector` (WCAG 2.3.1: more than 3 flashes in any second, in a region a third of the frame in each dimension, sliding by a sixth). A failing example must be changed; don't loosen the detector.
 
 Package names are `@html-animation-engine/<name>`. The composition contract is `Composition` in `packages/core/src/composition.ts`.
 
@@ -67,19 +90,20 @@ Package names are `@html-animation-engine/<name>`. The composition contract is `
 
 ## Commands
 
-| Command                | What it does                                                       |
-| ---------------------- | ------------------------------------------------------------------ |
-| `pnpm dev`             | Playground at http://localhost:5173                                |
-| `pnpm build`           | tsup builds every package; Vite builds the playground              |
-| `pnpm test`            | Vitest unit tests (all packages, from the root `vitest.config.ts`) |
-| `pnpm test:visual`     | Playwright visual tests (starts the playground automatically)      |
-| `pnpm lint`            | ESLint (incl. the purity rule) + Prettier check                    |
-| `pnpm format`          | Prettier write                                                     |
-| `pnpm typecheck`       | `tsc` for every package and the root configs/tests                 |
-| `pnpm check-env`       | Checks ffmpeg, ffprobe, required encoders and Playwright Chromium  |
-| `pnpm render <ex> ...` | Render an example to video/images (**not implemented yet**)        |
-| `pnpm stills <ex> ...` | Render chosen frames + a contact sheet (**not implemented yet**)   |
-| `pnpm changeset`       | Record a version bump for published packages                       |
+| Command                               | What it does                                                       |
+| ------------------------------------- | ------------------------------------------------------------------ |
+| `pnpm dev`                            | Playground at http://localhost:5173                                |
+| `pnpm build`                          | tsup builds every package; Vite builds the playground              |
+| `pnpm test`                           | Vitest unit tests (all packages, from the root `vitest.config.ts`) |
+| `pnpm test:visual`                    | Playwright visual tests (starts the playground automatically)      |
+| `pnpm test:visual --update-snapshots` | Regenerate this platform's golden frames                           |
+| `pnpm lint`                           | ESLint (incl. the purity rule) + Prettier check                    |
+| `pnpm format`                         | Prettier write                                                     |
+| `pnpm typecheck`                      | `tsc` for every package and the root configs/tests                 |
+| `pnpm check-env`                      | Checks ffmpeg, ffprobe, required encoders and Playwright Chromium  |
+| `pnpm render <ex> ...`                | Render an example to video/images (**not implemented yet**)        |
+| `pnpm stills <ex> ...`                | Render chosen frames + a contact sheet (**not implemented yet**)   |
+| `pnpm changeset`                      | Record a version bump for published packages                       |
 
 Don't call the env check `pnpm doctor`: that is a pnpm built-in and shadows the script.
 
@@ -99,7 +123,9 @@ Create `examples/<name>/` (lowercase kebab-case) with exactly three files:
 2. `config.ts`: `export default defineExampleConfig({ stills: [/* key moments in s */], budgetMs })` (import from `../index.js`).
 3. `README.md`: one line saying what it shows.
 
-The playground and the export CLI find examples by globbing `examples/*/composition.ts`; there is no registry to update. Import colours, type, easings and durations from the theme tokens. Never hard-code hex values in an example.
+The playground and the export CLI find examples by globbing `examples/*/composition.ts`; there is no registry to update. Spread `exampleDefaults` (size, fps, fonts) and import colours, type (`font('display', 64)`), easings and durations from `theme` in `examples/index.ts`. Never hard-code hex values in an example.
+
+Every example automatically gets three visual tests: golden frames at each of its `stills`, byte-identical frames after scrubbing, and the flash-safety check. After adding or intentionally changing an example, render its stills, **look at them**, then run `pnpm test:visual --update-snapshots` and commit the new goldens. Linux goldens come from the manually triggered **Update goldens** workflow; until they exist, CI skips only the golden comparison (with a message) and still runs the determinism and flash checks.
 
 ## Rendering stills and video
 
@@ -125,7 +151,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 
 - [x] Phase 1: repo setup (workspace, tooling, playground shell, `Composition` contract, `mountStage`, env check, CI)
 - [x] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text, theme tokens). Determinism is proven in `packages/core/test/determinism.test.ts` (pinned output) and `tests/visual/determinism.spec.ts` (byte-identical Canvas pixels)
-- [ ] Phase 3: renderers and effects, reduced-motion mode, flash-safety check; `mountStage` disables CSS transitions/animations and Web Animations inside the stage
+- [x] Phase 3: DOM/SVG/Canvas renderers (pixel parity tested), effects library with 13 examples (goldens, determinism, flash safety each), reduced-motion playback, WCAG flash detector, stage blocks CSS/Web Animations, bundled Inter font, capture page
 - [ ] Phase 4: Remotion adapter (both directions)
 - [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)
 - [ ] Phase 6: visual regression goldens, performance budgets

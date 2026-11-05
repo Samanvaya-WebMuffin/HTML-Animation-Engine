@@ -14,6 +14,7 @@ export * from './easing/index.js';
 export * from './geometry/index.js';
 export { clamp, invLerp, lerp, lerpAngle, mod, remap } from './math.js';
 export * from './random/index.js';
+export * from './safety/index.js';
 export * from './scene/index.js';
 export * from './text/index.js';
 export * from './themes/index.js';

@@ -11,6 +11,51 @@ export interface FontSpec {
   readonly letterSpacing?: number;
 }
 
+/** A font file to register with `document.fonts`. */
+export interface FontSource {
+  readonly family: string;
+  /** URL of the font file (e.g. a bundled `.woff2`). */
+  readonly src: string;
+  /** CSS font-weight, or a range for variable fonts, e.g. `'100 900'`. */
+  readonly weight?: string;
+  readonly style?: 'normal' | 'italic';
+}
+
+const registered = new WeakMap<Document, Map<string, Promise<void>>>();
+
+/**
+ * Registers font files with `document.fonts` and waits until they have loaded.
+ * Registering the same source twice is a no-op.
+ */
+export async function registerFontFaces(
+  sources: readonly FontSource[],
+  doc: Document = document,
+): Promise<void> {
+  let loaded = registered.get(doc);
+  if (!loaded) {
+    loaded = new Map();
+    registered.set(doc, loaded);
+  }
+  const cache = loaded;
+  await Promise.all(
+    sources.map((source) => {
+      const key = `${source.family}|${source.src}|${source.weight ?? ''}|${source.style ?? ''}`;
+      let pending = cache.get(key);
+      if (!pending) {
+        const FontFaceCtor = (doc.defaultView ?? globalThis).FontFace;
+        const face = new FontFaceCtor(source.family, `url(${JSON.stringify(source.src)})`, {
+          ...(source.weight === undefined ? {} : { weight: source.weight }),
+          ...(source.style === undefined ? {} : { style: source.style }),
+        });
+        doc.fonts.add(face);
+        pending = face.load().then(() => undefined);
+        cache.set(key, pending);
+      }
+      return pending;
+    }),
+  );
+}
+
 /** CSS `font` shorthand for a spec, e.g. `italic 700 48px Inter`. */
 export function fontString(font: FontSpec): string {
   const style = font.style === 'italic' ? 'italic ' : '';

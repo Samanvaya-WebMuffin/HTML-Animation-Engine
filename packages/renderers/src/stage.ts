@@ -1,6 +1,7 @@
 import {
   compositionSeed,
   loadFonts,
+  registerFontFaces,
   timeToFrame,
   type Composition,
   type RenderContext,
@@ -12,6 +13,8 @@ export interface StageOptions {
   fps?: number;
   /** Output pixel ratio for canvas backing stores. Defaults to 1. */
   pixelRatio?: number;
+  /** Passed to the composition as `ctx.reducedMotion`. Defaults to false. */
+  reducedMotion?: boolean;
 }
 
 /**
@@ -46,6 +49,7 @@ export async function mountStage(
   const { width, height } = composition;
 
   const doc = host.ownerDocument;
+  installMotionGuard(doc);
   const element = doc.createElement('div');
   element.dataset['haeStage'] = composition.id;
   Object.assign(element.style, {
@@ -65,7 +69,9 @@ export async function mountStage(
     fps,
     pixelRatio,
     seed: compositionSeed(composition),
+    reducedMotion: options.reducedMotion ?? false,
   };
+  if (composition.fontFaces?.length) await registerFontFaces(composition.fontFaces, doc);
   if (composition.fonts?.length) {
     const missing = await loadFonts(composition.fonts, doc);
     for (const font of missing) {
@@ -83,10 +89,52 @@ export async function mountStage(
     render(t: number) {
       const ctx: RenderContext = { ...setupContext, frame: timeToFrame(t, fps) };
       composition.render(t, ctx);
+      stopClockDrivenAnimation(element, composition.id);
     },
     destroy() {
       composition.teardown?.(setupContext);
       element.remove();
     },
   };
+}
+
+const GUARD_ID = 'hae-motion-guard';
+
+/**
+ * CSS transitions and animations run on the browser's clock, not on `t`, so
+ * they are switched off for everything inside a stage.
+ */
+function installMotionGuard(doc: Document): void {
+  if (doc.getElementById(GUARD_ID)) return;
+  const style = doc.createElement('style');
+  style.id = GUARD_ID;
+  style.textContent =
+    '[data-hae-stage], [data-hae-stage] * { transition: none !important; animation: none !important; }';
+  doc.head.append(style);
+}
+
+const warned = new Set<string>();
+
+/**
+ * Cancels Web Animations (`element.animate()`) and pauses SVG SMIL inside the
+ * stage after every frame, so nothing moves except what `render(t)` set.
+ */
+function stopClockDrivenAnimation(element: HTMLElement, id: string): void {
+  const animations = element.getAnimations?.({ subtree: true }) ?? [];
+  if (animations.length > 0) {
+    for (const animation of animations) animation.cancel();
+    if (!warned.has(id)) {
+      warned.add(id);
+      console.warn(
+        `[hae] "${id}" started ${animations.length} clock-driven animation(s); they were cancelled. ` +
+          'Derive motion from t instead.',
+      );
+    }
+  }
+  for (const svg of element.querySelectorAll('svg')) {
+    if (typeof svg.pauseAnimations === 'function' && typeof svg.setCurrentTime === 'function') {
+      svg.pauseAnimations();
+      svg.setCurrentTime(0);
+    }
+  }
 }

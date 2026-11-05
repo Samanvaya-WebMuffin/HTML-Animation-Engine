@@ -6,6 +6,18 @@ export interface PlayerState {
   readonly fps: number;
   readonly t: number;
   readonly playing: boolean;
+  readonly reducedMotion: boolean;
+}
+
+/**
+ * Reduced-motion playback: instead of running through every frame, playback
+ * holds on each key moment for `hold` seconds and cuts to the next.
+ */
+export interface ReducedMotionPlayback {
+  /** Key moments in seconds (usually the example's `stills`). */
+  readonly keyTimes: readonly number[];
+  /** Seconds to hold each key moment. */
+  readonly hold: number;
 }
 
 /**
@@ -24,6 +36,8 @@ export class Player {
   #playing = false;
   #anchorMs = 0;
   #anchorFrame = 0;
+  #anchorKey = 0;
+  #reduced: ReducedMotionPlayback | null = null;
   readonly loop: boolean;
   readonly #onChange: (state: PlayerState) => void;
 
@@ -47,6 +61,7 @@ export class Player {
       fps: this.#fps,
       t: frameToTime(this.#frame, this.#fps),
       playing: this.#playing,
+      reducedMotion: this.#reduced !== null,
     };
   }
 
@@ -68,6 +83,7 @@ export class Player {
     if (!this.loop && this.#frame >= this.#frameCount - 1) this.#frame = 0;
     this.#playing = true;
     this.#anchor(now, this.#frame);
+    if (this.#reduced) this.#tickReduced(now, this.#reduced); // cut to the first key moment
     this.#emit();
   }
 
@@ -82,9 +98,20 @@ export class Player {
     else this.play(now);
   }
 
+  /** Switches reduced-motion playback on (with its key moments) or off (`null`). */
+  setReducedMotion(playback: ReducedMotionPlayback | null, now?: number): void {
+    this.#reduced = playback && playback.keyTimes.length > 0 ? playback : null;
+    if (this.#playing && now !== undefined) this.#anchor(now, this.#frame);
+    this.#emit();
+  }
+
   /** Advances to the frame due at `now`. Call once per display refresh. */
   tick(now: number): void {
     if (!this.#playing) return;
+    if (this.#reduced) {
+      this.#tickReduced(now, this.#reduced);
+      return;
+    }
     const elapsed = Math.max(0, now - this.#anchorMs) / 1000;
     let next = this.#anchorFrame + timeToFrame(elapsed, this.#fps);
     if (next >= this.#frameCount) {
@@ -112,9 +139,38 @@ export class Player {
     this.#emit();
   }
 
+  #keyFrames(playback: ReducedMotionPlayback): number[] {
+    return playback.keyTimes.map((t) => Math.min(timeToFrame(t, this.#fps), this.#frameCount - 1));
+  }
+
+  #tickReduced(now: number, playback: ReducedMotionPlayback): void {
+    const keys = this.#keyFrames(playback);
+    const steps = Math.floor(Math.max(0, now - this.#anchorMs) / 1000 / playback.hold);
+    let index = this.#anchorKey + steps;
+    if (index >= keys.length) {
+      if (this.loop) {
+        index %= keys.length;
+      } else {
+        index = keys.length - 1;
+        this.#playing = false;
+      }
+    }
+    const next = keys[index] ?? this.#frame;
+    if (next !== this.#frame || !this.#playing) {
+      this.#frame = next;
+      this.#emit();
+    }
+  }
+
   #anchor(now: number, frame: number): void {
     this.#anchorMs = now;
     this.#anchorFrame = frame;
+    if (this.#reduced) {
+      // Start from the first key moment at or after the current frame.
+      const keys = this.#keyFrames(this.#reduced);
+      const index = keys.findIndex((key) => key >= frame);
+      this.#anchorKey = index === -1 ? 0 : index;
+    }
   }
 
   #emit(): void {

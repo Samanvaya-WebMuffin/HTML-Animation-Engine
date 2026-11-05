@@ -1,5 +1,5 @@
 import { seedToInt, type Seed } from './random/hash.js';
-import type { FontSpec } from './text/font.js';
+import type { FontSource, FontSpec } from './text/font.js';
 
 /**
  * A composition is a pure function of time. `render(t, ctx)` must draw the
@@ -24,6 +24,11 @@ export interface RenderContext {
    * randomness: `random(ctx.seed, 'star', i)` or `createRng(ctx.seed)`.
    */
   readonly seed: number;
+  /**
+   * True when the viewer prefers reduced motion. Playback already holds on key
+   * moments in this mode; compositions may also drop non-essential motion.
+   */
+  readonly reducedMotion: boolean;
 }
 
 export type SetupContext = Omit<RenderContext, 'frame'>;
@@ -41,6 +46,8 @@ export interface Composition {
   readonly background: string;
   /** Random seed. Default: the composition `id`. Change it to reshuffle all randomness. */
   readonly seed?: Seed;
+  /** Font files to register (via `FontFace`) before anything is measured. */
+  readonly fontFaces?: readonly FontSource[];
   /** Fonts to load before `setup` runs, so text is measured with the real font. */
   readonly fonts?: readonly FontSpec[];
   /**

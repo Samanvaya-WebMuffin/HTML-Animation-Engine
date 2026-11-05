@@ -1,7 +1,15 @@
-export { fontString, loadFonts, type FontSpec } from './font.js';
 export {
+  fontString,
+  loadFonts,
+  registerFontFaces,
+  type FontSource,
+  type FontSpec,
+} from './font.js';
+export {
+  baselineOffset,
   createCanvasMeasurer,
   layoutText,
+  type FontMetrics,
   type LaidOutLine,
   type LaidOutWord,
   type LayoutOptions,
