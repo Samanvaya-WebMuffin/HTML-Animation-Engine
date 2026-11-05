@@ -51,6 +51,8 @@ jobs:
       - name: Check render environment
         run: pnpm check-env
       - run: pnpm test:visual
+      - name: Export tests (4K MP4, ffprobe, frame-exact re-renders)
+        run: pnpm test:export
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v7

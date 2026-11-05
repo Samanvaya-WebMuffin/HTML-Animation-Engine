@@ -144,8 +144,9 @@ Package names are `@html-animation-engine/<name>`. The composition contract is `
 | `pnpm format`                         | Prettier write                                                     |
 | `pnpm typecheck`                      | `tsc` for every package and the root configs/tests                 |
 | `pnpm check-env`                      | Checks ffmpeg, ffprobe, required encoders and Playwright Chromium  |
-| `pnpm render <ex> ...`                | Render an example to video/images (**not implemented yet**)        |
-| `pnpm stills <ex> ...`                | Render chosen frames + a contact sheet (**not implemented yet**)   |
+| `pnpm render <ex> ...`                | Render an example to a 4K H.264 MP4 (see below)                    |
+| `pnpm stills <ex> ...`                | Render chosen frames as 4K PNGs + a contact sheet                  |
+| `pnpm test:export`                    | End-to-end export tests (Chromium + ffmpeg)                        |
 | `pnpm changeset`                      | Record a version bump for published packages                       |
 
 Don't call the env check `pnpm doctor`: that is a pnpm built-in and shadows the script.
@@ -175,11 +176,24 @@ Every example automatically gets three visual tests: golden frames at each of it
 Always render **stills first** and look at them before a full render.
 
 ```sh
-pnpm stills <example> --at 1.5,4,9.2     # requested frames + contact sheet
-pnpm render <example> --fps 60 --scale 2  # full render to MP4 (H.264)
+pnpm stills <example>                      # the example's config stills, as 4K PNGs + contact sheet
+pnpm stills <example> --at 1.5,4,9.2       # chosen times
+pnpm render <example>                      # 4K H.264 MP4 → out/<example>.mp4
+pnpm render <example> --from 2 --to 4 --resolution 1080p --crf 12 --audio music.wav
 ```
 
-Both commands currently exit with "not implemented yet"; capture and encoding are still to come. Planned options: `--fps --scale --from --to --crf --audio <file>`. Capture loads the composition in headless Chromium at the exact output size, waits for `document.fonts.ready`, then renders and captures frame by frame (reading Canvas/WebGL pixels directly). Frames are piped into ffmpeg, never written to disk as thousands of PNGs. The MP4 is written to a temporary name and renamed only when ffmpeg exits successfully.
+Render options: `--out`, `--resolution 4k|1440p|1080p|720p` (default **4k**: fit inside 3840 × 2160), `--scale` (exact factor instead), `--fps`, `--from`/`--to`, `--crf` (0 lossless, **18** default, 23 smaller), `--preset` (x264, default medium), `--tune` (e.g. `animation`), `--audio` (muxed with `-c:v copy`), `--root`. Output under `out/` is git-ignored.
+
+How export works (`packages/export`):
+
+- The CLI starts a Vite server for `apps/playground` and drives `capture.html` (isolated frames) in headless Chromium, with the viewport at the composition's size and `deviceScaleFactor` = output scale. DOM and SVG rasterise natively at 4K, and canvases and shaders render at `scale` × size; nothing is upscaled.
+- Each frame is captured as PNG through the DevTools protocol (`optimizeForSpeed`, lossless) and **piped** into ffmpeg; no frames touch the disk.
+- Encoding: libx264, 8-bit 4:2:0, the Rec. 709 matrix in limited range, Rec. 709 tags set with `setparams` (ffmpeg 9 ignores `-color_primaries`/`-color_trc` here), `+faststart`. Output goes to `<out>.partial-<pid>` and is renamed only when ffmpeg exits 0; failures leave nothing behind.
+- Colour accuracy: capture is exact (PNG stills match theme hex values); the MP4 is within ±1–2 levels, normal for 8-bit 4:2:0.
+- Speed on an M-series Mac at 4K: DOM/SVG/Canvas examples run at 15–30 fps; the WebGL flame at about 3 fps, because headless WebGL runs on SwiftShader (CPU), which is what keeps it deterministic.
+- Deferred (see Current scope): segmented or parallel encoding (not needed: x264 already uses every core, and capture is ~10–30 ms a frame), other formats, and the audio synth.
+
+`pnpm test:export` (also run in CI) checks a 4K render with ffprobe (codec, profile, size, pixel format, fps, exact frame count, duration, Rec. 709 tags), that re-renders are frame-identical (`framemd5`), that a `--from/--to` range equals the same frames of a full render (lossless), that audio muxing doesn't touch the video stream, that a failed encode leaves no files, and that WebGL, Remotion, Canvas 3D and DOM examples each export deterministically.
 
 ## House rules
 
@@ -198,6 +212,6 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 - [x] Phase 3b: 3D via projection (`spatial/`): slab rotating with zooms, lifted page corner, fly-through past 3D objects; examples `slab-rotate`, `page-curl`, `fly-through`. Also: chroma-weighted OKLCH hue, bundled JetBrains Mono
 - [x] Flame: WebGL2 shader layer + `candleFlame` (example `candle-flame`), researched against flame-structure and photographic references
 - [x] Phase 4: Remotion adapter, both directions (`HaeComposition`, `remotionCompositionProps`, `fromRemotion`); examples `remotion-title`, `remotion-roundtrip`; capture made order-independent (`isolateFrames`, no tracing)
-- [ ] Phase 5: export (capture, MP4 encode, stills + contact sheet)
+- [x] Phase 5: export: 4K H.264 MP4 (`pnpm render`), 4K stills + contact sheet (`pnpm stills`), audio mux, Node API, end-to-end tests
 - [ ] Phase 6: visual regression goldens, performance budgets
 - [ ] Phase 7: starter examples (a Remotion example replaces the Three.js and GSAP ones)

@@ -23,6 +23,20 @@ export default defineConfig({
   // export condition in each package.json), so no build step is needed.
   resolve: { conditions: ['source', 'module', 'browser', 'development|production'] },
   server: { port: 5173, strictPort: true },
+  // Scan every page and example up front so the dependency optimiser does not
+  // discover React/Remotion on first load and reload the page mid-capture.
+  optimizeDeps: {
+    entries: ['index.html', 'capture.html', '../../examples/*/composition.{ts,tsx}'],
+    include: [
+      'react',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom',
+      'react-dom/client',
+      'remotion',
+      '@remotion/player',
+    ],
+  },
   preview: { port: 4173, strictPort: true },
   build: {
     rolldownOptions: {

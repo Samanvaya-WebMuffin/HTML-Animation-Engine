@@ -52,17 +52,17 @@ pnpm check-env    # reports ffmpeg, ffprobe, the H.264 encoder and Chromium, wit
 
 ## Scripts
 
-| Script             | Description                                              |
-| ------------------ | -------------------------------------------------------- |
-| `pnpm dev`         | Start the playground at http://localhost:5173            |
-| `pnpm build`       | Build every package and the playground                   |
-| `pnpm test`        | Unit tests (Vitest)                                      |
-| `pnpm test:visual` | Visual tests (Playwright)                                |
-| `pnpm lint`        | ESLint and Prettier                                      |
-| `pnpm typecheck`   | TypeScript across the workspace                          |
-| `pnpm render`      | Render an example to MP4 (in progress)                   |
-| `pnpm stills`      | Render selected frames and a contact sheet (in progress) |
-| `pnpm check-env`   | Check the rendering toolchain                            |
+| Script             | Description                                         |
+| ------------------ | --------------------------------------------------- |
+| `pnpm dev`         | Start the playground at http://localhost:5173       |
+| `pnpm build`       | Build every package and the playground              |
+| `pnpm test`        | Unit tests (Vitest)                                 |
+| `pnpm test:visual` | Visual tests (Playwright)                           |
+| `pnpm lint`        | ESLint and Prettier                                 |
+| `pnpm typecheck`   | TypeScript across the workspace                     |
+| `pnpm render`      | Render an example to a 4K MP4 (`out/<example>.mp4`) |
+| `pnpm stills`      | Render 4K stills and a contact sheet                |
+| `pnpm check-env`   | Check the rendering toolchain                       |
 
 ## Visual tests and goldens
 

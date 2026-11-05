@@ -1,0 +1,149 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium, type Browser } from '@playwright/test';
+import { PNG } from 'pngjs';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  frameHashes,
+  probeVideo,
+  renderStills,
+  renderVideo,
+  startCaptureServer,
+  type CaptureServer,
+} from '../../packages/export/src/index.js';
+
+let server: CaptureServer;
+let browser: Browser;
+let dir: string;
+
+beforeAll(async () => {
+  server = await startCaptureServer(join(import.meta.dirname, '../../apps/playground'));
+  browser = await chromium.launch();
+  dir = mkdtempSync(join(tmpdir(), 'hae-export-'));
+});
+
+afterAll(async () => {
+  await browser?.close();
+  await server?.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+const render = (example: string, output: string, options: Record<string, unknown> = {}) =>
+  renderVideo({ url: server.url, browser, example, output: join(dir, output), ...options });
+
+describe('4K MP4 export', () => {
+  it('writes H.264 at 3840 × 2160 with exact frame count, fps, duration and Rec. 709 tags', async () => {
+    const result = await render('shape-morph', 'a.mp4', { to: 1 });
+    expect(result).toMatchObject({ width: 3840, height: 2160, fps: 30, frames: 30 });
+    const probe = await probeVideo(result.output);
+    expect(probe).toMatchObject({
+      codec: 'h264',
+      profile: 'High',
+      width: 3840,
+      height: 2160,
+      pixelFormat: 'yuv420p',
+      fps: 30,
+      frames: 30,
+      colorSpace: 'bt709',
+      colorPrimaries: 'bt709',
+      colorTransfer: 'bt709',
+      audioCodec: undefined,
+    });
+    expect(probe.duration).toBeCloseTo(1, 2);
+  });
+
+  it('re-renders to the same frames', async () => {
+    const [a, b] = await Promise.all([
+      frameHashes(join(dir, 'a.mp4')),
+      render('shape-morph', 'b.mp4', { to: 1 }).then((r) => frameHashes(r.output)),
+    ]);
+    expect(a).toHaveLength(30);
+    expect(b).toEqual(a);
+  });
+
+  it('renders a time range as exactly those frames of the full render (lossless)', async () => {
+    const full = await render('shape-morph', 'full.mp4', { to: 1, crf: 0, resolution: '1080p' });
+    const part = await render('shape-morph', 'part.mp4', {
+      from: 0.5,
+      to: 1,
+      crf: 0,
+      resolution: '1080p',
+    });
+    const [all, slice] = await Promise.all([frameHashes(full.output), frameHashes(part.output)]);
+    expect(slice).toHaveLength(15);
+    expect(slice).toEqual(all.slice(15));
+  });
+
+  it('muxes audio without touching the video stream', async () => {
+    const wav = join(dir, 'tone.wav');
+    execFileSync('ffmpeg', [
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'sine=frequency=440:duration=2',
+      wav,
+    ]);
+    const result = await render('shape-morph', 'audio.mp4', { to: 1, audio: wav });
+    const probe = await probeVideo(result.output);
+    expect(probe.audioCodec).toBe('aac');
+    expect(probe.duration).toBeCloseTo(1, 1);
+    expect(await frameHashes(result.output)).toEqual(await frameHashes(join(dir, 'a.mp4')));
+  });
+
+  it('leaves no partial files behind when encoding fails', async () => {
+    await expect(
+      render('shape-morph', 'broken.mp4', { to: 0.2, preset: 'no-such-preset' }),
+    ).rejects.toThrow(/ffmpeg/);
+    expect(readdirSync(dir).filter((f) => f.startsWith('broken'))).toEqual([]);
+  });
+});
+
+describe('every composition type exports deterministically', () => {
+  it.each([
+    ['candle-flame', 'WebGL shader'],
+    ['remotion-title', 'Remotion / React'],
+    ['fly-through', 'Canvas 3D'],
+    ['counter-roll', 'DOM text'],
+  ])('%s (%s)', async (example) => {
+    const a = await render(example, `${example}-1.mp4`, { from: 1, to: 1.5, resolution: '1080p' });
+    const b = await render(example, `${example}-2.mp4`, { from: 1, to: 1.5, resolution: '1080p' });
+    expect((await probeVideo(a.output)).frames).toBe(15);
+    expect(await frameHashes(b.output)).toEqual(await frameHashes(a.output));
+  });
+});
+
+describe('stills', () => {
+  it('writes full-resolution PNGs and a contact sheet', async () => {
+    const result = await renderStills({
+      url: server.url,
+      browser,
+      example: 'shape-morph',
+      outDir: join(dir, 'stills'),
+      at: [0.3, 1.5, 3.5],
+    });
+    expect(result.files).toHaveLength(3);
+    for (const file of result.files) {
+      const png = PNG.sync.read(readFileSync(file));
+      expect([png.width, png.height]).toEqual([3840, 2160]);
+    }
+    const sheet = PNG.sync.read(readFileSync(result.contactSheet));
+    expect(sheet.width).toBe(3 * 640 + 4 * 8); // 3 tiles, padding and margins
+  });
+
+  it('rejects times outside the composition', async () => {
+    await expect(
+      renderStills({
+        url: server.url,
+        browser,
+        example: 'shape-morph',
+        outDir: join(dir, 'bad'),
+        at: [99],
+      }),
+    ).rejects.toThrow(RangeError);
+  });
+});
