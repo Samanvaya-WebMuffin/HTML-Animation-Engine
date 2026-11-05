@@ -10,6 +10,7 @@ Every animation is a **pure function of time**. `render(t, ctx)` draws the frame
 - Randomness comes only from the seeded RNG in `@html-animation-engine/core`, so render N and render N+1 are identical.
 - Third-party libraries are **seeked** to `t` (`tl.seek(t)`, set `MotionValue`s, pass `t` to the Three.js update). Never let them run on their own clock.
 - Playback in the browser calls `render(t)` on a clock. Export calls `render(frame / fps)` for each frame. The clock lives only in `apps/playground/src/player.ts`, and it only picks the frame index.
+- CSS `transition`, `@keyframes` animations and the Web Animations API run on the browser's own clock. Don't use them in compositions. The stage disables them, so they can't leak into a render (planned for Phase 3).
 - Building DOM or canvas structure once in `setup()` is fine. `render(t)` must then set **every** time-dependent property from `t`, so any frame can be rendered first, in any order.
 
 ESLint enforces the banned APIs in `packages/{core,renderers,adapters}/src` and `examples/` (see `eslint.config.js`; tested in `tests/unit/purity-lint.test.ts`). Don't add `eslint-disable` for these rules. Find a time-derived approach instead.
@@ -92,7 +93,7 @@ Both commands currently exit with "not implemented yet"; capture and encoding ar
 
 - [x] Phase 1: repo setup (workspace, tooling, playground shell, `Composition` contract, `mountStage`, env check, CI)
 - [ ] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text)
-- [ ] Phase 3: renderers and effects, reduced-motion mode, flash-safety check
+- [ ] Phase 3: renderers and effects, reduced-motion mode, flash-safety check; `mountStage` disables CSS transitions/animations and Web Animations inside the stage
 - [ ] Phase 4: adapters (GSAP, Three.js, Framer Motion, Remotion)
 - [ ] Phase 5: export (capture, encode, formats, stills, audio helper)
 - [ ] Phase 6: visual regression goldens, performance budgets
