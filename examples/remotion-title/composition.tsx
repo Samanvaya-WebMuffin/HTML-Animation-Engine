@@ -12,6 +12,7 @@ import {
   useVideoConfig,
 } from 'remotion';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { arrival, bell, clap, cue, pad, pluck, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors } = theme;
 /**
@@ -20,6 +21,9 @@ const { colors } = theme;
  * (`seconds × fps`), so the motion would be the same at any rate.
  */
 const FPS = 60;
+/** The title's entrance spring and the bar's ease (shared with the soundtrack). */
+const TITLE_SPRING = { damping: 12, stiffness: 160 };
+const BAR_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 
 /** Engine shadows as CSS: same model (σ = blur / 2), so they match the renderers. */
@@ -40,10 +44,10 @@ const barFill = `linear-gradient(180deg, ${mixColors(colors.lime, lighting.highl
 function Title() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const enter = spring({ frame: frame - 0.2 * fps, fps, config: { damping: 12, stiffness: 160 } });
+  const enter = spring({ frame: frame - 0.2 * fps, fps, config: TITLE_SPRING });
   const bar = interpolate(frame, [(2 / 3) * fps, (4 / 3) * fps], [0, 1], {
     ...clamp,
-    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    easing: BAR_EASE,
   });
   // A specular glint crosses the title once it has settled (100 % → 0 % moves it left to right).
   const glint = interpolate(frame, [(14 / 15) * fps, (31 / 15) * fps], [100, 0], {
@@ -125,8 +129,25 @@ function Subtitle() {
   );
 }
 
+/** First frame at which the title's spring reaches its resting position: it visibly lands. */
+const TITLE_LAND =
+  (Array.from({ length: FPS }, (_, f) => f).find(
+    (f) => spring({ frame: f - 0.2 * FPS, fps: FPS, config: TITLE_SPRING }) >= 1,
+  ) ?? 0) / FPS;
+
+/** The title lands on a clap, the bar swishes out and snaps, the subtitle rings in. */
+const audio = soundtrack([
+  cue(0, pad(2.8, { attack: 0.4, release: 1.2 })),
+  cue(TITLE_LAND, clap({ big: true })),
+  cue(40 / FPS, whoosh(0.4, { from: 800, to: 4200, peak: 0.35 })),
+  cue(arrival(40 / FPS, 40 / FPS, BAR_EASE, 0.9), snap({ degree: 4 })),
+  cue(90 / FPS, pluck({ degree: 7, octave: 1 })),
+  cue(90 / FPS, bell({ degree: 9, gain: 0.5 })),
+]);
+
 export default fromRemotion({
   id: 'remotion-title',
+  audio,
   title: 'Remotion code inside the engine',
   component: Title,
   width: exampleDefaults.width,

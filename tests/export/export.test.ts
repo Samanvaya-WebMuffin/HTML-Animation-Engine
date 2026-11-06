@@ -5,9 +5,12 @@ import { join } from 'node:path';
 import { chromium, type Browser } from '@playwright/test';
 import { PNG } from 'pngjs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { decodeWav } from '../../packages/core/src/index.js';
 import {
+  audioHash,
   frameHashes,
   probeVideo,
+  renderAudio,
   renderStills,
   renderVideo,
   startCaptureServer,
@@ -50,9 +53,41 @@ describe('4K MP4 export', () => {
       colorSpace: 'bt709',
       colorPrimaries: 'bt709',
       colorTransfer: 'bt709',
-      audioCodec: undefined,
+      // The example's own soundtrack, rendered and muxed by default.
+      audioCodec: 'aac',
+      audioSampleRate: 48000,
+      audioChannels: 2,
     });
-    expect(probe.duration).toBeCloseTo(1, 2);
+    expect(result.audio).toBe('soundtrack');
+    expect(probe.duration).toBeCloseTo(1, 1);
+  });
+
+  it('re-renders to the same soundtrack, and leaves it out on request', async () => {
+    const again = await render('shape-morph', 'a2.mp4', { to: 1, resolution: '720p' });
+    const silent = await render('shape-morph', 'silent.mp4', {
+      to: 1,
+      sound: false,
+      resolution: '720p',
+    });
+    const first = await audioHash(join(dir, 'a.mp4'));
+    expect(first).toBeDefined();
+    expect(await audioHash(again.output)).toBe(first);
+    expect(silent.audio).toBeUndefined();
+    expect((await probeVideo(silent.output)).audioCodec).toBeUndefined();
+  });
+
+  it("renders a range's soundtrack as exactly that span of the full soundtrack", async () => {
+    const opts = { url: server.url, browser, example: 'shape-morph' };
+    await renderAudio({ ...opts, output: join(dir, 'full.wav') });
+    await renderAudio({ ...opts, output: join(dir, 'part.wav'), from: 3, to: 4 });
+    const full = decodeWav(readFileSync(join(dir, 'full.wav')));
+    const part = decodeWav(readFileSync(join(dir, 'part.wav')));
+    expect(full.sampleRate).toBe(48000);
+    expect(full.channels[0]).toHaveLength(5.5 * 48000);
+    expect(part.channels[0]).toHaveLength(48000);
+    // The clap at 3.2 s (and the reverb carried over from before 3 s) is in the slice, sample for sample.
+    expect(part.channels[0]).toEqual(full.channels[0]?.subarray(3 * 48000, 4 * 48000));
+    expect(Math.max(...(part.channels[0] ?? []).map(Math.abs))).toBeGreaterThan(0.3);
   });
 
   it('re-renders to the same frames', async () => {

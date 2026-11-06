@@ -19,6 +19,7 @@ import {
   litFill,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { bell, cue, pad, pluck, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors, easing, durations } = theme;
 const W = 1280;
@@ -79,9 +80,20 @@ const world: SceneNode[] = [
   block('c', 1000, 520, 240, 120, 60, colors.orange),
 ];
 
+/** Air rushing in and out with the camera; a snap as it locks on, a bell on the glint. */
+const audio = soundtrack([
+  cue(0, pad(4.3, { attack: 0.6, release: 1.2 })),
+  cue(0.4, whoosh(1.4, { from: 220, to: 2600, peak: 0.5 })),
+  cue(1.8, snap({ degree: 4 })),
+  cue(2.35, bell({ degree: 7, gain: 0.6 })),
+  cue(3.4, whoosh(1.4, { from: 2600, to: 220, peak: 0.5 })),
+  cue(4.8, pluck({ degree: 0, octave: 1, gain: 0.8 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'camera-push',
+  audio,
   title: 'Camera push-in and pull-back',
   duration: 5.5,
   background: colors.ink,

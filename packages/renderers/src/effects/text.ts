@@ -45,19 +45,30 @@ export interface TypeOnOptions {
   readonly measurer: TextMeasurer;
 }
 
+/**
+ * When each character of a `typeOn` appears, in seconds: a pure function of
+ * the options (and seed), so a soundtrack can type along exactly.
+ */
+export function typeOnTimes(
+  options: Pick<TypeOnOptions, 'id' | 'text' | 'start' | 'charsPerSecond' | 'jitter' | 'seed'>,
+): number[] {
+  const jitter = options.jitter ?? 0.3;
+  const step = 1 / options.charsPerSecond;
+  const times: number[] = [];
+  let clock = options.start;
+  Array.from(options.text).forEach((_, i) => {
+    clock += step * (1 + jitter * (random(options.seed ?? 0, options.id, i) * 2 - 1));
+    times.push(clock);
+  });
+  return times;
+}
+
 /** Text that types on one character at a time, with a blinking caret. */
 export function typeOn(options: TypeOnOptions): (t: number) => GroupNode {
   const { id, font, measurer, caret } = options;
   const chars = Array.from(options.text);
-  const jitter = options.jitter ?? 0.3;
-  const step = 1 / options.charsPerSecond;
   // Keystroke times, fixed once: a pure function of the seed.
-  const times: number[] = [];
-  let clock = options.start;
-  chars.forEach((_, i) => {
-    clock += step * (1 + jitter * (random(options.seed ?? 0, id, i) * 2 - 1));
-    times.push(clock);
-  });
+  const times = typeOnTimes(options);
   const end = times.at(-1) ?? options.start;
   const widths = chars.map((_, i) => measurer.measure(chars.slice(0, i + 1).join(''), font));
   const lineHeight = font.size * (font.lineHeight ?? 1.2);

@@ -9,6 +9,7 @@ export {
   type RenderContext,
   type SetupContext,
 } from './composition.js';
+export * from './audio/index.js';
 export * from './color/index.js';
 export * from './easing/index.js';
 export * from './geometry/index.js';

@@ -13,18 +13,42 @@ import {
   elevationShadows,
   glowShadows,
   typeOn,
+  typeOnTimes,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { cue, key, pad, pluck, snap, soundtrack } from '../sounds.js';
 
 const { colors } = theme;
 const type = font('display', 56);
 const TEXT = 'Every frame is a function of time.';
 const W = exampleDefaults.width;
 const H = exampleDefaults.height;
+/** What is typed and when (shared with the soundtrack's key clicks). */
+const TYPING = { id: 'typed', text: TEXT, start: 0.4, charsPerSecond: 22, seed: 7 } as const;
+
+/** One key click per character (softer for spaces); the full stop lands with a snap. */
+const KEYS = typeOnTimes(TYPING);
+const audio = soundtrack([
+  cue(0, pad(3.2, { attack: 0.6, release: 1.2, gain: 0.85 })),
+  KEYS.slice(0, -1).map((t, i) =>
+    cue(
+      t,
+      key({
+        degree: i % 3,
+        take: i,
+        gain: TEXT[i] === ' ' ? 0.45 : 1,
+        pan: (i / KEYS.length - 0.5) * 0.6,
+      }),
+    ),
+  ),
+  cue(KEYS.at(-1) ?? 0, snap({ degree: 4, pan: 0.3 })),
+  cue(KEYS.at(-1) ?? 0, pluck({ degree: 7, octave: 1, gain: 0.7, pan: 0.3 })),
+]);
 
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'type-on',
+  audio,
   title: 'Type-on with caret',
   duration: 4.5,
   background: colors.ink,
@@ -33,16 +57,12 @@ export default defineSceneComposition({
     const measurer = createCanvasMeasurer();
     const width = layoutText(TEXT, type, { measurer }).width;
     return typeOn({
-      id: 'typed',
-      text: TEXT,
+      ...TYPING,
       font: type,
       fill: colors.paper,
       shadow: elevationShadows(lighting, 'low', { strength: 1.4 }),
       x: 640 - width / 2,
       y: 326,
-      start: 0.4,
-      charsPerSecond: 22,
-      seed: 7,
       caret: {
         color: colors.lime,
         blinkRate: 1,

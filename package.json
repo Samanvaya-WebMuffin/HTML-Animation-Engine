@@ -18,6 +18,7 @@
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
     "render": "tsx --conditions=source packages/export/src/cli.ts render",
     "stills": "tsx --conditions=source packages/export/src/cli.ts stills",
+    "sound": "tsx --conditions=source packages/export/src/cli.ts audio",
     "check-env": "tsx --conditions=source packages/export/src/cli.ts doctor",
     "changeset": "changeset"
   },

@@ -19,6 +19,7 @@ import {
   maskReveal,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { arrival, bell, clap, cue, pad, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors, easing, durations } = theme;
 const headline = font('display', 96);
@@ -84,9 +85,19 @@ function irisRing(t: number): SceneNode[] {
   ];
 }
 
+/** A swish with the wipe and a snap as it completes; a clap as the iris opens; a bell on the glint. */
+const audio = soundtrack([
+  cue(0, pad(2.2, { attack: 0.4, release: 1 })),
+  cue(MASK.start, whoosh(durations.slow, { from: 300, to: 3600, peak: 0.48 })),
+  cue(arrival(MASK.start, durations.slow, easing.wipe, 0.95), snap({ degree: 2 })),
+  cue(arrival(IRIS.start, durations.slow, easing.enter, 0.5), clap({ chord: 'lift' })),
+  cue(IRIS.start + durations.slow * 0.8 + durations.slow / 2, bell({ degree: 9, gain: 0.55 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'mask-reveal',
+  audio,
   title: 'Mask and circle reveal',
   duration: 3.2,
   background: colors.ink,

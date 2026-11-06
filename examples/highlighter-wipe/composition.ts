@@ -17,6 +17,7 @@ import {
   lightSweep,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { arrival, bell, cue, pad, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors, easing, durations } = theme;
 const title = font('display', 88);
@@ -33,9 +34,18 @@ const paperEdge = mixColors(colors.paper, colors.ink, 0.14);
 // Shadows on paper are faint and warm-grey rather than black.
 const inkLift = elevationShadows(lighting, 'low', { strength: 0.35 });
 
+/** The marker drawn across with a swish; the word pops with a snap; a bell on the sheen. */
+const audio = soundtrack([
+  cue(0, pad(1.9, { chord: 'lift', attack: 0.4, release: 1 })),
+  cue(WIPE_START, whoosh(durations.base, { from: 1400, to: 5200, peak: 0.55 })),
+  cue(arrival(WIPE_START, durations.base, easing.wipe, 0.99), snap({ degree: 4 })),
+  cue(WIPE_START + durations.base + 0.1 + durations.slow / 2, bell({ degree: 9, gain: 0.6 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'highlighter-wipe',
+  audio,
   title: 'Highlighter wipe',
   duration: 3,
   background: colors.paper,

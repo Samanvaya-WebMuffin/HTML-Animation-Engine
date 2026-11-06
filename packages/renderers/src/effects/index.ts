@@ -62,6 +62,7 @@ export {
   counterRoll,
   marquee,
   typeOn,
+  typeOnTimes,
   type CounterOptions,
   type MarqueeOptions,
   type TypeOnOptions,

@@ -13,6 +13,7 @@ import {
   pageCurl,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { cue, pad, pluck, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors } = theme;
 const W = exampleDefaults.width;
@@ -66,9 +67,20 @@ const desk = backdrop('desk', lighting, {
   lights: [{ x: W * 0.22, y: H * 0.05, radius: 760, color: colors.orange, alpha: 0.1 }],
 });
 
+/** The corner lifts on a breath of air (highest at 0.75 s, every 3 s) and settles with a soft snap. */
+const audio = soundtrack([
+  cue(0, pad(4.6, { attack: 0.8, release: 1.4, gain: 0.9 })),
+  [0, 3].map((t, i) => [
+    cue(t, whoosh(1.5, { from: 380, to: 1700, peak: 0.5, gain: 0.8 })),
+    cue(t + 0.75, pluck({ degree: 4 + i * 3, octave: 1, gain: 0.6 })),
+    cue(t + 2.25, snap({ degree: i * 2, take: i, gain: 0.6 })),
+  ]),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'page-curl',
+  audio,
   title: 'Page corner lifted',
   duration: 6,
   background: colors.surface,

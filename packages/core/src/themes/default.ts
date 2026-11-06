@@ -91,6 +91,35 @@ export const defaultTheme = defineTheme({
     backdrop: { centre: colors.dusk, edge: colors.shade },
   },
 
+  sound: {
+    tuning: 440,
+    root: 'D3',
+    // D major pentatonic: D E F# A B.
+    scale: [0, 2, 4, 7, 9],
+    chords: {
+      /** Dmaj9: home. */
+      home: [0, 4, 7, 11, 14],
+      /** Gmaj9: lift (IV). */
+      lift: [5, 9, 12, 16, 19],
+      /** Bm9: shadow (vi). */
+      shadow: [-3, 0, 4, 7, 11],
+    },
+    // Balanced by loudness (EBU R128 momentary max, each sound alone): clap
+    // about -16 LUFS, snap -18, pluck -20, bell -22, tick -31, whoosh -27, bed -30.
+    levels: {
+      snap: -2,
+      clap: -1,
+      pluck: -14,
+      stab: -17,
+      sub: -9,
+      bell: -19,
+      tick: -12,
+      whoosh: -6,
+      bed: -26,
+    },
+    reverb: { size: 0.72, damping: 0.45, predelay: 0.018, gain: 0.9 },
+  },
+
   durations: {
     fast: 0.25,
     base: 0.45,

@@ -5,6 +5,7 @@ export {
   type EasingTokens,
   type LightingTokens,
   type ShadowLayer,
+  type SoundTokens,
   type Theme,
   type TypeToken,
 } from './theme.js';

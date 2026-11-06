@@ -8,6 +8,7 @@ import {
   litFill,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { arrival, bell, clap, cue, pad, snap, soundtrack, thump } from '../sounds.js';
 
 const { colors, easing, durations } = theme;
 const label = font('display', 40);
@@ -59,9 +60,23 @@ const cards = specs.map((spec, i) =>
   }),
 );
 
+/** Each card lands with a snap and a thump (the last with a clap); glints ring a rising arpeggio. */
+const audio = soundtrack([
+  cue(0, pad(1.9, { attack: 0.3, release: 1 })),
+  specs.map((spec, i) => {
+    const land = arrival(spec.start, 0.6, easing.snap);
+    return [
+      cue(land, i === specs.length - 1 ? clap() : snap({ degree: i * 2, take: i })),
+      cue(land, thump({ gain: 0.45 })),
+      cue(spec.start + 0.45 + durations.slow / 2, bell({ degree: 7 + i * 2, gain: 0.45 })),
+    ];
+  }),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'landing-shadow',
+  audio,
   title: 'Landing with a hard shadow',
   duration: 3,
   background: colors.ink,

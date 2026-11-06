@@ -15,6 +15,8 @@ function Host() {
 const FPS = 60;
 export default fromRemotion({
   id: 'remotion-roundtrip',
+  // Pixel-identical to shape-morph, so it sounds the same too.
+  ...(shapeMorph.audio ? { audio: shapeMorph.audio } : {}),
   title: 'Engine inside Remotion inside the engine',
   component: Host,
   width: shapeMorph.width,

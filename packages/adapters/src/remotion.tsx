@@ -20,6 +20,7 @@ import {
   type FontSource,
   type FontSpec,
   type Seed,
+  type Soundtrack,
 } from '@html-animation-engine/core';
 import { mountStage, type Stage } from '@html-animation-engine/renderers';
 import { Thumbnail } from '@remotion/player';
@@ -187,6 +188,8 @@ export interface FromRemotionOptions<Props extends Record<string, unknown>> {
   readonly seed?: Seed;
   readonly fontFaces?: readonly FontSource[];
   readonly fonts?: readonly FontSpec[];
+  /** Sound for export (see `Composition.audio`). Remotion's own `<Audio>` is not supported. */
+  readonly audio?: Soundtrack;
 }
 
 /**
@@ -240,6 +243,7 @@ export function fromRemotion<Props extends Record<string, unknown> = Record<stri
     ...(options.seed === undefined ? {} : { seed: options.seed }),
     ...(options.fontFaces ? { fontFaces: options.fontFaces } : {}),
     ...(options.fonts ? { fonts: options.fonts } : {}),
+    ...(options.audio ? { audio: options.audio } : {}),
     async setup(ctx) {
       const container = ctx.root.ownerDocument.createElement('div');
       Object.assign(container.style, { position: 'absolute', inset: '0' });

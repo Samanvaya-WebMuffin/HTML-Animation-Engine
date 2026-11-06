@@ -1,3 +1,4 @@
+export { AUDIO_SAMPLE_RATE, renderCompositionAudio, writeWav } from './audio.js';
 export {
   openCapture,
   probeComposition,
@@ -19,13 +20,15 @@ export {
   type EnvironmentReport,
   type ToolStatus,
 } from './env.js';
-export { frameHashes, probeVideo, type VideoProbe } from './probe.js';
+export { audioHash, frameHashes, probeVideo, type VideoProbe } from './probe.js';
 export {
   DEFAULT_EXPORT_FPS,
   exportFps,
   frameRange,
+  renderAudio,
   renderStills,
   renderVideo,
+  type RenderAudioOptions,
   type RenderResult,
   type RenderStillsOptions,
   type RenderVideoOptions,

@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createFlashDetector, type FlashDetector } from '../../packages/core/src/index.js';
+import {
+  createFlashDetector,
+  decodeWav,
+  renderSoundtrack,
+  type FlashDetector,
+  type PcmAudio,
+} from '../../packages/core/src/index.js';
 import {
   decode,
   exampleNames,
@@ -37,6 +43,32 @@ for (const name of exampleNames()) {
           maxDiffPixelRatio: 0.002,
         });
       }
+    });
+
+    test('has a soundtrack that fits the composition and renders identically', async ({ page }) => {
+      const info = await openCapture(page, name);
+      const track = info.audio;
+      expect(track, 'Composition.audio').toBeDefined();
+      if (!track) return;
+      for (const event of track.events) {
+        expect(event.at, 'cue time').toBeGreaterThanOrEqual(0);
+        expect(event.at, 'cue time').toBeLessThan(info.duration);
+      }
+      // Every sample loads through the page's server as 48 kHz WAV.
+      const samples: Record<string, PcmAudio> = {};
+      for (const [sample, url] of Object.entries(track.samples ?? {})) {
+        const response = await page.request.get(new URL(url, page.url()).toString());
+        expect(response.ok(), url).toBe(true);
+        samples[sample] = decodeWav(await response.body());
+        expect(samples[sample].sampleRate, url).toBe(48000);
+      }
+      const render = () =>
+        renderSoundtrack(track, { duration: info.duration, samples, seed: info.seed });
+      const [a, b] = [render(), render()];
+      expect(a.channels[0]?.length).toBe(Math.round(info.duration * 48000));
+      const bytes = (pcm: PcmAudio) =>
+        Buffer.concat(pcm.channels.map((c) => Buffer.from(c.buffer)));
+      expect(bytes(a).equals(bytes(b)), 'byte-identical renders').toBe(true);
     });
 
     test('renders identical frames regardless of what was drawn before', async ({ page }) => {

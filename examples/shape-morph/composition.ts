@@ -22,6 +22,7 @@ import {
   shapeMorph,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { arrival, bell, clap, cue, pad, pluck, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors, easing, durations } = theme;
 const W = exampleDefaults.width;
@@ -66,11 +67,25 @@ const shape = shapeMorph({
   ],
 });
 
+/** Each form's landing (or arrival) drives a hit; the last, heaviest one gets the clap. */
+const audio = soundtrack([
+  cue(0, pad(4.6, { attack: 0.8 })),
+  cue(arrival(0.3, 0.7, easing.snap), snap({ degree: 2 })),
+  cue(arrival(1.0, 1.0, easing.snap), snap({ degree: 4, take: 1 })),
+  cue(2.0, whoosh(0.2, { from: 600, to: 3200, peak: 0.6, gain: 0.7 })),
+  cue(arrival(2.0, 1.0, easing.enter, 0.5), pluck({ degree: 5, octave: 1 })),
+  cue(arrival(2.0, 1.0, easing.enter, 0.5), bell({ degree: 7, gain: 0.6 })),
+  cue(arrival(3.0, 1.0, easing.snap), clap({ big: true })),
+  cue(4.45, whoosh(0.8, { from: 1800, to: 7000, peak: 0.5, gain: 0.5 })),
+  cue(4.85, bell({ degree: 9, gain: 0.5 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'shape-morph',
   title: 'Shape morph',
   duration: 5.5,
+  audio,
   background: colors.ink,
   renderer: 'svg',
   scene(t) {

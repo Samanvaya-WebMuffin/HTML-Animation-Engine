@@ -16,6 +16,7 @@ import {
   litFill,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { bell, changeTimes, clap, cue, pad, soundtrack, tick, whoosh } from '../sounds.js';
 
 const { colors, easing, durations } = theme;
 const digits = font('display', 140);
@@ -28,9 +29,30 @@ const card = { x: 640, y: 335, width: 900, height: 380 };
 const cardShape = rect(card.x, card.y, card.width, card.height, 36);
 const COUNT_END = 0.3 + 1.8;
 
+/** The displayed value (as the counter computes it), for its digit turnovers. */
+const value = (t: number) => Math.round(1284930 * progress(t, 0.3, 1.8, easing.enter));
+/** Digit ticks that slow down like a slot machine: the 100k digit, then each lower digit as it settles. */
+const ticks = [
+  ...changeTimes((t) => Math.floor(value(t) / 1e5), 0.3, 1.1),
+  ...changeTimes((t) => Math.floor(value(t) / 1e4), 1.1, 1.6),
+  ...changeTimes((t) => Math.floor(value(t) / 1e3), 1.6, 1.85),
+  ...changeTimes((t) => Math.floor(value(t) / 1e2), 1.85, COUNT_END - 0.05),
+];
+
+/** A riser and slowing ticks build to the clap when the count lands. */
+const audio = soundtrack([
+  cue(0, pad(2.4, { chord: 'lift', attack: 0.5, release: 0.9 })),
+  cue(0.3, whoosh(1.75, { from: 300, to: 6500, peak: 0.97, gain: 0.8 })),
+  ticks.map((t, i) => cue(t, tick({ degree: i % 5, gain: 0.8 }))),
+  // The value lands (every digit stops) at the end of the count.
+  cue(COUNT_END, clap({ big: true })),
+  cue(COUNT_END - 0.1 + 0.7, bell({ degree: 9, gain: 0.55 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'counter-roll',
+  audio,
   title: 'Counter roll-up',
   duration: 3.5,
   background: colors.ink,

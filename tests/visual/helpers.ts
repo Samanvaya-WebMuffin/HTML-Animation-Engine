@@ -2,8 +2,8 @@ import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { FullConfig, Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-// Brings in the `window.haeCapture` type declared by the capture page.
-import type {} from '../../apps/playground/src/capture.js';
+// Also brings in the `window.haeCapture` type declared by the capture page.
+import type { CaptureInfo as PageInfo } from '../../apps/playground/src/capture.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -20,14 +20,8 @@ export function exampleNames(): string[] {
     .sort();
 }
 
-export interface CaptureInfo {
-  id: string;
-  width: number;
-  height: number;
-  fps: number;
-  duration: number;
-  stills: number[];
-}
+/** What the capture page reports, with `stills` as a mutable copy. */
+export type CaptureInfo = Omit<PageInfo, 'stills'> & { stills: number[] };
 
 /** Opens the capture page for `name` at its exact size and waits until it is ready. */
 export async function openCapture(

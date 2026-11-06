@@ -17,6 +17,8 @@ export interface VideoProbe {
   readonly colorPrimaries: string;
   readonly colorTransfer: string;
   readonly audioCodec: string | undefined;
+  readonly audioSampleRate: number | undefined;
+  readonly audioChannels: number | undefined;
 }
 
 /** Reads the video (and audio) stream properties with ffprobe, counting frames exactly. */
@@ -47,7 +49,26 @@ export async function probeVideo(path: string): Promise<VideoProbe> {
     colorPrimaries: String(video['color_primaries']),
     colorTransfer: String(video['color_transfer']),
     audioCodec: audio ? String(audio['codec_name']) : undefined,
+    audioSampleRate: audio ? Number(audio['sample_rate']) : undefined,
+    audioChannels: audio ? Number(audio['channels']) : undefined,
   };
+}
+
+/** MD5 of the decoded audio stream (undefined when there is none). */
+export async function audioHash(path: string): Promise<string | undefined> {
+  const { stdout } = await run(ffmpegPath(), [
+    '-v',
+    'error',
+    '-i',
+    path,
+    '-map',
+    '0:a?',
+    '-f',
+    'md5',
+    '-',
+  ]);
+  const hash = stdout.trim().replace(/^MD5=/, '');
+  return hash === 'd41d8cd98f00b204e9800998ecf8427e' || !hash ? undefined : hash;
 }
 
 /** MD5 of every decoded frame: equal lists mean the videos match frame for frame. */

@@ -1,6 +1,7 @@
 import { createNoise } from '@html-animation-engine/core';
 import { backdrop, defineSceneComposition, nodeGraph } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { bell, cue, pad, pluck, seeded, snap, soundtrack } from '../sounds.js';
 
 const { colors } = theme;
 const W = exampleDefaults.width;
@@ -27,9 +28,30 @@ const graph = nodeGraph({
 // Two coloured light pools drift slowly behind the graph and loop with it.
 const drift = createNoise('node-graph-light');
 
+/** Calm and generative: a seeded pentatonic phrase that loops with the drift, and two soft snaps. */
+const audio = soundtrack([
+  cue(0, pad(LOOP - 1.4, { chord: 'shadow', attack: 1, release: 1.4 })),
+  Array.from({ length: 12 }, (_, i) =>
+    cue(
+      i * 0.5,
+      i % 4 === 3
+        ? bell({ degree: 5 + Math.floor(seeded('graph', i) * 5), gain: 0.45 })
+        : pluck({
+            degree: Math.floor(seeded('graph', i) * 8),
+            octave: 1,
+            gain: 0.55,
+            pan: seeded('graph-pan', i) - 0.5,
+          }),
+    ),
+  ),
+  cue(1.5, snap({ degree: 4, gain: 0.55, pan: -0.3 })),
+  cue(4.5, snap({ degree: 2, take: 1, gain: 0.55, pan: 0.3 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'node-graph',
+  audio,
   title: 'Node graph',
   duration: 6,
   background: colors.ink,

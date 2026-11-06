@@ -1,6 +1,7 @@
 import { mixColors, progress, vec3, type OrbitOptions } from '@html-animation-engine/core';
 import { backdrop, defineSceneComposition, slab3d } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { arrival, clap, cue, pad, pluck, soundtrack, whoosh } from '../sounds.js';
 
 const { colors, easing } = theme;
 const target = vec3(0, 0, 0);
@@ -49,9 +50,27 @@ const slab = slab3d({
   ],
 });
 
+/**
+ * The camera rushes in; each whip spin swishes and lands on a clap; the bed
+ * follows the light (pink while the back faces us) and resolves as it settles.
+ */
+const audio = soundtrack([
+  cue(0, pad(0.9, { attack: 0.5, release: 1 })),
+  cue(0.9, pad(2.4, { chord: 'shadow', attack: 0.6, release: 1 })),
+  cue(3.2, pad(2.2, { attack: 0.7, release: 1.4 })),
+  cue(0, whoosh(1.6, { from: 200, to: 1800, peak: 0.5, gain: 0.8 })),
+  cue(0.6, whoosh(0.2, { from: 900, to: 5200, peak: 0.9 })),
+  cue(arrival(0.6, 1.0, easing.snap), clap({ big: true })),
+  cue(2.8, whoosh(0.24, { from: 900, to: 5200, peak: 0.9 })),
+  cue(arrival(2.8, 1.2, easing.snap), clap({ chord: 'lift' })),
+  cue(2.8, whoosh(1.4, { from: 2200, to: 240, peak: 0.45, gain: 0.8 })),
+  cue(5.6, pluck({ degree: 0, octave: 1 })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'slab-rotate',
+  audio,
   title: '3D slab rotating with zooms',
   duration: 6.5,
   background: colors.ink,

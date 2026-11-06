@@ -8,6 +8,7 @@ import {
 } from '@html-animation-engine/core';
 import { backdrop, defineSceneComposition, flyThrough } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { cue, pad, pluck, soundtrack, whoosh } from '../sounds.js';
 
 const { colors } = theme;
 const W = exampleDefaults.width;
@@ -62,9 +63,34 @@ const vignette = shapeNode('vignette', {
   ]),
 });
 
+/** Objects that pass closest to the camera (seconds), from their depth / forward speed. */
+const PASSES = [0.248, 0.34, 2.392, 2.546, 4.111, 4.932, 5.49, 5.941];
+
+/** A steady rush of air, a whoosh as each near object passes, and a note for each. */
+const audio = soundtrack([
+  cue(0, pad(4.6, { chord: 'lift', attack: 0.3, release: 1.4 })),
+  cue(0, whoosh(5.9, { from: 260, to: 520, peak: 0.5, gain: 0.7 })),
+  PASSES.map((t, i) => [
+    cue(
+      Math.max(0, t - 0.35),
+      whoosh(0.45, { from: 500, to: 3400, peak: 0.8, pan: i % 2 ? 0.45 : -0.45 }),
+    ),
+    cue(
+      t,
+      pluck({
+        degree: [4, 5, 2, 4, 7, 5, 4, 2][i] ?? 0,
+        octave: 1,
+        gain: 0.55,
+        pan: i % 2 ? 0.3 : -0.3,
+      }),
+    ),
+  ]),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'fly-through',
+  audio,
   title: 'Flying past 3D objects',
   duration: 6,
   background: colors.ink,

@@ -1,6 +1,7 @@
 import { mod } from '@html-animation-engine/core';
 import { backdrop, defineSceneComposition, dotGrid } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { cue, pad, pluck, snap, soundtrack, thump } from '../sounds.js';
 
 const { colors } = theme;
 const W = exampleDefaults.width;
@@ -25,9 +26,20 @@ const grid = dotGrid({
   glow: 9,
 });
 
+/** A pulse each time a wave leaves the centre, a soft snap on the off-beat between. */
+const audio = soundtrack([
+  cue(0, pad(2.8, { attack: 0.4, release: 1.2, gain: 0.8 })),
+  [0, PERIOD].map((t, i) => [
+    cue(t, thump({ gain: 0.8 })),
+    cue(t, pluck({ degree: i * 4, octave: 1, decay: 1.2 })),
+    cue(t + PERIOD / 2, snap({ degree: 2 + i * 2, take: i, gain: 0.7 })),
+  ]),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'dot-grid',
+  audio,
   title: 'Dot grid ripple',
   duration: 4,
   background: colors.ink,

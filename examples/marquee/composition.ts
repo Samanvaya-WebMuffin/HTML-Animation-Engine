@@ -15,6 +15,7 @@ import {
   marquee,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, font, lighting, theme } from '../index.js';
+import { clap, cue, pad, snap, soundtrack, thump, tick } from '../sounds.js';
 
 const { colors } = theme;
 const big = font('display', 96);
@@ -40,9 +41,29 @@ function edgeFade(id: string, side: 'left' | 'right') {
   });
 }
 
+/** A steady 120 BPM groove that loops with the ticker: kick on the beat, snaps on the backbeat, a clap to turn over. */
+const BEAT = 0.5;
+const audio = soundtrack([
+  cue(0, pad(LOOP - 1, { chord: 'lift', attack: 0.3, release: 1 })),
+  Array.from({ length: LOOP / BEAT }, (_, i) => {
+    const t = i * BEAT;
+    if (i % 2 === 0) return cue(t, thump({ gain: 0.7 }));
+    return cue(
+      t,
+      i === LOOP / BEAT - 1
+        ? clap({ chord: 'home' })
+        : snap({ degree: [2, 4, 1][(i - 1) / 2] ?? 0, take: i, gain: 0.8 }),
+    );
+  }),
+  Array.from({ length: LOOP / BEAT }, (_, i) =>
+    cue(i * BEAT + BEAT / 2, tick({ degree: 4, gain: 0.5 })),
+  ),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'marquee',
+  audio,
   title: 'Marquee',
   duration: LOOP,
   background: colors.ink,

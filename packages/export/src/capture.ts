@@ -1,3 +1,4 @@
+import type { Soundtrack } from '@html-animation-engine/core';
 import type { Browser, BrowserContext, CDPSession, Page } from 'playwright';
 
 /** What a capture page reports about its composition (see `window.haeCapture`). */
@@ -12,6 +13,9 @@ export interface CaptureInfo {
   readonly duration: number;
   readonly stills: readonly number[];
   readonly background: string;
+  readonly seed?: number;
+  /** Sound as data; sample URLs are relative to the capture page. */
+  readonly audio?: Soundtrack;
 }
 
 interface CaptureWindow {

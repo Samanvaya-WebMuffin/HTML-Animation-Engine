@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { checkEnvironment, formatReport } from './env.js';
-import { renderStills, renderVideo } from './render.js';
+import { renderAudio, renderStills, renderVideo } from './render.js';
 import { isResolutionName, RESOLUTIONS, type ResolutionName } from './resolution.js';
 import { startCaptureServer } from './server.js';
 
@@ -13,6 +13,7 @@ Commands:
   doctor                    Check ffmpeg, ffprobe and Playwright's Chromium
   render <example>          Render an example to an H.264 MP4
   stills <example>          Render chosen frames as PNGs plus a contact sheet
+  audio <example>           Render only the soundtrack, as a 48 kHz 24-bit WAV
 
 Render options:
   --out <file>              Output file (default: out/<example>.mp4)
@@ -23,12 +24,17 @@ Render options:
   --crf <n>                 x264 quality: 0 lossless, 18 visually lossless (default), 23 smaller
   --preset <name>           x264 preset (default: medium)
   --tune <name>             x264 tune, e.g. animation
-  --audio <file>            Mux an audio track (video stream copied, not re-encoded)
+  --audio <file>            Mux this audio file instead of the example's soundtrack
+  --no-audio                Leave the soundtrack out (silent video)
 
 Stills options:
   --at <s,s,...>            Times in seconds (default: the example's config stills)
   --out <dir>               Output directory (default: out/<example>/stills)
   --resolution, --scale     As for render
+
+Audio options:
+  --out <file>              Output file (default: out/<example>.wav)
+  --from <s> --to <s>       As for render
 
 Common:
   --root <dir>              App containing capture.html (default: apps/playground)
@@ -47,6 +53,7 @@ const OPTIONS = {
   preset: { type: 'string' },
   tune: { type: 'string' },
   audio: { type: 'string' },
+  'no-audio': { type: 'boolean' },
   at: { type: 'string' },
   root: { type: 'string' },
 } as const;
@@ -107,7 +114,7 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(`${formatReport(report)}\n`);
     return report.ok ? 0 : 1;
   }
-  if (command !== 'render' && command !== 'stills') {
+  if (command !== 'render' && command !== 'stills' && command !== 'audio') {
     process.stderr.write(`Unknown command "${command}".\n\n${USAGE}`);
     return 1;
   }
@@ -153,6 +160,20 @@ export async function main(argv: string[]): Promise<number> {
       return 0;
     }
 
+    if (command === 'audio') {
+      const result = await renderAudio({
+        url: server.url,
+        example,
+        output: resolve(values.out ?? `out/${example}.wav`),
+        ...(values.from === undefined ? {} : { from: number('from', values.from) }),
+        ...(values.to === undefined ? {} : { to: number('to', values.to) }),
+      } as Parameters<typeof renderAudio>[0]);
+      process.stdout.write(
+        `${result.output}\n  ${result.events} sounds, ${result.seconds.toFixed(2)}s, 48 kHz 24-bit stereo\n`,
+      );
+      return 0;
+    }
+
     const output = resolve(values.out ?? `out/${example}.mp4`);
     const result = await renderVideo({
       url: server.url,
@@ -168,10 +189,17 @@ export async function main(argv: string[]): Promise<number> {
       ...(values.preset === undefined ? {} : { preset: values.preset }),
       ...(values.tune === undefined ? {} : { tune: values.tune }),
       ...(values.audio === undefined ? {} : { audio: resolve(values.audio) }),
+      ...(values['no-audio'] ? { sound: false } : {}),
     } as Parameters<typeof renderVideo>[0]);
+    const sound =
+      result.audio === 'soundtrack'
+        ? ', with soundtrack'
+        : result.audio === 'file'
+          ? ', with audio'
+          : '';
     process.stdout.write(
       `${result.output}\n  ${result.width}×${result.height}, ${result.fps} fps, ${result.frames} frames ` +
-        `(${result.seconds.toFixed(2)}s) in ${(result.elapsedMs / 1000).toFixed(1)}s\n`,
+        `(${result.seconds.toFixed(2)}s)${sound} in ${(result.elapsedMs / 1000).toFixed(1)}s\n`,
     );
     return 0;
   } finally {

@@ -62,6 +62,30 @@ export interface LightingTokens {
   readonly backdrop: { readonly centre: string; readonly edge: string };
 }
 
+/**
+ * Sound tokens: one key, so every snap, pluck, stab and pad agrees. Melodies
+ * pick notes by scale degree; chords are semitone offsets from `root`.
+ */
+export interface SoundTokens {
+  /** Frequency of A4 in Hz. */
+  readonly tuning: number;
+  /** Root of the key, with octave (e.g. 'D3'). */
+  readonly root: string;
+  /** Scale as semitone offsets from the root (a pentatonic scale never clashes). */
+  readonly scale: readonly number[];
+  /** Named chords as semitone offsets from the root. */
+  readonly chords: Readonly<Record<string, readonly number[]>>;
+  /** Mix level of each sound family, in dB. */
+  readonly levels: Readonly<Record<string, number>>;
+  /** Shared room. */
+  readonly reverb: {
+    readonly size: number;
+    readonly damping: number;
+    readonly predelay: number;
+    readonly gain: number;
+  };
+}
+
 export interface Theme {
   readonly name: string;
   readonly colors: Readonly<Record<string, string>>;
@@ -69,6 +93,7 @@ export interface Theme {
   readonly easing: EasingTokens;
   readonly durations: DurationTokens;
   readonly lighting?: LightingTokens;
+  readonly sound?: SoundTokens;
 }
 
 /** Identity helper that keeps the theme's literal keys in its type. */

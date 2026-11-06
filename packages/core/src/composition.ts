@@ -1,3 +1,4 @@
+import type { Soundtrack } from './audio/types.js';
 import { seedToInt, type Seed } from './random/hash.js';
 import type { FontSource, FontSpec } from './text/font.js';
 
@@ -61,6 +62,11 @@ export interface Composition {
   readonly fontFaces?: readonly FontSource[];
   /** Fonts to load before `setup` runs, so text is measured with the real font. */
   readonly fonts?: readonly FontSpec[];
+  /**
+   * Sound, as data: sounds placed at times (see `Soundtrack`). Export renders
+   * it with `renderSoundtrack` and muxes it into the MP4; it never affects frames.
+   */
+  readonly audio?: Soundtrack;
   /**
    * Optional one-off setup: build DOM/canvas structure, load fonts and
    * textures. May be async. It must not start timers or animation loops.

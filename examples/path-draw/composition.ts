@@ -21,6 +21,7 @@ import {
   type BackdropLight,
 } from '@html-animation-engine/renderers';
 import { exampleDefaults, lighting, theme } from '../index.js';
+import { arrival, clap, cue, pad, pluck, snap, soundtrack, whoosh } from '../sounds.js';
 
 const { colors, easing } = theme;
 const W = exampleDefaults.width;
@@ -144,9 +145,20 @@ const tubes = lines.map((line) => {
   return { line, glow, core, spark };
 });
 
+/** The swoosh draws with a swish; the ring snaps closed; the underline lands the clap. */
+const audio = soundtrack([
+  cue(0, pad(2.4, { chord: 'lift', attack: 0.4, release: 1.1 })),
+  cue(0.3, whoosh(1.4, { from: 400, to: 3200, peak: 0.5 })),
+  cue(0.8, pluck({ degree: 4, octave: 1, gain: 0.8 })),
+  cue(arrival(0.8, 1.2, easing.enter, 0.9), snap({ degree: 5 })),
+  cue(1.4, whoosh(0.3, { from: 1500, to: 5000, peak: 0.4, gain: 0.7 })),
+  cue(arrival(1.4, 0.6, easing.enter, 0.9), clap({ chord: 'home' })),
+]);
+
 export default defineSceneComposition({
   ...exampleDefaults,
   id: 'path-draw',
+  audio,
   title: 'Path draw',
   duration: 3.5,
   background: colors.ink,

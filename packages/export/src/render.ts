@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { chromium, type Browser } from 'playwright';
+import { renderCompositionAudio, writeWav } from './audio.js';
 import { openCapture, probeComposition, type CaptureInfo, type CaptureTarget } from './capture.js';
 import { partialPath, runFfmpeg, startEncoder } from './encode.js';
 import { ffmpegPath } from './env.js';
@@ -23,8 +24,10 @@ export interface RenderVideoOptions extends CaptureTarget, SizeOptions {
   readonly crf?: number;
   readonly preset?: string;
   readonly tune?: string;
-  /** Audio file to mux in (the video stream is copied, not re-encoded). */
+  /** Audio file to mux in instead of the composition's soundtrack. */
   readonly audio?: string;
+  /** Render the composition's own soundtrack (`Composition.audio`) into the MP4. Default true. */
+  readonly sound?: boolean;
   readonly browser?: Browser;
   readonly onProgress?: (done: number, total: number) => void;
   /** Non-fatal notes, e.g. a frame rate that does not suit the composition. */
@@ -62,6 +65,8 @@ export interface RenderResult {
   readonly frames: number;
   readonly seconds: number;
   readonly elapsedMs: number;
+  /** Where the audio track came from, if there is one. */
+  readonly audio?: 'soundtrack' | 'file';
 }
 
 function resolveScale(info: CaptureInfo, options: SizeOptions): number {
@@ -115,8 +120,20 @@ export async function renderVideo(options: RenderVideoOptions): Promise<RenderRe
     const size = outputSize(probe.width, probe.height, scale);
     await mkdir(dirname(options.output), { recursive: true });
 
+    // The soundtrack covers exactly the exported frames.
+    const soundtrack =
+      options.audio === undefined && options.sound !== false
+        ? await renderCompositionAudio(probe, options.url, {
+            from: first / fps,
+            to: (first + count) / fps,
+          })
+        : undefined;
+    const audioPath =
+      options.audio ?? (soundtrack ? `${options.output}.audio-${process.pid}.wav` : undefined);
+    if (soundtrack && audioPath) await writeWav(soundtrack, audioPath);
+
     const session = await openCapture(browser, { ...options, fps }, probe, scale);
-    const videoPath = options.audio ? `${options.output}.video.mp4` : options.output;
+    const videoPath = audioPath ? `${options.output}.video-${process.pid}.mp4` : options.output;
     const encoder = startEncoder({
       output: videoPath,
       fps,
@@ -132,43 +149,50 @@ export async function renderVideo(options: RenderVideoOptions): Promise<RenderRe
       await encoder.finish();
     } catch (error) {
       await encoder.abort();
+      if (soundtrack && audioPath) await rm(audioPath, { force: true });
       throw error;
     } finally {
       await session.close();
     }
 
-    if (options.audio) {
-      const audio = options.audio;
-      await runFfmpeg(
-        (target) => [
-          '-hide_banner',
-          '-loglevel',
-          'error',
-          '-y',
-          '-i',
-          videoPath,
-          '-i',
-          audio,
-          '-map',
-          '0:v',
-          '-map',
-          '1:a',
-          '-c:v',
-          'copy',
-          '-c:a',
-          'aac',
-          '-b:a',
-          '320k',
-          '-shortest',
-          '-movflags',
-          '+faststart',
-          '-f',
-          'mp4',
-          target,
-        ],
-        options.output,
-      );
-      await rm(videoPath, { force: true });
+    if (audioPath) {
+      const audio = audioPath;
+      try {
+        await runFfmpeg(
+          (target) => [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-y',
+            '-i',
+            videoPath,
+            '-i',
+            audio,
+            '-map',
+            '0:v',
+            '-map',
+            '1:a',
+            '-c:v',
+            'copy',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '320k',
+            '-ar',
+            '48000',
+            '-shortest',
+            '-movflags',
+            '+faststart',
+            '-f',
+            'mp4',
+            target,
+          ],
+          options.output,
+        );
+      } finally {
+        await rm(videoPath, { force: true });
+        if (soundtrack) await rm(audio, { force: true });
+      }
     }
 
     return {
@@ -178,7 +202,33 @@ export async function renderVideo(options: RenderVideoOptions): Promise<RenderRe
       frames: count,
       seconds: count / fps,
       elapsedMs: Date.now() - started,
+      ...(audioPath ? { audio: soundtrack ? ('soundtrack' as const) : ('file' as const) } : {}),
     };
+  });
+}
+
+export interface RenderAudioOptions extends CaptureTarget {
+  /** WAV file to write (48 kHz, 24-bit stereo). */
+  readonly output: string;
+  readonly from?: number;
+  readonly to?: number;
+  readonly browser?: Browser;
+}
+
+/** Renders only a composition's soundtrack, as a WAV (fast: no frames are captured). */
+export async function renderAudio(
+  options: RenderAudioOptions,
+): Promise<{ output: string; seconds: number; events: number }> {
+  return withBrowser(options.browser, async (browser) => {
+    const probe = await probeComposition(browser, options);
+    const from = options.from ?? 0;
+    const to = options.to ?? probe.duration;
+    frameRange(probe, DEFAULT_EXPORT_FPS, from, to); // validates the range
+    const audio = await renderCompositionAudio(probe, options.url, { from, to });
+    if (!audio) throw new Error(`"${probe.id}" has no soundtrack (Composition.audio).`);
+    await mkdir(dirname(options.output), { recursive: true });
+    await writeWav(audio, options.output);
+    return { output: options.output, seconds: to - from, events: probe.audio?.events.length ?? 0 };
   });
 }
 

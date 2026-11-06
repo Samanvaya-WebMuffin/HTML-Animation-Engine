@@ -5,6 +5,7 @@
  *
  *   capture.html?example=<name>[&scale=2][&fps=60][&reduced=1]
  */
+import { compositionSeed, type Soundtrack } from '@html-animation-engine/core';
 import { mountStage } from '@html-animation-engine/renderers';
 import { examples } from './examples.js';
 
@@ -19,6 +20,10 @@ export interface CaptureInfo {
   readonly duration: number;
   readonly stills: readonly number[];
   readonly background: string;
+  /** The composition's numeric seed (seeds the soundtrack's noise). */
+  readonly seed: number;
+  /** Sound as data; sample URLs are relative to this page. */
+  readonly audio?: Soundtrack;
 }
 
 export interface CaptureApi {
@@ -64,6 +69,8 @@ async function mount(): Promise<CaptureInfo> {
     duration: composition.duration,
     stills: config?.stills ?? [],
     background: composition.background,
+    seed: compositionSeed(composition),
+    ...(composition.audio ? { audio: composition.audio } : {}),
   };
 }
 

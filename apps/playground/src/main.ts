@@ -1,7 +1,8 @@
-import { timeToFrame } from '@html-animation-engine/core';
+import { compositionSeed, timeToFrame } from '@html-animation-engine/core';
 import { mountStage, type Stage } from '@html-animation-engine/renderers';
 import { examples, type ExampleEntry } from './examples.js';
 import { Player, type PlayerState } from './player.js';
+import { SoundPlayer } from './sound.js';
 import './style.css';
 
 const FPS_CHOICES = [12, 24, 25, 30, 50, 60] as const;
@@ -26,6 +27,7 @@ const ui = {
   fps: $<HTMLSelectElement>('fps'),
   scale: $<HTMLSelectElement>('scale'),
   reduced: $<HTMLInputElement>('reduced-motion'),
+  sound: $<HTMLInputElement>('sound'),
 };
 
 /** Hold per key moment in reduced-motion playback, seconds. */
@@ -44,6 +46,8 @@ let stage: Stage | undefined;
 let player: Player | undefined;
 let mountToken = 0;
 let keyTimes: readonly number[] = [];
+const sound = new SoundPlayer();
+sound.enabled = params.get('sound') !== '0';
 
 function writeUrl(state?: PlayerState): void {
   if (state) params.set('frame', String(state.frame));
@@ -52,6 +56,8 @@ function writeUrl(state?: PlayerState): void {
 
 function render(state: PlayerState): void {
   stage?.render(state.t);
+  // Reduced-motion playback cuts between still moments, so it plays silently.
+  sound.sync(state.t, state.playing && !state.reducedMotion);
   ui.scrubber.max = String(state.frameCount - 1);
   ui.scrubber.value = String(state.frame);
   ui.play.textContent = state.playing ? 'Pause' : 'Play';
@@ -74,7 +80,16 @@ function fitStage(): void {
 }
 
 function setControlsEnabled(enabled: boolean): void {
-  for (const control of [ui.play, ui.prev, ui.next, ui.scrubber, ui.fps, ui.scale, ui.reduced]) {
+  for (const control of [
+    ui.play,
+    ui.prev,
+    ui.next,
+    ui.scrubber,
+    ui.fps,
+    ui.scale,
+    ui.reduced,
+    ui.sound,
+  ]) {
     control.disabled = !enabled;
   }
 }
@@ -90,6 +105,7 @@ function fillSelect(select: HTMLSelectElement, options: [string, string][], valu
 async function selectExample(entry: ExampleEntry): Promise<void> {
   const token = ++mountToken;
   player?.pause();
+  sound.stop();
   stage?.destroy();
   stage = undefined;
 
@@ -104,6 +120,12 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
 
   const { composition, config } = await entry.load();
   if (token !== mountToken) return;
+  ui.sound.checked = sound.enabled;
+  const soundReady = sound.load(
+    composition.audio,
+    composition.duration,
+    compositionSeed(composition),
+  );
   keyTimes = config?.stills ?? [composition.duration - 1 / composition.fps];
 
   const fps = Number(params.get('fps')) || composition.fps;
@@ -144,6 +166,8 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
   render(player.state);
   fitStage();
   setControlsEnabled(true);
+  await soundReady;
+  if (token === mountToken && player) render(player.state);
 }
 
 function buildList(): void {
@@ -183,6 +207,12 @@ function bindControls(): void {
     params.set('reduced', ui.reduced.checked ? '1' : '0');
     if (player) params.set('frame', String(player.state.frame));
     remount(); // the composition also receives ctx.reducedMotion
+  });
+  ui.sound.addEventListener('change', () => {
+    sound.enabled = ui.sound.checked;
+    params.set('sound', ui.sound.checked ? '1' : '0');
+    writeUrl();
+    if (player) render(player.state);
   });
   ui.scale.addEventListener('change', () => {
     params.set('scale', ui.scale.value);
