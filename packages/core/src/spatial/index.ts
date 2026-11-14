@@ -18,11 +18,14 @@ export {
   deformMesh,
   plane,
   pyramid,
+  roundedBox,
   sphere,
   type BoxColors,
   type CurlOptions,
   type Face,
   type Mesh,
+  type RoundedBoxColors,
+  type RoundedBoxOptions,
 } from './mesh.js';
 export {
   projectSpace,

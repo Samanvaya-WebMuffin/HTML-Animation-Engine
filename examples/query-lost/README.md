@@ -1,0 +1,1 @@
+Scene 3 of the queries video, the pain point: paper notes keep being pinned to a corkboard (each with one corner curling off it) while files and folders stack up, then it is all lost and a clock sweeps an hour while the team searches (SVG renderer).

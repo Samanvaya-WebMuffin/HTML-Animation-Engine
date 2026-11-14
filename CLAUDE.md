@@ -29,7 +29,9 @@ packages/renderers   DOM / SVG / Canvas 2D renderers, effects library, defineSce
 packages/adapters    one subpath export per library; currently ./remotion (both directions)
                      (each library is an OPTIONAL peer dependency; never a hard dependency)
 packages/export      Node CLI (`hae`) + API: Playwright capture, ffmpeg encode, environment check
-apps/playground      Vite app: example list, scrubber, play/pause, frame step, fps, resolution,
+apps/playground      Vite app: one featured video (`FEATURED` in src/main.ts; ?example=<name> for others):
+                     a sequence's scenes listed on the left (click to jump), dividers on the progress
+                     bar at each cut, play/pause, scrubber, frame step, fps, resolution, sound,
                      reduced motion. capture.html = one example at exact size (for headless capture)
 examples/<name>/     one folder per animation (see "Adding an example")
 tests/unit           repo-wide unit tests (e.g. the purity lint rule)
@@ -38,21 +40,21 @@ tests/visual         Playwright tests; goldens in tests/visual/__goldens__/<plat
 
 ### Core engine (`packages/core/src`)
 
-| Module              | What it gives you                                                                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `composition.ts`    | `Composition`, `defineComposition`, frame/time conversion, `compositionSeed`                                                                              |
-| `easing/`           | `cubicBezier` (Newton + bisection fallback), closed-form `spring` (`.duration` = settle time), CSS `steps`                                                |
-| `tween.ts`          | `progress(t, start, duration, ease)`, `keyframes`, `staggerProgress`, `lerpRect`, `holdFor(text)`                                                         |
-| `color/`            | CSS colour parsing, OKLCH conversion with gamut mapping, `mixColors` (OKLCH, shortest hue arc)                                                            |
-| `timeline/`         | `timeline([...])` from `clip`/`gap`/`label`/`seq`/`par`/`stagger`, `at(label, offset)`; `tempo({ bpm })` beat grid                                        |
-| `geometry/`         | matrices, SVG path parse/flatten/length, `rect`/`pill`/`circle`/`pathGeometry`, **`morph`**                                                               |
-| `scene/`            | scene nodes (group/shape/text), camera, `flattenScene` → paint-ordered draw list                                                                          |
-| `random/`           | stateless `random(seed, ...keys)`, seeded `createRng`, seeded simplex `createNoise` (with seamless `loop`)                                                |
-| `text/`             | `registerFontFaces`, `loadFonts`, `createCanvasMeasurer`, `layoutText`, `baselineOffset`                                                                  |
-| `spatial/`          | 3D: vectors, matrices, perspective `Camera3D`/`orbitCamera`, meshes (`box`, `plane`, `sphere`, `cylinder`, `pyramid`), `curlVertex`, **`projectSpace`**   |
-| `audio/`            | **soundtracks as data** (`Soundtrack`: sample/tone/noise/layer sounds at times), `renderSoundtrack` (pure, seeded mixer → PCM), WAV read/write, `hz`/`db` |
-| `safety/`           | `createFlashDetector`: WCAG 2.3.1 flash analysis on RGBA frames                                                                                           |
-| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations, lighting (shadow colour, elevation, sheen, glow)        |
+| Module              | What it gives you                                                                                                                                                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `composition.ts`    | `Composition`, `defineComposition`, frame/time conversion, `compositionSeed`                                                                                                                                           |
+| `easing/`           | `cubicBezier` (Newton + bisection fallback), closed-form `spring` (`.duration` = settle time), CSS `steps`                                                                                                             |
+| `tween.ts`          | `progress(t, start, duration, ease)`, `keyframes`, `staggerProgress`, `lerpRect`, `holdFor(text)`                                                                                                                      |
+| `color/`            | CSS colour parsing, OKLCH conversion with gamut mapping, `mixColors` (OKLCH, shortest hue arc)                                                                                                                         |
+| `timeline/`         | `timeline([...])` from `clip`/`gap`/`label`/`seq`/`par`/`stagger`, `at(label, offset)`; `tempo({ bpm })` beat grid                                                                                                     |
+| `geometry/`         | matrices, SVG path parse/flatten/length, `rect`/`pill`/`circle`/`pathGeometry`, **`morph`**                                                                                                                            |
+| `scene/`            | scene nodes (group/shape/text), camera, `flattenScene` → paint-ordered draw list                                                                                                                                       |
+| `random/`           | stateless `random(seed, ...keys)`, seeded `createRng`, seeded simplex `createNoise` (with seamless `loop`)                                                                                                             |
+| `text/`             | `registerFontFaces`, `loadFonts`, `createCanvasMeasurer`, `layoutText`, `baselineOffset`                                                                                                                               |
+| `spatial/`          | 3D: vectors, matrices, perspective `Camera3D`/`orbitCamera`, meshes (`box`, `roundedBox` (rounded corners, optional rounded `bevel` edge), `plane`, `sphere`, `cylinder`, `pyramid`), `curlVertex`, **`projectSpace`** |
+| `audio/`            | **soundtracks as data** (`Soundtrack`: sample/tone/noise/layer sounds at times), `renderSoundtrack` (pure, seeded mixer → PCM), WAV read/write, `hz`/`db`                                                              |
+| `safety/`           | `createFlashDetector`: WCAG 2.3.1 flash analysis on RGBA frames                                                                                                                                                        |
+| `themes/default.ts` | **the** token file: colours, type, easing (`enter`, `exit`, `snap`, `camera`, `wipe`), durations, lighting (shadow colour, elevation, sheen, glow)                                                                     |
 
 Conventions the code relies on:
 
@@ -83,7 +85,7 @@ Sound follows the core principle: a composition's `audio` is **plain data** (sou
 - **Sounds:** `sample` (a WAV by name; `onset` = where its transient is, so it lands exactly on the cue), `tone` (sine/triangle/saw/square with PolyBLEP, pitch drop, FM, unison), `noise` (white/pink, filter sweep, analogue-clap `bursts`), and `layer`. Each has `delay`, `gain`, `pan` (equal-gain balance) and a reverb `send`. Envelope `decay`/`release` are **−60 dB times**.
 - **Mix:** voices → dry bus + Freeverb send (high-passed at 220 Hz) → DC filter → look-ahead **true-peak** limiter (4× oversampled, ceiling −1.5 dBTP so AAC can't clip) → 15 ms end fade. Sounds are cut at 0 and `duration`.
 - **Samples are WAV** (parsed exactly by `decodeWav`, no browser resampling). The kit's four recordings (two finger snaps, a clap and a three-person clap, all **CC0** from Freesound, chosen by measurement) are in `examples/sounds/` with credits and processing notes.
-- **The kit** (`examples/sounds.ts`) layers recordings with synths tuned to the theme's key (`theme.sound`: D major pentatonic, chords `home`/`lift`/`shadow`, loudness-balanced `levels`): `snap` (snap + FM pluck), `clap` (two clap recordings + noise clap + saw chord stab + sub), `key`, `pluck`, `bell`, `tick`, `thump`, `whoosh`, `pad`. Helpers: `cue(at, sound)`, `soundtrack([...])`, `arrival(start, duration, ease)` (when an eased move visibly lands, e.g. a spring's first touch of its target), `changeTimes(fn, ...)` (when a value turns over, e.g. counter digits).
+- **The kit** (`examples/sounds.ts`) layers recordings with synths tuned to the theme's key (`theme.sound`: D major pentatonic, chords `home`/`lift`/`shadow`, loudness-balanced `levels`): `snap` (snap + FM pluck), `clap` (two clap recordings + noise clap + saw chord stab + sub), `key`, `pluck`, `bell`, `tick`, `thump`, `whoosh`, `pad`, `slap` (paper landing), `rustle` (very faint paper), and for music under a whole video `kick`, `hat`, `rim`, `bass`, `keys` (light levels: music sits ~7 dB under the effects). Helpers: `cue(at, sound)`, `soundtrack([...])`, `arrival(start, duration, ease)` (when an eased move visibly lands, e.g. a spring's first touch of its target), `changeTimes(fn, ...)` (when a value turns over, e.g. counter digits).
 - **Sync from the same numbers as the motion:** reference the composition's own timing constants (and effect helpers like `typeOnTimes`) rather than copying times.
 - Levels are set by loudness: each sound alone peaks around −16 LUFS momentary (clap) down to −30 (bed); whole clips land around −15 to −20 LUFS momentary max.
 
@@ -103,6 +105,8 @@ The three renderers draw the same `flattenScene` output and are tested for pixel
 **Light and shadow** (`effects/light.ts`, tokens in `theme.lighting`; examples import `lighting` from `examples/index.ts`). Light comes from above. `backdrop` (radial lift + vignette + optional coloured light pools; draw it first), `litFill`/`litGradient` (surface lighter at the top, darker at the bottom), `elevationShadows(lighting, 'low' | 'mid' | 'high', { lift, strength })` (contact + key + ambient layers), `glowShadows`, `lightSweep` (a specular band crossing a shape once), `groundShadow` (soft ellipse under floating or 3D objects). Use them for depth and light rather than flat fills; keep glints slow and small (flash safety).
 
 Effects are **factories** that do their expensive work once and return `(t) => SceneNode` (or a camera): `highlighterWipe`, `maskReveal`, `circleReveal`, `typeOn`, `counterRoll`, `marquee`, `particleBurst`, `confetti`, `dotGrid`, `nodeGraph`, `shapeMorph`, `pathDraw`, `staggerGrid`, `landingShadow`, `pushIn`, `pullBack`, `cameraPath`, in 3D `slab3d`, `pageCurl`, `flyThrough`, and as a shader layer `candleFlame`. Looping effects wrap `t` into their loop first, so `f(loopDuration)` equals `f(0)` exactly.
+
+**Videos made of scenes:** `defineSequence({ id, scenes })` plays compositions back to back as one (same size and fps). Each scene is mounted in its own layer with its own seed and drawn at its local time, so a frame in the video is exactly that scene's frame; soundtracks are merged at each scene's start, and `music` (a soundtrack timed from the video's start) plays under all of them. `isSequence(c)` / `c.scenes` give the scene titles and starts (the playground's scene list and progress-bar dividers). **A scene picks up from the exact last frame of the one before:** the next scene draws the previous scene's final state at its t = 0 (scene 1 exports what it draws, e.g. `wall` in `query-bubbles`), and `tests/visual/scenes.spec.ts` checks every cut is pixel-identical. When a still picture breaks apart into many moving pieces (the shards in `query-crack`), paint it once into an offscreen canvas at setup and draw each piece as a clipped, transformed copy of that image: copying the scene nodes into every piece made the break ~35,000 SVG elements and 150 ms a frame. The queries video (`query-film`, 72.85 s, 12 scenes following the Cowork video script: `query-bubbles` → `query-crack` → `query-lost` → `query-criteria` → `query-cowork` → `query-ask` → `query-work` → `query-answers` → `query-library` → `query-proof` → `query-week` → `query-outro`) is 9:16, with light synth music under it all (`defineSequence({ music })`: beats at 110 bpm, bass and keys at 55 bpm on each scene's chord). `query-lost`, `query-criteria` and `query-cowork` draw through one painter in `examples/query-story.ts` (`paint(StoryState)`, plus `caption`: phrase-by-phrase headline text); each scene's `state(t)` starts from the previous scene's exported `state` at its end, so the cuts match by construction. The product scenes are built from a UI kit, `examples/cowork-ui.ts` (windows, chips, buttons, line icons, cursor with clicks, typing caret, spinners, skeleton shimmer; all top-left based). `query-ask` → `query-library` are consecutive windows of **one timeline** in `examples/cowork-apps.ts` (three desks with a camera gliding between them; `defineAppsScene(scene, id, title)`), so their cuts match trivially; `appsWorld(apps, t, { camera })` redraws any moment with any camera, which the montage in `query-proof` uses (a stand-in for the real screen recordings the script asks for). Typing is human-paced (seeded key gaps), and layout positions shared by drawing and the cursor come from pure layout functions, never from values written during a render. It uses `phoneDefaults` (720 × 1280 at 60 fps, exported at 2160 × 3840).
 
 The **stage** (`mountStage`) blocks CSS transitions and animations inside it, cancels Web Animations and pauses SMIL after every frame (with a console warning), and passes `ctx.reducedMotion`.
 
@@ -148,22 +152,23 @@ Package names are `@html-animation-engine/<name>`. The composition contract is `
 
 ## Commands
 
-| Command                               | What it does                                                       |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| `pnpm dev`                            | Playground at http://localhost:5173                                |
-| `pnpm build`                          | tsup builds every package; Vite builds the playground              |
-| `pnpm test`                           | Vitest unit tests (all packages, from the root `vitest.config.ts`) |
-| `pnpm test:visual`                    | Playwright visual tests (starts the playground automatically)      |
-| `pnpm test:visual --update-snapshots` | Regenerate this platform's golden frames                           |
-| `pnpm lint`                           | ESLint (incl. the purity rule) + Prettier check                    |
-| `pnpm format`                         | Prettier write                                                     |
-| `pnpm typecheck`                      | `tsc` for every package and the root configs/tests                 |
-| `pnpm check-env`                      | Checks ffmpeg, ffprobe, required encoders and Playwright Chromium  |
-| `pnpm render <ex> ...`                | Render an example to a 4K 60 fps H.264 MP4 with sound (see below)  |
-| `pnpm stills <ex> ...`                | Render chosen frames as 4K PNGs + a contact sheet                  |
-| `pnpm sound <ex>`                     | Render only the soundtrack → `out/<ex>.wav` (48 kHz 24-bit, ~2 s)  |
-| `pnpm test:export`                    | End-to-end export tests (Chromium + ffmpeg)                        |
-| `pnpm changeset`                      | Record a version bump for published packages                       |
+| Command                               | What it does                                                                                                                                                   |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                            | Playground at http://localhost:5173                                                                                                                            |
+| (playground) **Export 4K** button     | Renders the shown video like `pnpm render` (4K 60 fps, sound) on the dev server and downloads it (`apps/playground/export-server.ts`; files in `out/exports/`) |
+| `pnpm build`                          | tsup builds every package; Vite builds the playground                                                                                                          |
+| `pnpm test`                           | Vitest unit tests (all packages, from the root `vitest.config.ts`)                                                                                             |
+| `pnpm test:visual`                    | Playwright visual tests (starts the playground automatically)                                                                                                  |
+| `pnpm test:visual --update-snapshots` | Regenerate this platform's golden frames                                                                                                                       |
+| `pnpm lint`                           | ESLint (incl. the purity rule) + Prettier check                                                                                                                |
+| `pnpm format`                         | Prettier write                                                                                                                                                 |
+| `pnpm typecheck`                      | `tsc` for every package and the root configs/tests                                                                                                             |
+| `pnpm check-env`                      | Checks ffmpeg, ffprobe, required encoders and Playwright Chromium                                                                                              |
+| `pnpm render <ex> ...`                | Render an example to a 4K 60 fps H.264 MP4 with sound (see below)                                                                                              |
+| `pnpm stills <ex> ...`                | Render chosen frames as 4K PNGs + a contact sheet                                                                                                              |
+| `pnpm sound <ex>`                     | Render only the soundtrack → `out/<ex>.wav` (48 kHz 24-bit, ~2 s)                                                                                              |
+| `pnpm test:export`                    | End-to-end export tests (Chromium + ffmpeg)                                                                                                                    |
+| `pnpm changeset`                      | Record a version bump for published packages                                                                                                                   |
 
 Don't call the env check `pnpm doctor`: that is a pnpm built-in and shadows the script.
 
@@ -200,7 +205,7 @@ pnpm render <example>                      # 4K 60 fps H.264 MP4 with its soundt
 pnpm render <example> --from 2 --to 4 --resolution 1080p --crf 12 --audio music.wav
 ```
 
-Render options: `--out`, `--resolution 4k|1440p|1080p|720p` (default **4k**: fit inside 3840 × 2160), `--scale` (exact factor instead), `--fps` (default **60**: compositions are pure functions of time, so they are sampled at any rate whatever their authoring `fps`; a `fixedFps` composition keeps its own rate, with a warning if overridden), `--from`/`--to`, `--crf` (0 lossless, **18** default, 23 smaller), `--preset` (x264, default medium), `--tune` (e.g. `animation`), `--audio <file>` (muxed instead of the soundtrack, with `-c:v copy`), `--no-audio` (silent), `--root`. Output under `out/` is git-ignored.
+Render options: `--out`, `--resolution 4k|1440p|1080p|720p` (default **4k**: fit inside 3840 × 2160, or 2160 × 3840 for a portrait composition such as a 9:16 phone video), `--scale` (exact factor instead), `--fps` (default **60**: compositions are pure functions of time, so they are sampled at any rate whatever their authoring `fps`; a `fixedFps` composition keeps its own rate, with a warning if overridden), `--from`/`--to`, `--crf` (0 lossless, **18** default, 23 smaller), `--preset` (x264, default medium), `--tune` (e.g. `animation`), `--audio <file>` (muxed instead of the soundtrack, with `-c:v copy`), `--no-audio` (silent), `--root`. Output under `out/` is git-ignored.
 
 How export works (`packages/export`):
 
@@ -228,7 +233,7 @@ How export works (`packages/export`):
 - [x] Phase 1: repo setup (workspace, tooling, playground shell, `Composition` contract, `mountStage`, env check, CI)
 - [x] Phase 2: core engine (easing, tweens, timeline/BPM, scene graph, camera, morph, RNG/noise, text, theme tokens). Determinism is proven in `packages/core/test/determinism.test.ts` (pinned output) and `tests/visual/determinism.spec.ts` (byte-identical Canvas pixels)
 - [x] Phase 3: DOM/SVG/Canvas renderers (pixel parity tested), effects library with 13 examples (goldens, determinism, flash safety each), reduced-motion playback, WCAG flash detector, stage blocks CSS/Web Animations, bundled Inter font, capture page
-- [x] Phase 3b: 3D via projection (`spatial/`): slab rotating with zooms, lifted page corner, fly-through past 3D objects; examples `slab-rotate`, `page-curl`, `fly-through`. Also: chroma-weighted OKLCH hue, bundled JetBrains Mono
+- [x] Phase 3b: 3D via projection (`spatial/`): slab rotating with zooms, lifted page corner, fly-through past 3D objects; examples `slab-rotate`, `page-curl`, `fly-through`, `slab-reveal` (a neon slab rising face-down into a top light). Also: chroma-weighted OKLCH hue, bundled JetBrains Mono
 - [x] Flame: WebGL2 shader layer + `candleFlame` (example `candle-flame`), researched against flame-structure and photographic references
 - [x] Phase 4: Remotion adapter, both directions (`HaeComposition`, `remotionCompositionProps`, `fromRemotion`); examples `remotion-title`, `remotion-roundtrip`; capture made order-independent (`isolateFrames`, no tracing)
 - [x] Phase 5: export: 4K H.264 MP4 (`pnpm render`), 4K stills + contact sheet (`pnpm stills`), audio mux, Node API, end-to-end tests

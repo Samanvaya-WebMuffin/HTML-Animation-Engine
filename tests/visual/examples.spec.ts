@@ -96,6 +96,8 @@ for (const name of exampleNames()) {
       // That is a few hundred screenshots, so allow more than the default 30 s.
       test.setTimeout(120_000);
       const info = await openCapture(page, name, { fps: DEFAULT_EXPORT_FPS });
+      // Long videos (a whole film of scenes) get about 45 ms a frame.
+      test.setTimeout(Math.max(120_000, info.duration * info.fps * 45 + 30_000));
       const cdp = await page.context().newCDPSession(page);
       const frames = Math.round(info.duration * info.fps);
       let detector: FlashDetector | undefined;

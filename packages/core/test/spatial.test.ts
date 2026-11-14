@@ -7,6 +7,7 @@ import {
   clipNear,
   curlVertex,
   cylinder,
+  roundedBox,
   deformMesh,
   dot3,
   flattenScene,
@@ -60,6 +61,12 @@ describe('primitives', () => {
     ['box', box(2, 1, 0.5, '#fff')],
     ['sphere', sphere(1, 12, 8, '#fff')],
     ['cylinder', cylinder(1, 2, 10, '#fff')],
+    ['roundedBox', roundedBox(2, 3, 0.4, 0.5, 6, '#fff')],
+    ['roundedBox (radius 0)', roundedBox(2, 3, 0.4, 0, 3, '#fff')],
+    [
+      'roundedBox (bevelled)',
+      roundedBox(2, 3, 0.4, 0.5, 6, '#fff', { bevel: 0.15, bevelSegments: 4 }),
+    ],
     ['pyramid', pyramid(1, 2, 4, '#fff')],
   ])('%s faces all point outward', (_name, mesh) => {
     expect(outward(mesh)).toBe(true);

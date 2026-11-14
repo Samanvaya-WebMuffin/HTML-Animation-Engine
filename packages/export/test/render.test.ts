@@ -21,9 +21,19 @@ describe('resolution presets', () => {
       width: 2160,
       height: 2160,
     });
+    // Portrait fills the portrait UHD frame (9:16 for phones).
     expect(outputSize(1080, 1920, scaleFor(1080, 1920, '4k'))).toEqual({
-      width: 1214,
-      height: 2160,
+      width: 2160,
+      height: 3840,
+    });
+    expect(outputSize(720, 1280, scaleFor(720, 1280, '4k'))).toEqual({
+      width: 2160,
+      height: 3840,
+    });
+    // Tall but not 9:16: fits the portrait bounds.
+    expect(outputSize(1000, 3000, scaleFor(1000, 3000, '1080p'))).toEqual({
+      width: 640,
+      height: 1920,
     });
   });
 

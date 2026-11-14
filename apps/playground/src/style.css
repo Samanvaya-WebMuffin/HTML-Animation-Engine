@@ -19,9 +19,13 @@ body {
   margin: 0;
   height: 100vh;
   display: grid;
-  grid-template-columns: 220px 1fr;
   background: var(--bg);
   color: var(--text);
+}
+
+/* With a scene list, it sits on the left. */
+body.has-scenes {
+  grid-template-columns: 240px 1fr;
 }
 
 .sidebar {
@@ -31,35 +35,46 @@ body {
   overflow: auto;
 }
 
-.sidebar h1 {
-  font-size: 13px;
-  margin: 0 0 20px;
-}
-
 .sidebar h2 {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
 }
 
-#example-list a {
-  display: block;
-  padding: 6px 8px;
+#scene-list button {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 2px;
+  border: 0;
   border-radius: 6px;
+  font: inherit;
+  text-align: left;
   color: var(--text);
-  text-decoration: none;
+  background: transparent;
+  cursor: pointer;
 }
 
-#example-list a:hover {
+#scene-list button:hover {
   background: var(--line);
 }
 
-#example-list a[aria-current='page'] {
+#scene-list button[aria-current='true'] {
   background: var(--accent);
   color: #000;
+}
+
+#scene-list .number,
+#scene-list .time {
+  color: inherit;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
 }
 
 .main {
@@ -82,7 +97,6 @@ body {
   left: 50%;
   top: 50%;
   transform-origin: 0 0;
-  box-shadow: 0 0 0 1px var(--line);
 }
 
 .empty {
@@ -123,10 +137,38 @@ body {
   min-width: 64px;
 }
 
-#scrubber {
+/* The scrubber, with a divider at each point where one scene hands over to the next. */
+.scrub {
+  position: relative;
   flex: 1;
   min-width: 120px;
+  display: flex;
+  align-items: center;
+}
+
+#scrubber {
+  width: 100%;
+  margin: 0;
   accent-color: var(--accent);
+}
+
+.markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Chrome's range thumb is 16 px wide: positions run from its centre at 0 to its centre at 1. */
+.markers span {
+  position: absolute;
+  top: 50%;
+  left: calc(8px + var(--at) * (100% - 16px));
+  width: 3px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 0 0 1px var(--panel);
 }
 
 .timecode {

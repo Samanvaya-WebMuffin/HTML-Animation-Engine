@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
+import { exportServer } from './export-server.js';
 
 const EXAMPLES = fileURLToPath(new URL('../../examples', import.meta.url));
 
@@ -18,7 +19,7 @@ function watchExamples(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [watchExamples()],
+  plugins: [watchExamples(), exportServer()],
   // Resolve workspace packages to their TypeScript sources (see the "source"
   // export condition in each package.json), so no build step is needed.
   resolve: { conditions: ['source', 'module', 'browser', 'development|production'] },

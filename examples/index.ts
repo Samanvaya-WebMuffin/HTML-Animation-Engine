@@ -24,6 +24,17 @@ export const exampleDefaults = {
 } as const;
 
 /**
+ * A 9:16 phone video: 720 × 1280 at 60 fps. Export renders it at 3×, the
+ * portrait 4K frame (2160 × 3840).
+ */
+export const phoneDefaults = {
+  ...exampleDefaults,
+  width: 720,
+  height: 1280,
+  fps: 60,
+} as const;
+
+/**
  * Per-example settings, in `examples/<name>/config.ts`. The composition itself
  * lives in `examples/<name>/composition.ts` as the default export.
  */

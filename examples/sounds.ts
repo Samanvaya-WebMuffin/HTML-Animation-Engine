@@ -3,6 +3,7 @@ import {
   type Ease,
   defineSoundtrack,
   hz,
+  lerp,
   noteNumber,
   random,
   type Sound,
@@ -202,6 +203,147 @@ export function key(options: HitOptions = {}): Sound {
   );
 }
 
+/**
+ * A notification ding: a bright bell tone with the inharmonic partials of a
+ * small struck bar (×2.76, ×5.4), so it reads as a chime rather than a synth.
+ */
+export function ding(options: HitOptions & { octave?: number } = {}): Sound {
+  const { degree = 0, octave = 3, gain = 1, pan = 0 } = options;
+  const freq = note(degree, octave);
+  const partial = (ratio: number, decay: number, g: number): Sound => ({
+    type: 'tone',
+    wave: 'sine',
+    freq: freq * ratio,
+    envelope: { attack: 0.001, decay },
+    gain: level('ding') * g,
+  });
+  return layer([partial(1, 1.1, 1), partial(2.76, 0.4, 0.35), partial(5.4, 0.14, 0.18)], {
+    gain,
+    pan,
+    send: 0.3,
+  });
+}
+
+/** Something popping into view: a short, high snap and a quick falling blip. */
+export function pop(options: HitOptions = {}): Sound {
+  const { degree = 0, take = 0, gain = 1, pan = 0 } = options;
+  return layer(
+    [
+      sample(take % 2 === 0 ? 'snap-1' : 'snap-2', level('pop') * 0.5, {
+        rate: 1.35,
+        filter: { type: 'highpass', freq: 700 },
+      }),
+      {
+        type: 'tone',
+        wave: 'sine',
+        freq: note(degree, 1),
+        pitch: { from: 2.2, time: 0.01 },
+        envelope: { attack: 0.0005, decay: 0.07 },
+        gain: level('pop'),
+      },
+    ],
+    { gain, pan, send: 0.08 },
+  );
+}
+
+/**
+ * Something hard cracking: the snap recording slowed down (deeper, with a
+ * longer crunch), a short burst of bright grit, and a low knock. `size` 0–1
+ * goes from a hairline tick to a heavy break.
+ */
+export function crack(
+  options: { size?: number; take?: number; gain?: number; pan?: number } = {},
+): Sound {
+  const { size = 0.5, take = 0, gain = 1, pan = 0 } = options;
+  return layer(
+    [
+      sample(take % 2 === 0 ? 'snap-1' : 'snap-2', level('snap'), {
+        rate: lerp(0.95, 0.55, size) + 0.06 * (take % 3),
+      }),
+      {
+        type: 'noise',
+        filter: { type: 'highpass', freq: lerp(3500, 1800, size) },
+        envelope: { attack: 0.0005, decay: lerp(0.03, 0.12, size) },
+        stereo: true,
+        gain: level('snap') * 0.35,
+      },
+      {
+        type: 'tone',
+        wave: 'sine',
+        freq: note(0, -1),
+        pitch: { from: 2.2, time: 0.015 },
+        envelope: { attack: 0.001, decay: lerp(0.08, 0.3, size) },
+        gain: level('sub') * size,
+      },
+    ],
+    { gain, pan, send: 0.25 },
+  );
+}
+
+/**
+ * Paper rustling, very faint: a few soft, irregular crinkles of filtered
+ * noise and a breath of air. `take` varies it so repeats don't match.
+ */
+export function rustle(options: { take?: number; gain?: number; pan?: number } = {}): Sound {
+  const { take = 0, gain = 1, pan = 0 } = options;
+  const r = (key: string) => random('rustle', key, take);
+  return layer(
+    [
+      {
+        type: 'noise',
+        filter: {
+          type: 'bandpass',
+          freq: 2600 + r('from') * 1800,
+          q: 0.8,
+          sweep: { to: 1700 + r('to') * 1200, time: 0.2 },
+        },
+        bursts: {
+          count: 3 + Math.floor(r('count') * 3),
+          spacing: 0.024 + r('spacing') * 0.02,
+          decay: 0.018,
+        },
+        envelope: { attack: 0.004, decay: 0.22 },
+        stereo: true,
+        gain: level('rustle'),
+      },
+      {
+        type: 'noise',
+        color: 'pink',
+        filter: { type: 'highpass', freq: 5000 },
+        envelope: { attack: 0.012, decay: 0.14 },
+        stereo: true,
+        gain: level('rustle') * 0.4,
+      },
+    ],
+    { gain, pan, send: 0.15 },
+  );
+}
+
+/** Paper or a folder landing flat: a soft papery slap with a little weight under it. */
+export function slap(options: { gain?: number; pan?: number } = {}): Sound {
+  const { gain = 1, pan = 0 } = options;
+  return layer(
+    [
+      {
+        type: 'noise',
+        color: 'pink',
+        filter: { type: 'bandpass', freq: 1400, q: 0.7 },
+        envelope: { attack: 0.0008, decay: 0.07 },
+        gain: level('pop') * 0.8,
+      },
+      {
+        type: 'tone',
+        wave: 'sine',
+        freq: note(0, 0),
+        pitch: { from: 1.8, time: 0.015 },
+        envelope: { attack: 0.001, decay: 0.09 },
+        gain: level('sub') * 0.25,
+      },
+    ],
+    { gain, pan, send: 0.1 },
+  );
+}
+
 /** Low thump for things landing (sub pitch-drop and a soft knock). */
 export function thump(options: { gain?: number; pan?: number } = {}): Sound {
   const { gain = 1, pan = 0 } = options;
@@ -247,6 +389,108 @@ export function whoosh(
     pan,
     send: 0.3,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Music: a light synth groove to sit under a whole video.
+// ---------------------------------------------------------------------------
+
+/** A soft synth kick: a sine falling onto the low root, with a faint click. */
+export function kick(options: { gain?: number; pan?: number } = {}): Sound {
+  const { gain = 1, pan = 0 } = options;
+  return layer(
+    [
+      {
+        type: 'tone',
+        wave: 'sine',
+        freq: note(0, -1),
+        pitch: { from: 2.2, time: 0.03 },
+        envelope: { attack: 0.001, decay: 0.32 },
+        gain: level('kick'),
+      },
+      {
+        type: 'noise',
+        filter: { type: 'bandpass', freq: 2500, q: 0.8 },
+        envelope: { attack: 0.0005, decay: 0.012 },
+        gain: level('kick') * 0.12,
+      },
+    ],
+    { gain, pan },
+  );
+}
+
+/** A hi-hat: a short hiss of high noise (`open` rings longer). */
+export function hat(options: { gain?: number; pan?: number; open?: boolean } = {}): Sound {
+  const { gain = 1, pan = 0, open = false } = options;
+  return {
+    type: 'noise',
+    filter: { type: 'highpass', freq: 7500 },
+    envelope: { attack: 0.0005, decay: open ? 0.22 : 0.045 },
+    gain: level('hat') * gain,
+    pan,
+    send: 0.06,
+  };
+}
+
+/** A soft backbeat: a tiny, airy synth clap. */
+export function rim(options: { gain?: number; pan?: number } = {}): Sound {
+  const { gain = 1, pan = 0 } = options;
+  return {
+    type: 'noise',
+    filter: { type: 'bandpass', freq: 1700, q: 1.1 },
+    bursts: { count: 2, spacing: 0.008, decay: 0.01 },
+    envelope: { attack: 0.0005, decay: 0.09 },
+    gain: level('rim') * gain,
+    pan,
+    send: 0.3,
+  };
+}
+
+/** A round synth bass note on the root of `chord`, `length` seconds long. */
+export function bass(
+  name: keyof typeof tokens.chords,
+  length: number,
+  options: { gain?: number } = {},
+): Sound {
+  const { gain = 1 } = options;
+  const freq = chord(name, -1)[0] as number;
+  const envelope = { attack: 0.012, decay: 0.6, sustain: 0.5, length, release: 0.25 };
+  return layer(
+    [
+      { type: 'tone', wave: 'sine', freq, envelope, gain: level('bass') },
+      {
+        type: 'tone',
+        wave: 'triangle',
+        freq: freq * 2,
+        filter: { type: 'lowpass', freq: 420 },
+        envelope,
+        gain: level('bass') * 0.35,
+      },
+    ],
+    { gain },
+  );
+}
+
+/** Soft synth keys: `chord` an octave up, mellow and slightly detuned, closing as it rings. */
+export function keys(
+  name: keyof typeof tokens.chords,
+  length: number,
+  options: { gain?: number; pan?: number } = {},
+): Sound {
+  const { gain = 1, pan = 0 } = options;
+  const notes = chord(name, 1);
+  return layer(
+    notes.map((freq) => ({
+      type: 'tone',
+      wave: 'triangle',
+      freq,
+      unison: { voices: 2, detune: 8, width: 0.6 },
+      filter: { type: 'lowpass', freq: 1800, q: 0.5, sweep: { to: 700, time: length } },
+      envelope: { attack: 0.02, decay: 0.9, sustain: 0.35, length, release: 0.6 },
+      gain: level('keys') / Math.sqrt(notes.length),
+    })),
+    { gain, pan, send: 0.45 },
+  );
 }
 
 /** A soft sustained chord bed under a scene, `length` seconds long. */

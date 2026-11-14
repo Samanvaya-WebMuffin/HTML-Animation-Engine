@@ -17,7 +17,7 @@ Commands:
 
 Render options:
   --out <file>              Output file (default: out/<example>.mp4)
-  --resolution <name>       Fit inside ${Object.keys(RESOLUTIONS).join(' | ')} (default: 4k = 3840×2160)
+  --resolution <name>       Fit inside ${Object.keys(RESOLUTIONS).join(' | ')} (default: 4k = 3840×2160, 2160×3840 portrait)
   --scale <n>               Exact scale factor instead of --resolution
   --fps <n>                 Frame rate (default: 60; Remotion compositions keep their own)
   --from <s> --to <s>       Render only part of the composition

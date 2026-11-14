@@ -3,13 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HTML-Animation-Engine Playground</title>
+    <title>HTML-Animation-Engine</title>
   </head>
   <body>
-    <aside class="sidebar">
-      <h1>HTML-Animation-Engine</h1>
-      <h2>Examples</h2>
-      <nav id="example-list" aria-label="Examples"></nav>
+    <aside class="sidebar" id="scene-panel" hidden>
+      <h2>Scenes</h2>
+      <nav id="scene-list" aria-label="Scenes"></nav>
     </aside>
     <main class="main">
       <section id="viewport" class="viewport" aria-label="Preview">
@@ -22,15 +21,18 @@
         <button id="play" type="button" title="Play / pause (Space)">Play</button>
         <button id="prev" type="button" title="Previous frame (←, Shift+← for 10)">◀ Frame</button>
         <button id="next" type="button" title="Next frame (→, Shift+→ for 10)">Frame ▶</button>
-        <input
-          id="scrubber"
-          type="range"
-          min="0"
-          max="0"
-          step="1"
-          value="0"
-          aria-label="Scrubber"
-        />
+        <div class="scrub">
+          <input
+            id="scrubber"
+            type="range"
+            min="0"
+            max="0"
+            step="1"
+            value="0"
+            aria-label="Scrubber"
+          />
+          <div id="markers" class="markers" aria-hidden="true"></div>
+        </div>
         <output id="timecode" class="timecode">0.000 s · 0 / 0</output>
         <label>
           FPS
@@ -44,6 +46,13 @@
           <input id="sound" type="checkbox" checked />
           Sound
         </label>
+        <button
+          id="export"
+          type="button"
+          title="Render this video at 4K, 60 fps, with sound, and download the MP4"
+        >
+          Export 4K
+        </button>
         <label title="Hold on key moments instead of playing motion (defaults to your OS setting)">
           <input id="reduced-motion" type="checkbox" />
           Reduced motion

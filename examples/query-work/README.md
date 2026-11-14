@@ -1,0 +1,1 @@
+Scene 7 of the queries video, the work: the COO's plan unfolds and goes ahead, the rep's quick answer is waiting with its sources, and researchers run in parallel against a racing clock (SVG renderer).

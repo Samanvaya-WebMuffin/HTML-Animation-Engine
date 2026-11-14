@@ -1,9 +1,20 @@
 import { compositionSeed, timeToFrame } from '@html-animation-engine/core';
-import { mountStage, type Stage } from '@html-animation-engine/renderers';
+import {
+  isSequence,
+  mountStage,
+  type SceneMark,
+  type Stage,
+} from '@html-animation-engine/renderers';
 import { examples, type ExampleEntry } from './examples.js';
 import { Player, type PlayerState } from './player.js';
 import { SoundPlayer } from './sound.js';
 import './style.css';
+
+/**
+ * The one video the page shows: every scene, played straight through
+ * (`?example=<name>` still opens a single scene or example, for development).
+ */
+const FEATURED = 'query-film';
 
 const FPS_CHOICES = [12, 24, 25, 30, 50, 60] as const;
 const SCALE_CHOICES = [0.5, 1, 2] as const;
@@ -15,7 +26,6 @@ function $<T extends HTMLElement>(id: string): T {
 }
 
 const ui = {
-  list: $<HTMLElement>('example-list'),
   viewport: $<HTMLElement>('viewport'),
   frame: $<HTMLElement>('stage-frame'),
   empty: $<HTMLElement>('empty'),
@@ -28,7 +38,66 @@ const ui = {
   scale: $<HTMLSelectElement>('scale'),
   reduced: $<HTMLInputElement>('reduced-motion'),
   sound: $<HTMLInputElement>('sound'),
+  scenePanel: $<HTMLElement>('scene-panel'),
+  sceneList: $<HTMLElement>('scene-list'),
+  markers: $<HTMLElement>('markers'),
+  export: $<HTMLButtonElement>('export'),
 };
+
+/** The scenes of the video being played (empty for a single composition). */
+let scenes: readonly SceneMark[] = [];
+
+const clock = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+
+/**
+ * Lists the scenes on the left (each jumps to its first frame) and puts a
+ * divider on the progress bar wherever one scene hands over to the next.
+ */
+function showScenes(marks: readonly SceneMark[], duration: number): void {
+  scenes = marks;
+  document.body.classList.toggle('has-scenes', marks.length > 0);
+  ui.scenePanel.hidden = marks.length === 0;
+  ui.sceneList.replaceChildren(
+    ...marks.map((mark, i) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset['index'] = String(i);
+      const parts = [String(i + 1), mark.title, clock(mark.start)];
+      const classes = ['number', 'title', 'time'];
+      button.append(
+        ...parts.map((text, k) => {
+          const span = document.createElement('span');
+          span.className = classes[k] ?? '';
+          span.textContent = text;
+          return span;
+        }),
+      );
+      button.addEventListener('click', () => {
+        if (!player) return;
+        player.seek(timeToFrame(mark.start, player.state.fps), performance.now());
+      });
+      return button;
+    }),
+  );
+  ui.markers.replaceChildren(
+    ...marks.slice(1).map((mark) => {
+      const span = document.createElement('span');
+      span.style.setProperty('--at', String(mark.start / duration));
+      span.title = mark.title;
+      return span;
+    }),
+  );
+  requestAnimationFrame(fitStage); // the stage area changed width
+}
+
+/** The scene playing at `t`. */
+function currentScene(t: number): number {
+  let index = 0;
+  scenes.forEach((mark, i) => {
+    if (t >= mark.start - 1e-9) index = i;
+  });
+  return index;
+}
 
 /** Hold per key moment in reduced-motion playback, seconds. */
 const REDUCED_HOLD = 2;
@@ -63,6 +132,12 @@ function render(state: PlayerState): void {
   ui.play.textContent = state.playing ? 'Pause' : 'Play';
   ui.reduced.checked = state.reducedMotion;
   ui.timecode.value = `${state.t.toFixed(3)} s · ${state.frame} / ${state.frameCount - 1}`;
+  if (scenes.length) {
+    const current = currentScene(state.t);
+    for (const button of ui.sceneList.querySelectorAll('button')) {
+      button.setAttribute('aria-current', String(Number(button.dataset['index']) === current));
+    }
+  }
   if (!state.playing) writeUrl(state);
 }
 
@@ -109,10 +184,6 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
   stage?.destroy();
   stage = undefined;
 
-  for (const link of ui.list.querySelectorAll('a')) {
-    if (link.dataset['name'] === entry.name) link.setAttribute('aria-current', 'page');
-    else link.removeAttribute('aria-current');
-  }
   if (params.get('example') !== entry.name) {
     params.set('example', entry.name);
     params.delete('frame');
@@ -164,29 +235,63 @@ async function selectExample(entry: ExampleEntry): Promise<void> {
   player.seek(Number(params.get('frame')) || 0);
   player.setReducedMotion(reducedMotion ? { keyTimes, hold: REDUCED_HOLD } : null);
   render(player.state);
+  showScenes(isSequence(composition) ? composition.scenes : [], composition.duration);
+  render(player.state);
   fitStage();
   setControlsEnabled(true);
   await soundReady;
   if (token === mountToken && player) render(player.state);
 }
 
-function buildList(): void {
-  ui.list.replaceChildren(
-    ...examples.map((entry) => {
-      const link = document.createElement('a');
-      link.href = `?example=${encodeURIComponent(entry.name)}`;
-      link.textContent = entry.name;
-      link.dataset['name'] = entry.name;
-      link.addEventListener('click', (event) => {
-        event.preventDefault();
-        void selectExample(entry);
-      });
-      return link;
-    }),
-  );
+/** What the dev server reports about an export (see export-server.ts). */
+interface ExportStatus {
+  readonly state: 'idle' | 'running' | 'done' | 'error';
+  readonly done?: number;
+  readonly total?: number;
+  readonly error?: string;
+  readonly name?: string;
+}
+
+/**
+ * Renders the current video at 4K 60 fps on the dev server (the same export
+ * as `pnpm render`) and downloads it, showing progress on the button.
+ */
+async function exportVideo(): Promise<void> {
+  const example = params.get('example') ?? FEATURED;
+  const label = ui.export.textContent;
+  ui.export.disabled = true;
+  const show = (text: string) => (ui.export.textContent = text);
+  try {
+    const start = await fetch(`/__export?example=${encodeURIComponent(example)}`, {
+      method: 'POST',
+    });
+    if (!start.ok && start.status !== 409)
+      throw new Error(`Export failed to start (${start.status}).`);
+    show('Exporting…');
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const status = (await (await fetch('/__export/status')).json()) as ExportStatus;
+      if (status.state === 'error') throw new Error(status.error ?? 'Export failed.');
+      if (status.state === 'done') {
+        const link = document.createElement('a');
+        link.href = '/__export/download';
+        link.download = status.name ?? `${example}-4k-60fps.mp4`;
+        link.click();
+        break;
+      }
+      const pct = status.total ? Math.floor(((status.done ?? 0) / status.total) * 100) : 0;
+      show(status.total ? `Exporting ${pct}%` : 'Preparing…');
+    }
+  } catch (error) {
+    alert(error instanceof Error ? error.message : String(error));
+  } finally {
+    ui.export.disabled = false;
+    show(label ?? 'Export 4K');
+  }
 }
 
 function bindControls(): void {
+  ui.export.addEventListener('click', () => void exportVideo());
   ui.play.addEventListener('click', () => player?.toggle(performance.now()));
   ui.prev.addEventListener('click', () => player?.step(-1, performance.now()));
   ui.next.addEventListener('click', () => player?.step(1, performance.now()));
@@ -255,11 +360,12 @@ function loop(now: number): void {
   requestAnimationFrame(loop);
 }
 
-buildList();
 bindControls();
 setControlsEnabled(false);
 
-const initial = examples.find((entry) => entry.name === params.get('example')) ?? examples[0];
+const initial =
+  examples.find((entry) => entry.name === (params.get('example') ?? FEATURED)) ??
+  examples.find((entry) => entry.name === FEATURED);
 if (initial) {
   void selectExample(initial);
 } else {

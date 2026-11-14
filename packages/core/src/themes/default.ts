@@ -18,6 +18,8 @@ const colors = {
   blue: '#3d7cff',
   orange: '#ff8a3d',
   violet: '#8b5cff',
+  /** Notification red: unread badges and alerts. */
+  alert: '#ff3b30',
   /** Deepest tone: cast shadows and vignette edges. */
   shade: '#030407',
   /** Lifted backdrop centre, between ink and surface. */
@@ -113,9 +115,19 @@ export const defaultTheme = defineTheme({
       stab: -17,
       sub: -9,
       bell: -19,
+      ding: -15,
+      pop: -12,
       tick: -12,
       whoosh: -6,
       bed: -26,
+      /** Paper rustling: barely there. */
+      rustle: -33,
+      // Music under a whole video: kept light, well below the sound effects.
+      kick: -17,
+      hat: -29,
+      rim: -27,
+      bass: -22,
+      keys: -26,
     },
     reverb: { size: 0.72, damping: 0.45, predelay: 0.018, gain: 0.9 },
   },

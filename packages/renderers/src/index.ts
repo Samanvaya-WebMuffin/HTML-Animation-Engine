@@ -8,6 +8,15 @@ export {
   type SceneCompositionOptions,
   type SceneContent,
 } from './scene-composition.js';
+export {
+  defineSequence,
+  isSequence,
+  sceneAt,
+  sceneStarts,
+  type SceneMark,
+  type SequenceComposition,
+  type SequenceOptions,
+} from './sequence.js';
 export { mountStage, type Stage, type StageOptions } from './stage.js';
 export {
   createShaderLayer,
