@@ -16,12 +16,14 @@ import {
   loadFonts,
   shapeNode,
   textNode,
+  imageNode,
   type Composition,
   type Scene,
 } from '../../../packages/core/src/index.js';
 import {
   createRenderer,
   mountStage,
+  preloadImages,
   type RendererKind,
 } from '../../../packages/renderers/src/index.js';
 import { fontFaces } from '../../../examples/fonts.js';
@@ -199,11 +201,92 @@ export function lightScene(): Scene {
   };
 }
 
-const SCENES = { basic: scene, light: lightScene } as const;
+/** A small generated bitmap (stripes and a disc), as a data URL. */
+function testImage(): string {
+  const c = document.createElement('canvas');
+  c.width = 120;
+  c.height = 80;
+  const g = c.getContext('2d');
+  if (!g) return '';
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = i % 2 ? colors.blue : colors.paper;
+    g.fillRect(i * 20, 0, 20, 80);
+  }
+  g.fillStyle = colors.pink;
+  g.beginPath();
+  g.arc(60, 40, 26, 0, Math.PI * 2);
+  g.fill();
+  return c.toDataURL('image/png');
+}
+let image = '';
+
+/** Blurred layers (even, uneven, turned, nested) and an image node. */
+export function blurScene(): Scene {
+  const card = (id: string, x: number, y: number, fill: string) =>
+    shapeNode(id, { geometry: rect(x, y, 120, 80, 14), fill });
+  return {
+    width: W,
+    height: H,
+    world: [
+      // An even blur over a group of two shapes and text (a focus pull).
+      groupNode(
+        'soft',
+        [
+          card('soft-a', 0, 0, colors.blue),
+          card('soft-b', 50, 40, colors.pink),
+          textNode('soft-t', {
+            text: 'Focus',
+            font: body,
+            fill: colors.paper,
+            transform: { x: -30, y: -12 },
+          }),
+        ],
+        { blur: 12, transform: { x: 130, y: 120 } },
+      ),
+      // Motion blur along x.
+      groupNode('motion', [card('motion-a', 0, 0, colors.orange)], {
+        blur: { x: 30, y: 0 },
+        transform: { x: 380, y: 120 },
+      }),
+      // Motion blur turned 35°, scaled with its node.
+      groupNode('turned', [card('turned-a', 0, 0, colors.lime)], {
+        blur: { x: 16, y: 2, angle: 35 },
+        transform: { x: 620, y: 130, scale: 1.2 },
+      }),
+      // A blurred layer inside another.
+      groupNode(
+        'outer',
+        [
+          card('outer-a', -70, 0, colors.violet),
+          groupNode('inner', [card('inner-a', 70, 0, colors.alert)], { blur: 10 }),
+        ],
+        { blur: 4, transform: { x: 200, y: 330 } },
+      ),
+      // An image, sharp and skewed, and a blurred copy.
+      imageNode('img', {
+        src: image,
+        width: 120,
+        height: 80,
+        transform: { x: 470, y: 350, skewX: -12 },
+      }),
+      imageNode('img-soft', {
+        src: image,
+        width: 120,
+        height: 80,
+        blur: 8,
+        transform: { x: 650, y: 350 },
+      }),
+    ],
+  };
+}
+
+const SCENES = { basic: scene, light: lightScene, blur: blurScene } as const;
 
 export async function mountAll(which: keyof typeof SCENES = 'basic'): Promise<void> {
   await registerFontFaces(fontFaces);
   await loadFonts([display, body]);
+  image = testImage();
+  await preloadImages([image]);
   document.body.style.margin = '0';
   (['canvas', 'svg', 'dom'] as RendererKind[]).forEach((kind, i) => {
     const host = document.createElement('div');

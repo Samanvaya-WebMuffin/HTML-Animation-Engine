@@ -14,7 +14,7 @@ import './style.css';
  * The one video the page shows: every scene, played straight through
  * (`?example=<name>` still opens a single scene or example, for development).
  */
-const FEATURED = 'query-film';
+const FEATURED = 'cowork-film';
 
 const FPS_CHOICES = [12, 24, 25, 30, 50, 60] as const;
 const SCALE_CHOICES = [0.5, 1, 2] as const;

@@ -16,15 +16,24 @@ import {
   type FontSpec,
   type SceneNode,
 } from '@html-animation-engine/core';
-import {
-  backdrop,
-  defineSceneComposition,
-  elevationShadows,
-} from '@html-animation-engine/renderers';
+import { defineSceneComposition, elevationShadows } from '@html-animation-engine/renderers';
+import { SFX_DIV, beats, onGrid } from '../cowork-beat.js';
+import { openingBackdrop } from '../cowork-film.js';
+import { C } from '../cowork-look.js';
 import { font, lighting, phoneDefaults, theme } from '../index.js';
 import { cue, ding, pad, pop, soundtrack, thump, whoosh } from '../sounds.js';
 
-const { colors, easing } = theme;
+const { easing } = theme;
+/**
+ * The default theme's colours, on the Cowork film's ground: the badges'
+ * rings match it, and the last bubble is Violet Haze.
+ */
+const colors = { ...theme.colors, paper: C.bg.canvas } as const;
+const HELLO = C.brand.tint;
+/** The ground, for the next scene (the crack) to light and paint with. */
+export const TINT = colors.paper;
+/** How long the crack (scene 2) runs, seven beats: the aurora behind both drifts on to the pinboard. */
+export const CRACK_DURATION = beats(7);
 const W = phoneDefaults.width;
 const H = phoneDefaults.height;
 
@@ -88,18 +97,20 @@ const PAD = { x: 20, y: 15 };
 const GAP = 18;
 
 /**
- * Timing (3 s in all): a few bubbles arrive slowly, each with a ding, then the
- * flood accelerates until the screen is covered, and the last one lands.
+ * Timing (five beats of the film's 110 bpm, about 2.7 s): a few bubbles
+ * arrive slowly on sixteenths, each with a ding, then the flood accelerates
+ * on thirty-seconds until the screen is covered, and the last one lands on
+ * beat four.
  */
 const T = {
-  first: 0.12,
+  first: onGrid(0.12),
   /** How many arrive slowly (each with a ding) before the pace picks up. */
   slow: 5,
   /** The flood: from the end of the slow arrivals until the screen is covered. */
-  floodEnd: 2.05,
+  floodEnd: onGrid(2.05),
   /** The last bubble, on top in the centre. */
-  final: 2.2,
-  duration: 3,
+  final: beats(4),
+  duration: beats(5),
 } as const;
 /** Pop length while slow, and in the flood (shorter, so everything has landed well before the end). */
 const POP = { slow: 0.5, fast: 0.32 } as const;
@@ -260,7 +271,7 @@ function layout(seed: string): Bubble[] {
       else {
         // Accelerating: gaps shrink steadily until the last of the flood.
         const k = (i - T.slow + 1) / (ordered.length - T.slow);
-        at = slowEnd + (T.floodEnd - slowEnd) * k ** 0.55;
+        at = onGrid(slowEnd + (T.floodEnd - slowEnd) * k ** 0.55, SFX_DIV);
       }
       return { ...b, at, pop: i < T.slow ? POP.slow : POP.fast };
     }),
@@ -316,7 +327,7 @@ function hiddenFrom(
 function appearSlow(i: number): number {
   let t = T.first;
   for (let k = 0; k < i; k++) t += 0.3 * 0.8 ** k;
-  return t;
+  return onGrid(t);
 }
 
 /** The camera starts close on the first bubble and pulls back as the flood begins. */
@@ -343,9 +354,10 @@ function bubbleNode(
   const last = b.text === QUERIES.at(-1);
   // Hardening (scene 2) sinks every colour into the wall's; at 0 nothing changes.
   const hard = (c: string) => (harden > 0 ? mixColors(c, colors.ink, harden) : c);
-  const [surface, ink] = (last ? [colors.paper, colors.ink] : [colors.ink, colors.paper]).map(
-    hard,
-  ) as [string, string];
+  const [surface, ink] = (last ? [HELLO, colors.ink] : [colors.ink, colors.paper]).map(hard) as [
+    string,
+    string,
+  ];
   const children: SceneNode[] = [
     // The tail, then the body, sharing one shadow so they read as one shape.
     shapeNode(`q${i}-tail`, {
@@ -466,14 +478,14 @@ const audio = soundtrack([
     if (i === FINAL) {
       return [
         cue(b.at, pop({ degree: 4, take: i })),
-        cue(b.at + 0.02, ding({ degree: 4, octave: 4, gain: 1.1 })),
+        cue(b.at, ding({ degree: 4, octave: 4, gain: 1.1 })),
         cue(b.at, thump({ gain: 0.7 })),
       ];
     }
     if (i < T.slow) {
       return [
         cue(b.at, pop({ degree: i % 5, take: i, pan, gain: 0.8 })),
-        cue(b.at + 0.02, ding({ degree: [4, 2, 5, 7, 4][i] ?? 4, pan })),
+        cue(b.at, ding({ degree: [4, 2, 5, 7, 4][i] ?? 4, pan })),
       ];
     }
     // The flood: quieter the faster they come.
@@ -487,14 +499,8 @@ function createMeasure(): Measure {
   return (text, spec) => measurer.measure(text, spec);
 }
 
-/** The light room behind the bubbles (its look, for anything that must match it). */
-export const ROOM = {
-  width: W,
-  height: H,
-  centre: colors.paper,
-  edge: mixColors(colors.paper, colors.muted, 0.28),
-} as const;
-const room = backdrop('backdrop', lighting, ROOM);
+/** The ground behind the bubbles, for the crack's still picture of the wall. */
+const room = shapeNode('backdrop', { geometry: rect(W / 2, H / 2, W, H), fill: colors.paper });
 
 /**
  * This scene's drawing, for the next scene to pick up from its exact last
@@ -528,5 +534,13 @@ export default defineSceneComposition({
   background: colors.paper,
   renderer: 'svg',
   setup: createMeasure,
-  scene: (t, _ctx, measure) => ({ camera: wall.camera(t), world: wall.world(t, measure) }),
+  scene: (t, _ctx, measure) => {
+    // The film's ground and aurora, held still on screen while the camera
+    // zooms (so the light doesn't swell with it), drifting on to the pinboard.
+    const z = wall.camera(t).zoom;
+    const light = groupNode('opening', openingBackdrop(T.duration - t + CRACK_DURATION), {
+      transform: { x: W / 2, y: H / 2, scale: 1 / z, originX: W / 2, originY: H / 2 },
+    });
+    return { camera: wall.camera(t), world: [light, ...wall.world(t, measure).slice(1)] };
+  },
 });

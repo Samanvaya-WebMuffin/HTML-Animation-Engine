@@ -49,6 +49,12 @@ export function rotate(degrees: number): Matrix {
   return [cos, sin, -sin, cos, 0, 0];
 }
 
+/** Skew in degrees: `x` slants vertical lines (x += y·tan), `y` slants horizontal ones. */
+export function skew(xDegrees: number, yDegrees = 0): Matrix {
+  if (xDegrees === 0 && yDegrees === 0) return IDENTITY;
+  return [1, Math.tan(yDegrees * DEG_TO_RAD), Math.tan(xDegrees * DEG_TO_RAD), 1, 0, 0];
+}
+
 export function applyMatrix(m: Matrix, point: Point): Point {
   return { x: m[0] * point.x + m[2] * point.y + m[4], y: m[1] * point.x + m[3] * point.y + m[5] };
 }

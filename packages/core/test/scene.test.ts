@@ -130,3 +130,61 @@ describe('flattenScene', () => {
     );
   });
 });
+
+describe('blurred layers', () => {
+  const box = (id: string) => shapeNode(id, { geometry: rect(0, 0, 10, 10), fill: '#000' });
+
+  it('records each blurring ancestor, outermost first, with σ scaled by its matrix', () => {
+    const items = flattenScene({
+      width: 100,
+      height: 100,
+      world: [
+        groupNode(
+          'outer',
+          [box('a'), groupNode('inner', [box('b')], { blur: { x: 8, y: 2, angle: 30 } })],
+          {
+            blur: 4,
+            transform: { scale: 2 },
+          },
+        ),
+        box('c'),
+      ],
+    });
+    const layers = Object.fromEntries(items.map((i) => [i.node.id, i.layers]));
+    expect(layers['a']).toEqual([{ id: 'outer', x: 4, y: 4, angle: 0 }]);
+    expect(layers['b']).toEqual([
+      { id: 'outer', x: 4, y: 4, angle: 0 },
+      { id: 'inner', x: 8, y: 2, angle: 30 },
+    ]);
+    expect(layers['c']).toEqual([]);
+  });
+
+  it('ignores a zero blur', () => {
+    const [item] = flattenScene({
+      width: 10,
+      height: 10,
+      world: [groupNode('g', [box('a')], { blur: 0 })],
+    });
+    expect(item?.layers).toEqual([]);
+  });
+
+  it('keeps every item of a layer contiguous in paint order, even with z', () => {
+    const items = flattenScene({
+      width: 10,
+      height: 10,
+      world: [groupNode('g', [box('a'), box('b')], { blur: 6, z: 1 }), box('c')],
+    });
+    expect(items.map((i) => i.node.id)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('skew', () => {
+  it('slants vertical lines with skewX and horizontal lines with skewY', () => {
+    const m = transformMatrix({ skewX: 45 });
+    expect(m[2]).toBeCloseTo(1);
+    expect(m[1]).toBeCloseTo(0);
+    const n = transformMatrix({ skewY: 45, x: 5 });
+    expect(n[1]).toBeCloseTo(1);
+    expect(n[4]).toBe(5);
+  });
+});

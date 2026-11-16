@@ -17,6 +17,7 @@ export {
   type SequenceComposition,
   type SequenceOptions,
 } from './sequence.js';
+export { loadedImage, preloadImages } from './images.js';
 export { mountStage, type Stage, type StageOptions } from './stage.js';
 export {
   createShaderLayer,

@@ -67,3 +67,26 @@ export {
   type MarqueeOptions,
   type TypeOnOptions,
 } from './text.js';
+export {
+  aurora,
+  defocus,
+  edgeFade,
+  flightPath,
+  gridBackdrop,
+  motionBlur,
+  screenVelocity,
+  viewTransform,
+  type AuroraOptions,
+  type AuroraPool,
+  type BoardView,
+  type GridOptions,
+} from './board.js';
+export {
+  connector,
+  elbow,
+  roundedRoute,
+  type ConnectorOptions,
+  type ConnectorPulse,
+  type Point2,
+} from './connector.js';
+export { kineticText, type KineticText, type KineticTextOptions } from './kinetic.js';

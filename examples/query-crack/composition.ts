@@ -15,7 +15,9 @@ import {
 } from '@html-animation-engine/core';
 import { createRenderer, type Renderer } from '@html-animation-engine/renderers';
 import { lighting, phoneDefaults, theme } from '../index.js';
-import { wall, type Measure } from '../query-bubbles/composition.js';
+import { SFX_DIV, beats, onGrid } from '../cowork-beat.js';
+import { openingBackdrop } from '../cowork-film.js';
+import { CRACK_DURATION, TINT, wall, type Measure } from '../query-bubbles/composition.js';
 import { bell, clap, crack, cue, pad, seeded, soundtrack, tick, whoosh } from '../sounds.js';
 
 const { colors, easing } = theme;
@@ -34,12 +36,12 @@ const REACH = Math.hypot(W / 2, H / 2);
  */
 const T = {
   /** A breath on the finished wall; a faint sheen crosses it as it sets. */
-  sheen: { start: 0.1, duration: 0.6 },
+  sheen: { start: onGrid(0.1), duration: 0.6 },
   /** The crack front runs from the centre to the corners. */
-  crack: { start: 0.55, duration: 1.0 },
+  crack: { start: beats(1), duration: 1.0 },
   /** It breaks: shards fall, the centre first. */
-  fall: 1.65,
-  duration: 3.6,
+  fall: beats(3),
+  duration: CRACK_DURATION,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -272,9 +274,9 @@ function cracks(t: number): SceneNode[] {
   // and a bright core) rather than blur filters, which would have to be
   // recomputed over the whole frame every time the cracks grow.
   const glow = [
-    { scale: 10, color: colors.paper, alpha: 0.035 },
-    { scale: 7, color: colors.paper, alpha: 0.05 },
-    { scale: 4.6, color: colors.paper, alpha: 0.08 },
+    { scale: 10, color: TINT, alpha: 0.035 },
+    { scale: 7, color: TINT, alpha: 0.05 },
+    { scale: 4.6, color: TINT, alpha: 0.08 },
     { scale: 2.6, color: colors.light, alpha: 0.2 },
     { scale: 1, color: colors.light, alpha: 1 },
   ];
@@ -308,8 +310,8 @@ function leak(t: number): SceneNode | null {
   return shapeNode('leak', {
     geometry: rect(CENTRE.x, CENTRE.y, 2 * r, 2 * r, r),
     fill: radialGradient(CENTRE.x, CENTRE.y, r, [
-      { offset: 0, color: withAlpha(colors.paper, a) },
-      { offset: 1, color: withAlpha(colors.paper, 0) },
+      { offset: 0, color: withAlpha(TINT, a) },
+      { offset: 1, color: withAlpha(TINT, 0) },
     ]),
   });
 }
@@ -484,7 +486,7 @@ const audio = soundtrack([
   cue(T.crack.start, crack({ size: 0.9 })),
   [60, 110, 170, 240, 320, 410, 510, 620].map((r, i) =>
     cue(
-      crackReaches(r),
+      onGrid(crackReaches(r), SFX_DIV),
       crack({
         size: lerp(0.6, 0.2, i / 7),
         take: i + 1,
@@ -498,12 +500,12 @@ const audio = soundtrack([
   cue(T.fall, whoosh(1.2, { from: 3000, to: 250, peak: 0.15, gain: 0.9 })),
   Array.from({ length: 12 }, (_, i) =>
     cue(
-      T.fall + 0.15 + seeded('debris', i) * 1.1,
+      onGrid(T.fall + 0.15 + seeded('debris', i) * 1.1, SFX_DIV),
       tick({ degree: 5 + (i % 5), gain: 0.6, pan: (seeded('debris-pan', i) - 0.5) * 1.4 }),
     ),
   ),
-  [0, 1, 2].map((i) => cue(T.fall + 0.35 + i * 0.28, bell({ degree: 7 + i * 2, gain: 0.35 }))),
-  cue(T.fall + 0.1, pad(T.duration - T.fall - 0.4, { chord: 'home', attack: 0.5, release: 1.2 })),
+  [0, 1, 2].map((i) => cue(T.fall + beats(0.5 * (i + 1)), bell({ degree: 7 + i * 2, gain: 0.35 }))),
+  cue(T.fall, pad(T.duration - T.fall - 0.4, { chord: 'home', attack: 0.5, release: 1.2 })),
 ]);
 
 interface Mounted {
@@ -526,13 +528,13 @@ export default defineComposition({
   audio,
   title: 'The wall breaks',
   duration: T.duration,
-  background: colors.paper,
+  background: TINT,
   /**
    * Layers, bottom to top: the room (SVG), the wall exactly as scene 1 draws
    * it (SVG; hidden when it breaks), the falling shards (canvas), and the
-   * light: sheen, leak and cracks (SVG). The room and the wall are still, so
-   * they are drawn once here and never redrawn; the shards are cut from a
-   * still picture of the wall, also made here.
+   * light: sheen, leak and cracks (SVG). The room is the film's ground and
+   * aurora, redrawn each frame as the light drifts; the wall is still, so it
+   * is drawn once here, and the shards are cut from a still picture of it.
    */
   setup(ctx) {
     const measure = wall.createMeasure();
@@ -540,7 +542,7 @@ export default defineComposition({
     const doc = ctx.root.ownerDocument;
     const still = { width: W, height: H, camera: wall.camera(wall.end) };
     const room = createRenderer('svg', ctx.root, size);
-    room.render({ ...still, world: [wall.room] });
+    room.render({ ...still, world: openingBackdrop(T.duration) });
     const wallLayer = doc.createElement('div');
     Object.assign(wallLayer.style, { position: 'absolute', inset: '0' });
     ctx.root.append(wallLayer);
@@ -560,7 +562,7 @@ export default defineComposition({
     const top = createRenderer('svg', ctx.root, size);
     // The finished wall as one picture, at the output resolution.
     const holder = doc.createElement('div');
-    const painter = createRenderer('canvas', holder, { ...size, background: colors.paper });
+    const painter = createRenderer('canvas', holder, { ...size, background: TINT });
     painter.render({
       width: W,
       height: H,
@@ -583,6 +585,13 @@ export default defineComposition({
   render(t, ctx) {
     const m = mounted.get(ctx.root);
     if (!m) throw new Error('query-crack rendered before setup.');
+    // The film's ground and aurora, drifting on to the pinboard (its last frame is the pinboard's first).
+    m.room.render({
+      width: W,
+      height: H,
+      camera: wall.camera(wall.end),
+      world: openingBackdrop(T.duration - t),
+    });
     const jolt = shake(t);
     const camera = { ...wall.camera(wall.end), x: W / 2 + jolt.x, y: H / 2 + jolt.y };
     // Until it breaks, scene 1's last frame exactly; then the room behind the shards.

@@ -7,13 +7,16 @@ import {
   invert,
   multiply,
   shadowList,
+  type BlurLayer,
   type DrawItem,
+  type ImageNode,
   type Matrix,
   type Scene,
   type ShapeNode,
   type TextNode,
 } from '@html-animation-engine/core';
 import { fixed, matrixString, type Renderer, type RendererOptions } from './renderer.js';
+import { loadedImage } from './images.js';
 import { Slots } from './slots.js';
 import {
   createSvgShapeParts,
@@ -28,7 +31,7 @@ import { TextLayouter } from './text.js';
 
 let instances = 0;
 
-type Mode = 'rect' | 'svg' | 'text';
+type Mode = 'rect' | 'svg' | 'text' | 'image';
 
 interface DomSlot {
   readonly root: HTMLElement;
@@ -39,13 +42,15 @@ interface DomSlot {
   readonly shadowBoxes: HTMLElement[];
   readonly box?: HTMLElement;
   readonly svgParts?: SvgShapeParts;
+  readonly image?: HTMLImageElement;
   readonly lines: HTMLElement[];
   /** One set of line copies per text shadow. */
   readonly lineShadows: HTMLElement[][];
 }
 
-function modeOf(node: ShapeNode | TextNode): Mode {
+function modeOf(node: ShapeNode | TextNode | ImageNode): Mode {
   if (node.type === 'text') return 'text';
+  if (node.type === 'image') return 'image';
   const dashed = Boolean(node.stroke?.dash?.length);
   const gradient = node.fill !== undefined && typeof node.fill !== 'string';
   return node.geometry.kind === 'rect' && !dashed && !gradient ? 'rect' : 'svg';
@@ -89,7 +94,9 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
     const extra =
       node.type === 'text'
         ? `${text.layout(node).layout.lines.length}|${shadowSignature(node.shadow)}`
-        : shapeSignature(node);
+        : node.type === 'image'
+          ? ''
+          : shapeSignature(node);
     return `${modeOf(node)}|${item.clips.length}|${extra}`;
   };
 
@@ -118,6 +125,18 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
       lineShadows: [],
     };
 
+    if (node.type === 'image') {
+      const image = doc.createElement('img');
+      image.decoding = 'sync';
+      Object.assign(image.style, {
+        position: 'absolute',
+        left: '0',
+        top: '0',
+        transformOrigin: '0 0',
+      });
+      content.append(image);
+      return { ...base, image };
+    }
     if (node.type === 'text') {
       const count = text.layout(node).layout.lines.length;
       const makeLines = () =>
@@ -194,6 +213,74 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
     );
   };
 
+  const updateImage = (slot: DomSlot, node: ImageNode, local: Matrix, opacity: number) => {
+    const image = slot.image;
+    if (!image) return;
+    const src = loadedImage(node.src).src;
+    if (image.getAttribute('src') !== src) image.src = src;
+    Object.assign(image.style, {
+      width: `${fixed(node.width)}px`,
+      height: `${fixed(node.height)}px`,
+      transform: `${matrixString(local)} translate(${fixed(-node.width / 2)}px, ${fixed(-node.height / 2)}px)`,
+      opacity: fixed(opacity),
+    });
+  };
+
+  // Blurred layers: a full-frame wrapper with a CSS filter, turned by the
+  // blur's angle, and an inner wrapper turned back. Uneven blurs use an SVG filter.
+  interface DomLayer {
+    readonly outer: HTMLElement;
+    readonly inner: HTMLElement;
+  }
+  const layers = new Map<string, DomLayer>();
+  let filterSvg: SVGSVGElement | undefined;
+  const filters = new Map<string, string>();
+  const unevenFilter = (sx: number, sy: number): string => {
+    const key = `${fixed(sx, 3)} ${fixed(sy, 3)}`;
+    let id = filters.get(key);
+    if (!id) {
+      if (!filterSvg) {
+        filterSvg = doc.createElementNS(SVG_NS, 'svg');
+        Object.assign(filterSvg.style, { position: 'absolute', width: '0', height: '0' });
+        root.append(filterSvg);
+      }
+      id = `${prefix}-blur${filters.size}`;
+      const filter = doc.createElementNS(SVG_NS, 'filter');
+      filter.id = id;
+      filter.setAttribute('color-interpolation-filters', 'sRGB');
+      const blur = doc.createElementNS(SVG_NS, 'feGaussianBlur');
+      blur.setAttribute('stdDeviation', key);
+      filter.append(blur);
+      filterSvg.append(filter);
+      filters.set(key, id);
+    }
+    return `url(#${id})`;
+  };
+  const layerFor = (id: string): DomLayer => {
+    let entry = layers.get(id);
+    if (!entry) {
+      const outer = positioned();
+      const inner = positioned();
+      for (const e of [outer, inner]) {
+        e.style.width = `${width}px`;
+        e.style.height = `${height}px`;
+      }
+      outer.append(inner);
+      entry = { outer, inner };
+      layers.set(id, entry);
+    }
+    return entry;
+  };
+  const updateLayer = (layer: BlurLayer) => {
+    const { outer, inner } = layerFor(layer.id);
+    outer.style.filter =
+      Math.abs(layer.x - layer.y) < 1e-6
+        ? `blur(${fixed(layer.x)}px)`
+        : unevenFilter(layer.x, layer.y);
+    outer.style.transform = layer.angle ? `rotate(${fixed(layer.angle)}deg)` : '';
+    inner.style.transform = layer.angle ? `rotate(${fixed(-layer.angle)}deg)` : '';
+  };
+
   const updateText = (slot: DomSlot, node: TextNode, local: Matrix, opacity: number) => {
     const { layout } = text.layout(node);
     slot.content.style.transform = matrixString(local);
@@ -208,6 +295,8 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
           lineHeight: `${fixed(layout.lineHeight)}px`,
           height: `${fixed(layout.lineHeight)}px`,
           letterSpacing: `${node.font.letterSpacing ?? 0}px`,
+          // Exact font sizes, as in the SVG and Canvas renderers (see svg.ts).
+          textRendering: 'geometricPrecision',
           color,
           filter: blur ? `blur(${fixed(blur / 2)}px)` : 'none',
           opacity: fixed(opacity),
@@ -223,8 +312,22 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
     kind: 'dom',
     element: root,
     render(scene: Scene) {
+      const items = flattenScene(scene);
+      const used = new Set<string>();
+      for (const item of items) {
+        for (const layer of item.layers) {
+          if (used.has(layer.id)) continue;
+          used.add(layer.id);
+          updateLayer(layer);
+        }
+      }
+      for (const [id, entry] of layers) {
+        if (used.has(id)) continue;
+        entry.outer.remove();
+        layers.delete(id);
+      }
       slots.sync(
-        flattenScene(scene),
+        items,
         (item) => item.node.id,
         signatureOf,
         build,
@@ -249,9 +352,28 @@ export function createDomRenderer(host: HTMLElement, options: RendererOptions): 
           const local = multiply(invert(parent), item.matrix);
           const { node } = item;
           if (node.type === 'text') updateText(slot, node, local, item.opacity);
+          else if (node.type === 'image') updateImage(slot, node, local, item.opacity);
           else if (slot.mode === 'rect') updateRect(slot, node, local, item.opacity);
           else if (slot.svgParts)
             updateSvgShape(slot.svgParts, node, matrixString(local), item.opacity);
+        },
+        {
+          signature: (item) => item.layers.map((l) => l.id).join('>'),
+          place: (entries) => {
+            const placed = new Set<string>();
+            for (const { slot, item } of entries) {
+              let parent: HTMLElement = root;
+              for (const l of item.layers) {
+                const entry = layerFor(l.id);
+                if (!placed.has(l.id)) {
+                  parent.append(entry.outer);
+                  placed.add(l.id);
+                }
+                parent = entry.inner;
+              }
+              parent.append(slot.root);
+            }
+          },
         },
       );
     },

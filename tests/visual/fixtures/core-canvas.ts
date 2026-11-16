@@ -53,7 +53,7 @@ function paint(ctx: CanvasRenderingContext2D, items: readonly DrawItem[]) {
         ctx.fillStyle = node.fill;
         ctx.fill(new Path2D(geometryToPath(node.geometry)));
       }
-    } else {
+    } else if (node.type === 'text') {
       ctx.font = fontString(node.font);
       // Must match the measurer, which includes letter spacing in word widths.
       ctx.letterSpacing = `${node.font.letterSpacing ?? 0}px`;

@@ -168,8 +168,8 @@ describe('determinism', () => {
     const output = times.map(frame).join('\n');
     expect({ hash: hashString(output), length: output.length }).toMatchInlineSnapshot(`
       {
-        "hash": 2718609238,
-        "length": 3569220,
+        "hash": 1102420526,
+        "length": 3666528,
       }
     `);
   });

@@ -7,7 +7,7 @@ const FIXTURE = `/@fs${fileURLToPath(new URL('./fixtures/parity.ts', import.meta
 const W = 800;
 const H = 500;
 
-async function drawAll(page: Page, which: 'basic' | 'light') {
+async function drawAll(page: Page, which: 'basic' | 'light' | 'blur') {
   await page.setViewportSize({ width: W, height: H * 3 });
   await page.goto('/capture.html');
   await page.evaluate(
@@ -38,6 +38,16 @@ test('Canvas, SVG and DOM renderers draw the same gradients, shadows and glows',
 }) => {
   const { svgDiff, domDiff } = await drawAll(page, 'light');
   // Measured on macOS: SVG 0.02 %, DOM 0.16 %.
+  test.info().annotations.push({ type: 'diff', description: `svg ${svgDiff}, dom ${domDiff}` });
+  expect(svgDiff).toBeLessThan(0.003);
+  expect(domDiff).toBeLessThan(0.015);
+});
+
+test('Canvas, SVG and DOM renderers draw the same blurred layers and images', async ({ page }) => {
+  // Even, uneven (motion), turned and nested blurs, and a skewed image.
+  // Measured on macOS: SVG 0 %, DOM 0 % (blur differences stay under the 0.1
+  // per-pixel threshold); a clipped or misplaced layer scores well above 1 %.
+  const { svgDiff, domDiff } = await drawAll(page, 'blur');
   test.info().annotations.push({ type: 'diff', description: `svg ${svgDiff}, dom ${domDiff}` });
   expect(svgDiff).toBeLessThan(0.003);
   expect(domDiff).toBeLessThan(0.015);

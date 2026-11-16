@@ -1,1 +1,0 @@
-Scene 10 of the queries video, social proof: a fast full-frame montage of Cowork at work (answers streaming with sources, researchers, the report, the library) under two text cards; stands in for the real screen recordings the script asks for (SVG renderer).

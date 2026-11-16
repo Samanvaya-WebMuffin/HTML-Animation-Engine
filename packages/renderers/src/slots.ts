@@ -11,6 +11,16 @@ export interface Slot {
   dispose?(): void;
 }
 
+/**
+ * Where slots go, when they are not simply appended to the parent in order
+ * (e.g. into blurred layer containers). `signature` names an item's place;
+ * `place` puts every slot in paint order when any key or place changed.
+ */
+export interface Placement<S, T> {
+  signature(item: T): string;
+  place(entries: readonly { readonly slot: S; readonly item: T }[]): void;
+}
+
 export class Slots<S extends Slot> {
   readonly #parent: Element;
   readonly #slots = new Map<string, S>();
@@ -30,8 +40,10 @@ export class Slots<S extends Slot> {
     signatureOf: (item: T) => string,
     build: (item: T, key: string) => S,
     update: (slot: S, item: T) => void,
+    placement?: Placement<S, T>,
   ): void {
     const order: string[] = [];
+    const entries: { slot: S; item: T }[] = [];
     const seen = new Set<string>();
     for (const item of items) {
       const key = keyOf(item);
@@ -44,7 +56,8 @@ export class Slots<S extends Slot> {
         this.#order = []; // force a reorder pass
       }
       update(slot, item);
-      order.push(key);
+      order.push(placement ? `${key}@${placement.signature(item)}` : key);
+      entries.push({ slot, item });
       seen.add(key);
     }
     for (const [key, slot] of this.#slots) {
@@ -54,10 +67,8 @@ export class Slots<S extends Slot> {
       }
     }
     if (order.length !== this.#order.length || order.some((key, i) => key !== this.#order[i])) {
-      for (const key of order) {
-        const slot = this.#slots.get(key);
-        if (slot) this.#parent.append(slot.root);
-      }
+      if (placement) placement.place(entries);
+      else for (const { slot } of entries) this.#parent.append(slot.root);
       this.#order = order;
     }
   }

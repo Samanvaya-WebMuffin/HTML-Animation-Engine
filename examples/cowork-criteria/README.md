@@ -1,0 +1,1 @@
+Scene 4 of the Cowork film: the network of sources and people assembles around a hub on a tilted plane, the camera settles back as a violet field spreads, and new work lights up, then gets done (SVG renderer).

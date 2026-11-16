@@ -204,6 +204,21 @@ export function key(options: HitOptions = {}): Sound {
 }
 
 /**
+ * A typing tap: faint and soft, a fingertip on a key rather than a click.
+ * The snap recording a little faster, its brightness filtered away, with no
+ * pitched tick, so a stream of them sits far under everything else.
+ */
+export function tap(options: HitOptions = {}): Sound {
+  const { take = 0, gain = 1, pan = 0 } = options;
+  return sample(take % 2 === 0 ? 'snap-1' : 'snap-2', level('snap') * 0.36 * gain, {
+    rate: 1.25 + 0.1 * (take % 3),
+    filter: { type: 'lowpass', freq: 2200, q: 0.5 },
+    pan,
+    send: 0.04,
+  });
+}
+
+/**
  * A notification ding: a bright bell tone with the inharmonic partials of a
  * small struck bar (×2.76, ×5.4), so it reads as a chime rather than a synth.
  */

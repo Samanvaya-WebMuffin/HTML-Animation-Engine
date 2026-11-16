@@ -5,11 +5,20 @@ import {
   multiply,
   rotate,
   scale,
+  skew,
   translate,
   type Matrix,
 } from '../geometry/matrix.js';
 import { cameraMatrix } from './camera.js';
-import type { Scene, SceneNode, ShapeNode, TextNode, Transform } from './nodes.js';
+import {
+  blurAxes,
+  type ImageNode,
+  type Scene,
+  type SceneNode,
+  type ShapeNode,
+  type TextNode,
+  type Transform,
+} from './nodes.js';
 
 export interface ClipRegion {
   readonly geometry: Geometry;
@@ -17,9 +26,21 @@ export interface ClipRegion {
   readonly matrix: Matrix;
 }
 
+/**
+ * A blurred layer: everything painted by the node `id` and its subtree,
+ * blurred together. σ along the two axes is in screen px (scaled by the
+ * node's matrix); the axes are turned by `angle` degrees on screen.
+ */
+export interface BlurLayer {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly angle: number;
+}
+
 /** A leaf node ready to paint, in final paint order. */
 export interface DrawItem {
-  readonly node: ShapeNode | TextNode;
+  readonly node: ShapeNode | TextNode | ImageNode;
   readonly layer: 'world' | 'screen';
   /** Local → screen matrix (camera included for the world layer). */
   readonly matrix: Matrix;
@@ -27,6 +48,17 @@ export interface DrawItem {
   readonly opacity: number;
   /** Clips from ancestors (outermost first) and the node itself. */
   readonly clips: readonly ClipRegion[];
+  /**
+   * Blurred layers this item paints into, outermost first (ancestors, then
+   * the node itself). Items of one layer are always contiguous in paint
+   * order, so renderers draw each layer once and blur it as a whole.
+   */
+  readonly layers: readonly BlurLayer[];
+}
+
+/** Uniform scale of a matrix (geometric mean of its axis scales). */
+function uniformScale(m: Matrix): number {
+  return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 }
 
 export function transformMatrix(t: Transform | undefined): Matrix {
@@ -36,6 +68,7 @@ export function transformMatrix(t: Transform | undefined): Matrix {
   return compose(
     translate(t.x ?? 0, t.y ?? 0),
     rotate(t.rotation ?? 0),
+    skew(t.skewX ?? 0, t.skewY ?? 0),
     scale(sx, sy),
     translate(-(t.originX ?? 0), -(t.originY ?? 0)),
   );
@@ -64,6 +97,7 @@ export function flattenScene(scene: Scene): DrawItem[] {
     parent: Matrix,
     parentOpacity: number,
     parentClips: readonly ClipRegion[],
+    parentLayers: readonly BlurLayer[],
   ) => {
     if (seen.has(node.id)) throw new Error(`scene: duplicate node id "${node.id}".`);
     seen.add(node.id);
@@ -71,15 +105,29 @@ export function flattenScene(scene: Scene): DrawItem[] {
     if (node.visible === false || opacity <= 0) return;
     const matrix = multiply(parent, transformMatrix(node.transform));
     const clips = node.clip ? [...parentClips, { geometry: node.clip, matrix }] : parentClips;
+    const axes = blurAxes(node.blur);
+    const layers =
+      axes.x > 0 || axes.y > 0
+        ? [
+            ...parentLayers,
+            {
+              id: node.id,
+              x: axes.x * uniformScale(matrix),
+              y: axes.y * uniformScale(matrix),
+              angle: axes.angle,
+            },
+          ]
+        : parentLayers;
     if (node.type === 'group') {
-      for (const child of paintOrder(node.children)) visit(child, layer, matrix, opacity, clips);
+      for (const child of paintOrder(node.children))
+        visit(child, layer, matrix, opacity, clips, layers);
     } else {
-      items.push({ node, layer, matrix, opacity, clips });
+      items.push({ node, layer, matrix, opacity, clips, layers });
     }
   };
 
   const camera = scene.camera ? cameraMatrix(scene.camera, scene.width, scene.height) : IDENTITY;
-  for (const node of paintOrder(scene.world)) visit(node, 'world', camera, 1, []);
-  for (const node of paintOrder(scene.screen ?? [])) visit(node, 'screen', IDENTITY, 1, []);
+  for (const node of paintOrder(scene.world)) visit(node, 'world', camera, 1, [], []);
+  for (const node of paintOrder(scene.screen ?? [])) visit(node, 'screen', IDENTITY, 1, [], []);
   return items;
 }

@@ -26,51 +26,64 @@ import {
   type TextMeasurer,
 } from '@html-animation-engine/core';
 import { elevationShadows, litFill } from '@html-animation-engine/renderers';
-import { font, lighting, theme } from './index.js';
-
-const { colors } = theme;
+import { C, R, face, lighting } from './cowork-look.js';
+import { font } from './index.js';
 
 /** UI colours, all mixed from theme tokens. */
 export const UI = {
-  surface: colors.light,
+  surface: C.surface.paper,
   /** Sidebars, inputs and quiet panels. */
-  wash: mixColors(colors.paper, colors.light, 0.5),
+  wash: C.surface.sunken,
   /** Hairlines and borders. */
-  line: mixColors(colors.paper, colors.muted, 0.32),
-  text: colors.ink,
-  /** Secondary text (darker than `muted`, so it reads on white). */
-  sub: mixColors(colors.muted, colors.ink, 0.38),
-  faint: colors.muted,
-  accent: colors.blue,
-  accentSoft: mixColors(colors.blue, colors.light, 0.9),
-  accentLine: mixColors(colors.blue, colors.light, 0.65),
-  /** Done, checked, high confidence: lime deepened until it reads as text. */
-  good: mixColors(colors.lime, colors.ink, 0.5),
-  goodSoft: mixColors(colors.lime, colors.light, 0.72),
-  alert: colors.alert,
-  alertSoft: mixColors(colors.alert, colors.light, 0.9),
-  warm: colors.orange,
-  warmSoft: mixColors(colors.orange, colors.light, 0.85),
-  violet: colors.violet,
-  violetSoft: mixColors(colors.violet, colors.light, 0.88),
-  pink: colors.pink,
-  ink: colors.ink,
-  shade: colors.shade,
+  line: C.stroke.hairline,
+  text: C.text.primary,
+  /** Secondary text. */
+  sub: C.text.secondary,
+  faint: C.text.tertiary,
+  /** Cowork acting: primary actions, focus, the caret. */
+  accent: C.brand.fill,
+  accentSoft: C.brand.tint,
+  accentLine: C.brand.soft,
+  /** Outcomes: done, checked, high confidence. */
+  good: C.outcome.fg,
+  goodSoft: C.outcome.bg,
+  /** Friction: restricted, urgent. */
+  alert: C.friction.fill,
+  alertSoft: C.friction.bg,
+  /** Time and effort. */
+  warm: C.time.fg,
+  warmSoft: C.time.bg,
+  violet: C.brand.deep,
+  violetSoft: C.brand.tint,
+  pink: C.person.fill,
+  ink: C.text.primary,
+  shade: lighting.shadow,
+  /** Knowledge and sources: citations, documents. */
+  source: C.source.icon,
+  sourceSoft: C.source.bg,
+  sourceText: C.source.fg,
 } as const;
 
-/** UI type. Inter is variable, so every weight comes from the one bundled file. */
+/**
+ * UI type on Soft Calm: Sora for window and section titles (500, never
+ * heavier), Inter for reading and labels (400/500), lowercase JetBrains Mono
+ * for metadata, eyebrows and clocks (never all-caps).
+ */
 export const F = {
   body: { ...font('body', 18), lineHeight: 1.38 },
-  bodyStrong: { ...font('body', 18), weight: 600, lineHeight: 1.38 },
+  bodyStrong: face('label', 18, { lineHeight: 1.38 }),
   small: { ...font('body', 15), lineHeight: 1.35 },
-  smallStrong: { ...font('body', 15), weight: 600, lineHeight: 1.35 },
-  tiny: { ...font('body', 13), weight: 600, letterSpacing: 0.3, lineHeight: 1.3 },
-  title: { ...font('body', 23), weight: 700, letterSpacing: -0.4, lineHeight: 1.25 },
-  heading: { ...font('body', 19), weight: 650, letterSpacing: -0.2, lineHeight: 1.3 },
-  ask: { ...font('body', 21), weight: 500, letterSpacing: -0.25, lineHeight: 1.38 },
+  smallStrong: face('label', 15, { lineHeight: 1.35 }),
+  tiny: face('label', 13, { lineHeight: 1.3 }),
+  /** Lowercase metadata and section eyebrows. */
+  meta: face('mono', 13, { letterSpacing: 0.2, lineHeight: 1.3 }),
+  title: face('title', 23, { letterSpacing: -0.5, lineHeight: 1.25 }),
+  heading: face('title', 19, { letterSpacing: -0.3, lineHeight: 1.3 }),
+  ask: { ...font('body', 21), letterSpacing: -0.25, lineHeight: 1.38 },
   mono: { ...font('mono', 16), lineHeight: 1.3 },
-  clock: { ...font('mono', 32), weight: 600, letterSpacing: -0.5, lineHeight: 1.1 },
-  role: { ...font('body', 17), weight: 650, lineHeight: 1.2 },
+  clock: face('mono', 32, { weight: 500, letterSpacing: -0.5, lineHeight: 1.1 }),
+  role: face('label', 17, { lineHeight: 1.2 }),
+  button: face('label', 17, { lineHeight: 1.3 }),
 } satisfies Record<string, FontSpec>;
 export const UI_FONTS: readonly FontSpec[] = Object.values(F);
 
@@ -109,7 +122,7 @@ export function label(
   return textNode(id, { text, font: f, fill, transform: { x, y }, ...options });
 }
 
-/** Line icons on a 24 px grid (drawn with round 2 px strokes unless filled). */
+/** Line icons on a 24 px grid, drawn with round 1.5 px strokes (Soft Calm's one line set). */
 const ICONS = {
   search: 'M10.5 4a6.5 6.5 0 1 1 0 13a6.5 6.5 0 1 1 0-13ZM15.4 15.4L20 20',
   lock: 'M7 11h10a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 17 20H7a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 7 11ZM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
@@ -145,7 +158,7 @@ export function icon(
     geometry: pathGeometry(ICONS[name]),
     stroke: {
       color,
-      width: (options.width ?? 2) / s,
+      width: (options.width ?? 1.5) / s,
       cap: 'round',
       join: 'round',
     },
@@ -154,21 +167,42 @@ export function icon(
   });
 }
 
-/** The Cowork mark: four rounded squares, the company's knowledge together. */
-export const MARK_COLORS = [colors.blue, colors.violet, colors.pink, colors.orange] as const;
+/** The Cowork mark tile: an Index Violet tile holding four tint squares (knowledge, people, insight, outcomes). */
+export const MARK_COLORS = [
+  C.mark.knowledge,
+  C.mark.people,
+  C.mark.insight,
+  C.mark.outcome,
+] as const;
 export function mark(id: string, x: number, y: number, size: number, opacity = 1): SceneNode {
-  const cell = size * 0.44;
-  const gap = size * 0.12;
+  const cell = size * 0.25;
+  const gap = size * 0.08;
   return groupNode(
     id,
-    MARK_COLORS.map((c, k) => {
-      const [col, row] = [k % 2, Math.floor(k / 2)];
-      const cy = (row - 0.5) * (cell + gap);
-      return shapeNode(`${id}-${k}`, {
-        geometry: rect((col - 0.5) * (cell + gap), cy, cell, cell, cell * 0.3),
-        fill: litFill(lighting, c, { y: cy, height: cell }),
-      });
-    }),
+    [
+      shapeNode(`${id}-tile`, {
+        geometry: rect(0, 0, size, size, size * 0.3),
+        fill: linearGradient(-size / 2, -size / 2, size / 2, size / 2, [
+          C.button.primaryTop,
+          C.button.primaryBg,
+          C.brand.deep,
+        ]),
+        shadow: { x: 0, y: 2, blur: 6, color: withAlpha(C.brand.fill, 0.3) },
+      }),
+      ...MARK_COLORS.map((c, k) => {
+        const [col, row] = [k % 2, Math.floor(k / 2)];
+        return shapeNode(`${id}-${k}`, {
+          geometry: rect(
+            (col - 0.5) * (cell + gap),
+            (row - 0.5) * (cell + gap),
+            cell,
+            cell,
+            cell * 0.3,
+          ),
+          fill: c,
+        });
+      }),
+    ],
     { transform: { x, y }, opacity },
   );
 }
@@ -261,21 +295,30 @@ export function skeleton(id: string, x: number, y: number, w: number, h: number,
   });
 }
 
-/** An avatar: a coloured disc with a person glyph. */
-export function avatar(id: string, x: number, y: number, r: number, color: string, opacity = 1) {
-  const s = r / 16;
+/** A monogram avatar: a disc in the people family with white initials and a Cloud rim. */
+export function avatar(
+  id: string,
+  initials: string,
+  x: number,
+  y: number,
+  r: number,
+  color: string,
+  opacity = 1,
+) {
+  const f = face('label', r * 0.78, { weight: 600, letterSpacing: 0, lineHeight: 1.2 });
   return groupNode(
     id,
     [
       box(`${id}-disc`, -r, -r, 2 * r, 2 * r, r, {
-        fill: litFill(lighting, color, { y: 0, height: 2 * r }),
+        fill: litFill(lighting, color, { y: 0, height: 2 * r }, { sheen: 0.18, shade: 0.06 }),
+        stroke: { color: UI.surface, width: 1.5 },
       }),
-      shapeNode(`${id}-glyph`, {
-        geometry: pathGeometry(
-          'M0 -9.5a4.6 4.6 0 1 1 0 9.2a4.6 4.6 0 1 1 0-9.2ZM-8.2 9.6a8.2 7 0 0 1 16.4 0Z',
-        ),
-        fill: withAlpha(UI.surface, 0.92),
-        transform: { scale: s },
+      textNode(`${id}-t`, {
+        text: initials,
+        font: f,
+        fill: C.text.onBrand,
+        align: 'center',
+        transform: { y: -(f.size * 1.2) / 2 },
       }),
     ],
     { transform: { x, y }, opacity },
@@ -368,13 +411,24 @@ export interface Ui {
     node: SceneNode;
     w: number;
   };
-  /** A button (`primary` filled with the accent, else outlined); `press` 0–1 darkens and sinks it. */
+  /**
+   * A pill button (top-left at x, y): `primary` is solid Index Violet (the one
+   * key action on a screen), `soft` Violet Haze (the default), `secondary`
+   * hairline Cloud. `press` 0–1 settles and sinks it.
+   */
   button(
     id: string,
     text: string,
     x: number,
     y: number,
-    options?: { primary?: boolean; icon?: IconName; press?: number; hover?: number; h?: number },
+    options?: {
+      primary?: boolean;
+      variant?: 'primary' | 'soft' | 'secondary';
+      icon?: IconName;
+      press?: number;
+      hover?: number;
+      h?: number;
+    },
   ): { node: SceneNode; w: number };
   /** How many characters of `text` fit in `maxWidth` (for ellipsis-free cropping). */
   fit(text: string, f: FontSpec, maxWidth: number): string;
@@ -404,29 +458,55 @@ export function createUi(measurer: TextMeasurer): Ui {
       return { node: groupNode(id, children, { opacity }), w };
     },
     button(id, text, x, y, options = {}) {
-      const f = F.bodyStrong;
-      const h = options.h ?? 42;
+      const f = F.button;
+      const h = options.h ?? 44;
       const iconW = options.icon ? 24 : 0;
-      const w = Math.round(measure(text, f) + 36 + iconW);
+      const pad = 22;
+      const w = Math.round(measure(text, f) + pad * 2 + iconW);
       const press = clamp(options.press ?? 0);
       const hover = clamp(options.hover ?? 0);
-      const primary = options.primary ?? false;
-      const base = primary ? UI.accent : UI.surface;
-      const fill = mixColors(base, UI.ink, 0.06 * hover + 0.16 * press);
-      const color = primary ? UI.surface : UI.text;
+      const variant = options.variant ?? (options.primary ? 'primary' : 'soft');
+      const color =
+        variant === 'primary'
+          ? C.button.primaryFg
+          : variant === 'soft'
+            ? C.button.softFg
+            : C.button.secondaryFg;
       const ty = y + (h - f.size * (f.lineHeight ?? 1.2)) / 2;
-      const children: SceneNode[] = [
-        box(`${id}-bg`, x, y, w, h, 12, {
-          fill: primary ? litFill(lighting, fill, { y: y + h / 2, height: h }) : fill,
-          stroke: primary ? undefined : { color: UI.line, width: 1.2 },
-          shadow: primary
-            ? elevationShadows(lighting, 'low', { strength: 0.45 * (1 - press) })
-            : undefined,
-        }),
-      ];
+      const darken = 0.05 * hover + 0.1 * press;
+      const bg =
+        variant === 'primary'
+          ? box(`${id}-bg`, x, y, w, h, h / 2, {
+              fill: linearGradient(0, y, 0, y + h, [
+                mixColors(C.button.primaryTop, UI.ink, darken),
+                mixColors(C.button.primaryBg, UI.ink, darken),
+              ]),
+              // A soft violet lift, never a hard edge; a press settles it.
+              shadow: [
+                {
+                  x: 0,
+                  y: 4 + 8 * (1 - press),
+                  blur: 24,
+                  color: withAlpha(C.brand.fill, 0.26 * (1 - 0.5 * press)),
+                },
+                { x: 0, y: 2, blur: 4, color: withAlpha(C.brand.deep, 0.16) },
+              ],
+            })
+          : variant === 'soft'
+            ? box(`${id}-bg`, x, y, w, h, h / 2, {
+                fill: mixColors(C.button.softBg, C.brand.soft, 0.5 * hover + 0.8 * press),
+              })
+            : box(`${id}-bg`, x, y, w, h, h / 2, {
+                fill: mixColors(C.button.secondaryBg, UI.wash, hover + press),
+                stroke: { color: C.button.secondaryStroke, width: 1 },
+                shadow: elevationShadows(lighting, 'low', { strength: 0.5 * (1 - press) }),
+              });
+      const children: SceneNode[] = [bg];
       if (options.icon)
-        children.push(icon(`${id}-icon`, options.icon, x + 18 + 9, y + h / 2, 17, color));
-      children.push(label(`${id}-text`, text, x + 18 + iconW, ty, f, color));
+        children.push(
+          icon(`${id}-icon`, options.icon, x + pad + 8, y + h / 2, 17, color, { width: 1.7 }),
+        );
+      children.push(label(`${id}-text`, text, x + pad + iconW, ty, f, color));
       return {
         node: groupNode(id, children, {
           transform: {
@@ -462,7 +542,7 @@ export interface Frame {
 }
 
 /**
- * An app window: a white rounded panel with a soft elevation, its content
+ * An app window: a Cloud panel with pillowy corners, a hairline edge and a wide faint shadow, its content
  * clipped to it. Children are in the window's own coordinates (0, 0 = top left).
  */
 export function windowNode(
@@ -479,7 +559,7 @@ export function windowNode(
   } = {},
 ): SceneNode {
   const { x, y, w, h } = frame;
-  const r = frame.r ?? 24;
+  const r = frame.r ?? R.card;
   const s = options.shape ?? { cx: w / 2, cy: h / 2, w, h, r };
   const outline = rect(s.cx, s.cy, s.w, s.h, s.r);
   const content = options.content ?? 1;
@@ -502,7 +582,7 @@ export function windowNode(
         : []),
       shapeNode(`${id}-edge`, {
         geometry: outline,
-        stroke: { color: withAlpha(UI.shade, 0.07), width: 1 },
+        stroke: { color: C.stroke.hairline, width: 1 },
       }),
     ],
     { transform: { x, y }, opacity: options.opacity },

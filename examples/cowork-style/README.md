@@ -1,0 +1,1 @@
+The Cowork look for the queries video's overhaul: palette (each helper colour with its meaning) and type, then paper, depth of field, frosted glass, components and the connected mark, with a camera flight between them on a white board lit by a violet aurora (SVG renderer).

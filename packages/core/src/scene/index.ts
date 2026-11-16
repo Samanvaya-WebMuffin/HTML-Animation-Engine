@@ -1,13 +1,23 @@
 export { cameraMatrix, defaultCamera, lerpCamera, screenToWorld, worldToScreen } from './camera.js';
-export { flattenScene, transformMatrix, type ClipRegion, type DrawItem } from './flatten.js';
 export {
+  flattenScene,
+  transformMatrix,
+  type BlurLayer,
+  type ClipRegion,
+  type DrawItem,
+} from './flatten.js';
+export {
+  blurAxes,
+  imageNode,
   linearGradient,
   radialGradient,
   shadowList,
   groupNode,
   shapeNode,
   textNode,
+  type Blur,
   type Camera,
+  type ImageNode,
   type GroupNode,
   type Scene,
   type SceneNode,

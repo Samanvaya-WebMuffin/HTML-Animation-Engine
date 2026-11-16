@@ -2,8 +2,8 @@ import type { Geometry } from '../geometry/shape.js';
 import type { FontSpec } from '../text/font.js';
 
 /**
- * Local transform, applied as translate(x, y) · rotate · scale ·
- * translate(-originX, -originY). Rotation is in degrees.
+ * Local transform, applied as translate(x, y) · rotate · skew · scale ·
+ * translate(-originX, -originY). Rotation and skew are in degrees.
  */
 export interface Transform {
   readonly x?: number;
@@ -12,6 +12,9 @@ export interface Transform {
   readonly scaleX?: number;
   readonly scaleY?: number;
   readonly rotation?: number;
+  /** Skew in degrees, applied after rotation and before scale (a slight 2.5D lean). */
+  readonly skewX?: number;
+  readonly skewY?: number;
   /** Pivot for rotation and scale, in local px. */
   readonly originX?: number;
   readonly originY?: number;
@@ -33,6 +36,14 @@ export interface Shadow {
   readonly blur?: number;
   readonly color: string;
 }
+
+/**
+ * A Gaussian blur of everything a node (and its subtree) paints, as one
+ * layer. A number blurs evenly; `{ x, y }` blurs more along one axis (motion
+ * blur), and `angle` (degrees, clockwise) turns those axes on screen. Like
+ * shadows, σ = value / 2, in the node's own units (it scales with the node).
+ */
+export type Blur = number | { readonly x: number; readonly y: number; readonly angle?: number };
 
 /** One or more shadows, painted in order beneath the node (first is lowest). */
 export type Shadows = Shadow | readonly Shadow[];
@@ -80,6 +91,8 @@ interface NodeBase {
   readonly z?: number;
   /** Clips this node and its children, in this node's local coordinates. */
   readonly clip?: Geometry;
+  /** Blurs this node and its children as one layer (focus pulls, depth of field, motion blur). */
+  readonly blur?: Blur;
   readonly visible?: boolean;
 }
 
@@ -113,7 +126,19 @@ export interface TextNode extends NodeBase {
   readonly maxWidth?: number;
 }
 
-export type SceneNode = GroupNode | ShapeNode | TextNode;
+/**
+ * A bitmap drawn centred on the local origin, `width` × `height` px. Its
+ * `src` must be loaded first with `preloadImages` (renderers draw it
+ * synchronously, so a frame never waits for a decode).
+ */
+export interface ImageNode extends NodeBase {
+  readonly type: 'image';
+  readonly src: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+export type SceneNode = GroupNode | ShapeNode | TextNode | ImageNode;
 
 /** 2D camera. (`x`, `y`) is the world point shown at the centre of the frame. */
 export interface Camera {
@@ -152,6 +177,17 @@ export function shapeNode(id: string, props: Props<ShapeNode>): ShapeNode {
 
 export function textNode(id: string, props: Props<TextNode>): TextNode {
   return { id, type: 'text', ...props };
+}
+
+export function imageNode(id: string, props: Props<ImageNode>): ImageNode {
+  return { id, type: 'image', ...props };
+}
+
+/** A blur as standard deviations along two axes turned by `angle` degrees. */
+export function blurAxes(blur: Blur | undefined): { x: number; y: number; angle: number } {
+  if (blur === undefined) return { x: 0, y: 0, angle: 0 };
+  if (typeof blur === 'number') return { x: blur / 2, y: blur / 2, angle: 0 };
+  return { x: blur.x / 2, y: blur.y / 2, angle: blur.angle ?? 0 };
 }
 
 /** A node's shadows as a list (empty when it has none). */

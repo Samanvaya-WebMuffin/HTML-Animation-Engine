@@ -1,12 +1,10 @@
 /**
- * The applications part of the queries video, as one continuous timeline:
- * three desks side by side (a sales rep, the COO, and an HR head next to an
- * intern), each with the Cowork app, and a camera gliding between them. The
- * scenes `query-ask`, `query-work`, `query-answers` and `query-library` are
- * consecutive windows of this one timeline, so every cut between them is the
- * same frame on both sides by construction. It opens from the exact last
- * frame of `query-cowork`: the Cowork tile shrinks into the rep's ask bar as
- * the rep's window opens out of it.
+ * The product scenes' choreography, as one continuous timeline: three
+ * people's screens (a sales rep, the COO, and an HR head beside an intern),
+ * each with the Cowork app, played through the script's beats. The Cowork
+ * film (`cowork-film.ts`) shows them as a deck on each product group of the
+ * mood board, pulling focus to whichever screen the story is on
+ * (`deskFocus`), from film time = timeline time + `FILM.apps`.
  *
  * Three stories run through it (the script's C, A and D threads):
  * C: the rep asks a quick question, the answer is waiting, its source opens.
@@ -17,7 +15,6 @@
  */
 import {
   clamp,
-  createCanvasMeasurer,
   groupNode,
   layoutText,
   lerp,
@@ -33,25 +30,15 @@ import {
   type SceneNode,
   type SoundEvent,
 } from '@html-animation-engine/core';
-import { defineSceneComposition, elevationShadows } from '@html-animation-engine/renderers';
-import { lighting, phoneDefaults, theme } from './index.js';
-import { wall } from './query-bubbles/composition.js';
-import { cowork, type CoworkCaptions } from './query-cowork/composition.js';
-import {
-  CX,
-  HEADLINE,
-  STORY_FONTS,
-  caption,
-  paint,
-  tileNode,
-  type Caption,
-} from './query-story.js';
+import { elevationShadows } from '@html-animation-engine/renderers';
+import { SFX_DIV, beats, gridTimes, onGrid } from './cowork-beat.js';
+import { C, R, lighting, look } from './cowork-look.js';
+import { phoneDefaults } from './index.js';
 import {
   F,
   UI,
   UI_FONTS,
   avatar,
-  createUi,
   box,
   caret,
   checkDisc,
@@ -73,36 +60,40 @@ import {
 import {
   bell,
   cue,
+  tap,
   ding,
   key,
-  pad,
   pluck,
   pop,
   slap,
   snap,
-  soundtrack,
   thump,
   tick,
   whoosh,
   type Cues,
 } from './sounds.js';
 
-const { easing } = theme;
+const { easing } = look;
+
+/** The frame's centre line. */
+const CX = phoneDefaults.width / 2;
 
 // ---------------------------------------------------------------------------
-// The timeline (seconds from the start of `query-ask`)
+// The timeline (seconds from the start of the product scenes)
 // ---------------------------------------------------------------------------
 
 /** Where each scene starts and ends on the timeline. */
+// The timeline starts on a beat of the film (`cowork-beat.ts`), so its
+// sixteenths are the film's: every moment below is moved onto them.
 export const SCENES = {
-  ask: { start: 0, end: 8.5 },
-  work: { start: 8.5, end: 16.25 },
-  answers: { start: 16.25, end: 24.6 },
-  library: { start: 24.6, end: 34.2 },
+  ask: { start: 0, end: beats(16) },
+  work: { start: beats(16), end: beats(30) },
+  answers: { start: beats(30), end: beats(45) },
+  library: { start: beats(45), end: beats(63) },
 } as const;
 export type AppsScene = keyof typeof SCENES;
 
-const T = {
+const T_WRITTEN = {
   /** The previous scene's captions leave; the rep's window opens out of the tile. */
   intro: { exit: 0.3, tile: 0.1, tileMove: 0.9, open: 0.3, openDur: 0.8 },
   // C1: mid-scroll, the rep stops and asks.
@@ -116,7 +107,7 @@ const T = {
   a2: { unfold: 9.12, cursor: 9.7, save: 10.06, go: 10.46, work: 10.62 },
   // C2: the rep's answer is already there.
   c2: { ready: 4.4, sweep: 11.35 },
-  // Off camera (seen only in the montage of `query-proof`): the rep's answer streams in and a source opens.
+  // Before the camera returns to the rep: the answer streams in and a source opens (for the montage).
   c1b: { stream: 4.5, streamEnd: 5.1, cursor: 4.95, click: 5.36, open: 5.4, close: 6.4 },
   // A3: researchers in parallel, the elapsed clock racing.
   a3: { race: 13.35, raceEnd: 15.95, steps: [11.9, 13.85, 14.5, 15.15] as const },
@@ -133,9 +124,10 @@ const T = {
   // B2: next quarter, one refresh, version 2, and another team builds on it.
   b2: { flip: 31.3, cursor: 31.35, refresh: 31.85, v2: 32.45, ask: 32.75 },
 } as const;
+const T = gridTimes(T_WRITTEN);
 
 /** Captions: each phrase arrives at its time, and the whole line leaves at `out`. */
-const CAPTIONS: readonly {
+const CAPTIONS_WRITTEN: readonly {
   id: string;
   text: string;
   at: readonly number[];
@@ -172,7 +164,12 @@ const CAPTIONS: readonly {
     breaks: [2],
   },
 ];
-const CAPTION_Y = 140;
+/** Each caption arrives and leaves on a sixteenth. */
+export const CAPTIONS = CAPTIONS_WRITTEN.map((c) => ({
+  ...c,
+  at: c.at.map((t) => onGrid(t)),
+  out: onGrid(c.out),
+}));
 
 // ---------------------------------------------------------------------------
 // The desks and the camera
@@ -183,11 +180,13 @@ export const DESK = { c: CX, a: CX + 720, d: CX + 1440 } as const;
 /** The window every desk shows. */
 export const WIN = { w: 640, h: 860, top: 330 } as const;
 export const MID = WIN.top + WIN.h / 2;
-/** The intern's and HR head's windows, side by side. */
-const HALF = { w: 314, gap: 12 } as const;
+/** The HR head's and the intern's windows, full width, one above the other. */
+const PANE = { h: 422, gap: 16 } as const;
+/** The intern's window top (window-local, below the HR head's). */
+const LOW = PANE.h + PANE.gap;
 
 /** Camera moves: arrive at desk `to`, moving over [at, at + duration]. */
-const MOVES: readonly { to: number; at: number; duration: number }[] = [
+const MOVES_WRITTEN: readonly { to: number; at: number; duration: number }[] = [
   { to: DESK.a, at: 3.2, duration: 0.72 },
   { to: DESK.d, at: 6.25, duration: 0.72 },
   { to: DESK.a, at: 8.55, duration: 0.72 },
@@ -199,6 +198,16 @@ const MOVES: readonly { to: number; at: number; duration: number }[] = [
   { to: DESK.d, at: 27.95, duration: 0.72 },
   { to: DESK.a, at: 30.65, duration: 0.72 },
 ];
+/** Each move starts and lands on a sixteenth. */
+const MOVES = MOVES_WRITTEN.map((m) => ({ ...m, at: onGrid(m.at), duration: onGrid(m.duration) }));
+
+/**
+ * Which desk is in focus at `t` (0 = the rep, 1 = the COO, 2 = HR and intern),
+ * continuous through each move: the film uses it to pull focus between screens.
+ */
+export function deskFocus(t: number): number {
+  return (camera(t).x - DESK.c) / 720;
+}
 
 /** The camera: which desk point is centred, and a slight pull back mid-move. */
 function camera(t: number): { x: number; zoom: number } {
@@ -249,10 +258,10 @@ const Q = {
   d: "What were this year's salary revisions?",
 };
 const TYPE = {
-  c: typing('c', Q.c, T.c1.type, 34),
+  c: typing('c', Q.c, T.c1.type, 37),
   a: typing('a', Q.a, T.a1.type, 54),
   hr: typing('hr', Q.d, T.d1.hr, 31),
-  intern: typing('intern', Q.d, T.d1.intern, 30),
+  intern: typing('intern', Q.d, T.d1.intern, 33),
 };
 
 interface Way {
@@ -377,11 +386,11 @@ function typedText(
 }
 
 /** A person tag above a window: who is at this desk. */
-function personTag(ui: Ui, id: string, role: string, color: string, x: number, y: number) {
-  const w = ui.measure(role, F.role) + 34;
+function personTag(ui: Ui, id: string, role: string, who: Person, x: number, y: number) {
+  const w = ui.measure(role, F.role) + 40;
   return groupNode(id, [
-    avatar(`${id}-av`, x - w / 2 + 12, y, 12, color),
-    label(`${id}-role`, role, x - w / 2 + 32, y - 9, F.role, UI.sub),
+    face(`${id}-av`, who, x - w / 2 + 13, y, 13),
+    label(`${id}-role`, role, x - w / 2 + 36, y - 10, F.role, UI.sub),
   ]);
 }
 
@@ -451,12 +460,12 @@ function citation(
   const w = Math.round(ui.measure(text, f) + numW + 44);
   return {
     node: groupNode(id, [
-      box(`${id}-bg`, x, y, w, 32, 10, {
-        fill: hover > 0.5 ? UI.accentSoft : UI.wash,
-        stroke: { color: hover > 0.5 ? UI.accentLine : UI.line, width: 1 },
+      box(`${id}-bg`, x, y, w, 32, 16, {
+        fill: hover > 0.5 ? UI.sourceSoft : UI.wash,
+        stroke: { color: hover > 0.5 ? UI.source : UI.line, width: 1 },
       }),
-      box(`${id}-n`, x + 6, y + 6, numW, 20, 6, { fill: UI.accentSoft }),
-      label(`${id}-nt`, String(n), x + 6 + numW / 2, y + 7, F.smallStrong, UI.accent, {
+      box(`${id}-n`, x + 6, y + 6, numW, 20, 10, { fill: UI.sourceSoft }),
+      label(`${id}-nt`, String(n), x + 6 + numW / 2, y + 7, F.smallStrong, UI.sourceText, {
         align: 'center',
       }),
       icon(`${id}-ic`, ic, x + numW + 20, y + 16, 16, UI.sub),
@@ -557,12 +566,12 @@ const ROW = 68;
 const LIST = { top: 64, bottom: 744 } as const;
 const DOCK = { x: 16, y: 756, w: 608, h: 88 } as const;
 /** The tile lands here, as the ask bar's icon (window-local). */
-const DOCK_ICON = { x: 54, y: DOCK.y + DOCK.h / 2, size: 40 } as const;
+export const DOCK_ICON = { x: 54, y: DOCK.y + DOCK.h / 2, size: 40 } as const;
 
 const ANSWER_C =
   "You approved *8.5%* for Arden Logistics' three-year renewal. The deal desk signed it off on 12 May, and the customer confirmed it in Teams the next day.";
 
-function stationC(ui: Ui, t: number): SceneNode[] {
+export function stationC(ui: Ui, t: number): SceneNode[] {
   const open = progress(t, T.intro.open, T.intro.openDur, easing.enter);
   if (open <= 0) return [];
   const left = DESK.c - WIN.w / 2;
@@ -581,7 +590,7 @@ function stationC(ui: Ui, t: number): SceneNode[] {
   kids.push(
     icon('c-h-icon', 'mail', 36, 32, 22, UI.text),
     label('c-h-title', 'Inbox', 56, 19, F.title),
-    label('c-h-count', '248 unread', 56 + ui.measure('Inbox', F.title) + 12, 24, F.small, UI.sub),
+    label('c-h-count', '248 unread', 56 + ui.measure('Inbox', F.title) + 12, 26, F.meta, UI.faint),
     icon('c-h-search', 'search', 604, 32, 20, UI.sub),
     rule('c-h-rule', 0, 63, WIN.w),
   );
@@ -609,7 +618,7 @@ function stationC(ui: Ui, t: number): SceneNode[] {
     );
     if (m.tag) {
       const tagColor = m.tag === 'Urgent' ? UI.alert : UI.warm;
-      const tag = ui.chip(`${id}-tag`, m.tag, 0, 0, {
+      const tag = ui.chip(`${id}-tag`, m.tag.toLowerCase(), 0, 0, {
         fill: m.tag === 'Urgent' ? UI.alertSoft : UI.warmSoft,
         color: tagColor,
         font: F.tiny,
@@ -641,12 +650,13 @@ function stationC(ui: Ui, t: number): SceneNode[] {
   const sent = progress(t, T.c1.send, 0.25, easing.exit);
   kids.push(
     rule('c-dock-rule', 0, LIST.bottom, WIN.w),
-    box('c-dock-ring', DOCK.x - 3, DOCK.y - 3, DOCK.w + 6, DOCK.h + 6, 25, {
-      stroke: { color: withAlpha(UI.accent, 0.18 * focus * (1 - sent)), width: 4 },
+    box('c-dock-ring', DOCK.x - 3, DOCK.y - 3, DOCK.w + 6, DOCK.h + 6, 27, {
+      stroke: { color: withAlpha(C.stroke.focus, focus * (1 - sent)), width: 3 },
     }),
-    box('c-dock', DOCK.x, DOCK.y, DOCK.w, DOCK.h, 22, {
-      fill: UI.wash,
-      stroke: { color: focus * (1 - sent) > 0.5 ? UI.accentLine : UI.line, width: 1.2 },
+    box('c-dock', DOCK.x, DOCK.y, DOCK.w, DOCK.h, 24, {
+      fill: UI.surface,
+      stroke: { color: focus * (1 - sent) > 0.5 ? UI.accentLine : UI.line, width: 1 },
+      shadow: elevationShadows(lighting, 'low', { strength: 0.35 }),
     }),
   );
   const text = typed(TYPE.c, t);
@@ -717,7 +727,7 @@ function stationC(ui: Ui, t: number): SceneNode[] {
   if (p3) kids.push(cursor('c-cursor3', p3.x, p3.y, pressAt(t, T.c3.click), p3.opacity));
 
   return [
-    groupNode('c-tag-o', [personTag(ui, 'c-tag', 'Sales rep', UI.accent, DESK.c, WIN.top - 30)], {
+    groupNode('c-tag-o', [personTag(ui, 'c-tag', 'Sales rep', 'SR', DESK.c, WIN.top - 30)], {
       opacity: clamp((open - 0.5) / 0.5),
     }),
     windowNode('c-win', { x: left, y: WIN.top, w: WIN.w, h: WIN.h }, kids, {
@@ -735,6 +745,12 @@ function sheetLayout(ui: Ui) {
   const y0 = LIST.top + 22 + q.height + 20 + 26;
   const para = layoutText(plain(ANSWER_C), F.body, { measurer: ui.measurer, maxWidth: 576 });
   return { chip: { x: 32, y: y0 + 34 + para.height + 16 } };
+}
+
+/** Where the HR head's answer starts (window-local). */
+function paneLayout(ui: Ui) {
+  const q = layoutText(Q.d, F.body, { measurer: ui.measurer, maxWidth: WIN.w - 120 });
+  return { answerY: 84 + q.height + 20 + 22 };
 }
 
 function sheetC(ui: Ui, t: number, top: number): SceneNode[] {
@@ -792,11 +808,12 @@ function sheetC(ui: Ui, t: number, top: number): SceneNode[] {
               c1.node,
               c2.node,
               confidence(ui, 'c-conf', 32, chipsY + 46),
-              label('c-sugg', 'SUGGESTED', 32, chipsY + 104, F.tiny, UI.faint),
+              label('c-sugg', 'suggested', 32, chipsY + 104, F.meta, UI.faint),
               ...['Show me the order form', 'Who else approved a rate this year?'].map((s, k) =>
                 groupNode(`c-sugg${k}`, [
-                  box(`c-sugg${k}-bg`, 32, chipsY + 128 + k * 48, 576, 40, 12, {
-                    stroke: { color: UI.line, width: 1.2 },
+                  box(`c-sugg${k}-bg`, 32, chipsY + 128 + k * 48, 576, 40, 20, {
+                    fill: UI.surface,
+                    stroke: { color: UI.line, width: 1 },
                   }),
                   icon(`c-sugg${k}-ic`, 'search', 52, chipsY + 148 + k * 48, 16, UI.sub),
                   label(`c-sugg${k}-t`, s, 70, chipsY + 137 + k * 48, F.body, UI.sub),
@@ -839,7 +856,7 @@ function emailC(ui: Ui, t: number, x: number): SceneNode {
   kids.push(groupNode('c-mail-srcpos', [src.node], { transform: { x: 56, y: top + 16 } }));
   kids.push(
     label('c-mail-subj', 'Re: Renewal terms: Arden Logistics', 32, top + 66, F.title),
-    avatar('c-mail-av', 50, top + 128, 18, UI.violet),
+    face('c-mail-av', 'DD', 50, top + 128, 18),
     label('c-mail-from', 'Deal desk', 78, top + 108, F.bodyStrong),
     label('c-mail-to', 'to Sales · 12 May, 16:42', 78, top + 130, F.small, UI.sub),
     icon('c-mail-clip', 'paperclip', 604, top + 120, 18, UI.sub),
@@ -899,6 +916,26 @@ function emailC(ui: Ui, t: number, x: number): SceneNode {
 
 const TABS = ['Ask', 'Work', 'Reports'] as const;
 
+/** Monogram avatars, every one in the people family (rose). */
+const PEOPLE = {
+  SR: C.avatar.rep,
+  CO: C.avatar.coo,
+  HR: C.avatar.hr,
+  IN: C.avatar.intern,
+  CF: C.avatar.cfo,
+  FT: C.avatar.team,
+  DD: C.avatar.cfo,
+  LG: C.avatar.hr,
+  SP: C.avatar.intern,
+} as const;
+type Person = keyof typeof PEOPLE;
+const face = (id: string, who: Person, x: number, y: number, r: number, opacity = 1) =>
+  avatar(id, who, x, y, r, PEOPLE[who], opacity);
+
+/** A pill button's width (matches `ui.button`). */
+const buttonWidth = (ui: Ui, text: string, withIcon = false) =>
+  Math.round(ui.measure(text, F.button) + 44 + (withIcon ? 24 : 0));
+
 const PLAN = {
   who: 'Every supplier that delivered late this quarter, and the customers whose orders they touched.',
   measures: ['Days late', 'On-time rate', 'Promises to customers'],
@@ -940,28 +977,33 @@ const LIBRARY = [
     title: 'Renewals at risk, Q2',
     meta: 'Sales ops · Level 3 · 24 Jun',
     v: 3,
-    people: [UI.accent, UI.pink, UI.violet],
+    people: ['SR', 'HR', 'CO'] as const,
   },
   {
     title: 'Vendor contract terms',
     meta: 'Legal · Level 3 · 19 Jun',
     v: 2,
-    people: [UI.violet, UI.warm],
+    people: ['LG', 'CO'] as const,
   },
-  { title: 'Hiring plan review', meta: 'HR · Level 1 · 12 Jun', v: 1, people: [UI.pink] },
+  { title: 'Hiring plan review', meta: 'HR · Level 1 · 12 Jun', v: 1, people: ['HR'] as const },
   {
     title: 'Escalations this month',
     meta: 'Support · Level 3 · 9 Jun',
     v: 4,
-    people: [UI.accent, UI.warm],
+    people: ['SP', 'CO'] as const,
   },
   {
     title: 'Pricing changes since 2025',
     meta: 'Finance · Level 3 · 2 Jun',
     v: 2,
-    people: [UI.warm],
+    people: ['CF'] as const,
   },
-  { title: 'Onboarding time by region', meta: 'Ops · Level 3 · 28 May', v: 1, people: [UI.accent] },
+  {
+    title: 'Onboarding time by region',
+    meta: 'Ops · Level 3 · 28 May',
+    v: 1,
+    people: ['SR'] as const,
+  },
 ] as const;
 
 /** The elapsed clock (seconds) on the deep run. */
@@ -976,7 +1018,7 @@ function elapsed(t: number): number {
 /** How far the researchers have got (0–1). */
 const researched = (t: number) => clamp(elapsed(t) / 1120);
 
-function stationA(ui: Ui, t: number): SceneNode[] {
+export function stationA(ui: Ui, t: number): SceneNode[] {
   const left = DESK.a - WIN.w / 2;
   const kids: (SceneNode | null)[] = [];
   // Which tab is showing: Ask, then Work once it goes ahead, then Reports as the report lands.
@@ -1002,7 +1044,7 @@ function stationA(ui: Ui, t: number): SceneNode[] {
       label(`a-tab${k}`, name, at(k), 23, F.smallStrong, k === active ? UI.text : UI.sub),
     ),
     box('a-tab-line', ux, 60, uw, 3, 1.5, { fill: UI.accent }),
-    avatar('a-h-av', 606, 32, 15, UI.warm),
+    face('a-h-av', 'CO', 606, 32, 15),
     rule('a-h-rule', 0, 63, WIN.w),
   );
 
@@ -1104,7 +1146,7 @@ function stationA(ui: Ui, t: number): SceneNode[] {
   if (pd) kids.push(cursor('a-cursor4', pd.x, pd.y, pressAt(t, T.b2.refresh), pd.opacity));
 
   return [
-    personTag(ui, 'a-tag', 'COO', UI.warm, DESK.a, WIN.top - 30),
+    personTag(ui, 'a-tag', 'COO', 'CO', DESK.a, WIN.top - 30),
     windowNode('a-win', { x: left, y: WIN.top, w: WIN.w, h: WIN.h }, kids),
   ];
 }
@@ -1112,7 +1154,7 @@ function stationA(ui: Ui, t: number): SceneNode[] {
 const COMPOSER = { x: 24, y: 136, w: 592, h: 262 } as const;
 const LEVEL = { x: 44, y: COMPOSER.y + COMPOSER.h - 58, seg: 82 } as const;
 const askButton = (ui: Ui) => {
-  const w = Math.round(ui.measure('Ask', F.bodyStrong) + 36 + 24);
+  const w = buttonWidth(ui, 'Ask', true);
   return { x: COMPOSER.x + COMPOSER.w - 20 - w, y: COMPOSER.y + COMPOSER.h - 60, w };
 };
 
@@ -1120,20 +1162,20 @@ function askViewA(ui: Ui, t: number): SceneNode[] {
   const kids: (SceneNode | null)[] = [];
   kids.push(label('a-greet', 'What do you need to know?', 32, 90, F.title));
   kids.push(
-    box('a-comp-ring', COMPOSER.x - 4, COMPOSER.y - 4, COMPOSER.w + 8, COMPOSER.h + 8, 24, {
-      stroke: { color: withAlpha(UI.accent, 0.16), width: 4 },
+    box('a-comp-ring', COMPOSER.x - 3, COMPOSER.y - 3, COMPOSER.w + 6, COMPOSER.h + 6, R.card + 3, {
+      stroke: { color: C.stroke.focus, width: 3 },
     }),
-    box('a-comp', COMPOSER.x, COMPOSER.y, COMPOSER.w, COMPOSER.h, 20, {
+    box('a-comp', COMPOSER.x, COMPOSER.y, COMPOSER.w, COMPOSER.h, R.card, {
       fill: UI.surface,
-      stroke: { color: UI.accentLine, width: 1.2 },
+      stroke: { color: UI.accentLine, width: 1 },
     }),
     ...typedText(ui, 'a-q', TYPE.a, t, 48, COMPOSER.y + 22, F.ask, 544, 1),
   );
   // Depth: Level 1 → Level 3.
   const sel = lerp(0, 2, progress(t, T.a1.level, 0.35, easing.snap));
-  kids.push(box('a-lvl-bg', LEVEL.x, LEVEL.y, LEVEL.seg * 3, 40, 12, { fill: UI.wash }));
+  kids.push(box('a-lvl-bg', LEVEL.x, LEVEL.y, LEVEL.seg * 3, 40, 20, { fill: UI.wash }));
   kids.push(
-    box('a-lvl-sel', LEVEL.x + 3 + sel * LEVEL.seg, LEVEL.y + 3, LEVEL.seg - 6, 34, 9, {
+    box('a-lvl-sel', LEVEL.x + 3 + sel * LEVEL.seg, LEVEL.y + 3, LEVEL.seg - 6, 34, 17, {
       fill: UI.surface,
       shadow: elevationShadows(lighting, 'low', { strength: 0.35 }),
     }),
@@ -1197,7 +1239,7 @@ function askViewA(ui: Ui, t: number): SceneNode[] {
   );
   // Recent questions, quiet below.
   const ry = COMPOSER.y + COMPOSER.h + 84;
-  kids.push(label('a-recent', 'RECENT', 32, ry, F.tiny, UI.faint));
+  kids.push(label('a-recent', 'recent', 32, ry, F.meta, UI.faint));
   [
     ['Which accounts renew next quarter?', 'Level 1'],
     ['Summarise last week’s escalations', 'Level 1'],
@@ -1222,7 +1264,7 @@ function planLayout(ui: Ui) {
   const y0 = 86 + q.height + 20 + 22;
   const cardY = y0 + 36;
   const fy = cardY + PLAN_CARD.h - 66;
-  const goW = Math.round(ui.measure('Go ahead', F.bodyStrong) + 36);
+  const goW = buttonWidth(ui, 'Go ahead');
   return {
     y0,
     cardY,
@@ -1272,7 +1314,7 @@ function planViewA(ui: Ui, t: number): SceneNode[] {
     groupNode(
       'a-plan-who',
       [
-        label('a-plan-who-l', 'WHO IS INCLUDED', cx, cardY + 62, F.tiny, UI.faint),
+        label('a-plan-who-l', 'who is included', cx, cardY + 62, F.meta, UI.faint),
         paragraph(ui, 'a-plan-who-t', PLAN.who, cx, cardY + 82, F.body, 540).node,
       ],
       item(0),
@@ -1280,7 +1322,7 @@ function planViewA(ui: Ui, t: number): SceneNode[] {
   );
   let mx = cx;
   const measures: SceneNode[] = [
-    label('a-plan-m-l', 'MEASURES', cx, cardY + 150, F.tiny, UI.faint),
+    label('a-plan-m-l', 'measures', cx, cardY + 150, F.meta, UI.faint),
   ];
   PLAN.measures.forEach((m, k) => {
     const c = ui.chip(`a-plan-m${k}`, m, mx, cardY + 172, {
@@ -1293,7 +1335,7 @@ function planViewA(ui: Ui, t: number): SceneNode[] {
     mx += c.w + 8;
   });
   inside.push(groupNode('a-plan-measures', measures, item(1)));
-  const steps: SceneNode[] = [label('a-plan-s-l', 'STEPS', cx, cardY + 222, F.tiny, UI.faint)];
+  const steps: SceneNode[] = [label('a-plan-s-l', 'steps', cx, cardY + 222, F.meta, UI.faint)];
   PLAN.steps.forEach((s, k) => {
     const y = cardY + 246 + k * 32;
     steps.push(
@@ -1335,13 +1377,13 @@ function planViewA(ui: Ui, t: number): SceneNode[] {
     ),
   );
   kids.push(
-    box('a-plan-card', PLAN_CARD.x, cardY, PLAN_CARD.w, h, 18, {
+    box('a-plan-card', PLAN_CARD.x, cardY, PLAN_CARD.w, h, 20, {
       fill: UI.surface,
-      stroke: { color: UI.line, width: 1.2 },
-      shadow: elevationShadows(lighting, 'low', { strength: 0.3 }),
+      stroke: { color: UI.line, width: 1 },
+      shadow: elevationShadows(lighting, 'mid', { strength: 0.3 }),
     }),
     groupNode('a-plan-inside', inside, {
-      clip: rect(PLAN_CARD.x + PLAN_CARD.w / 2, cardY + h / 2, PLAN_CARD.w, h, 18),
+      clip: rect(PLAN_CARD.x + PLAN_CARD.w / 2, cardY + h / 2, PLAN_CARD.w, h, 20),
     }),
   );
   kids.push(clickRing('a-ring-save', SAVE.x + 11, SAVE.y + 11, t, T.a2.save));
@@ -1377,7 +1419,7 @@ function workViewA(ui: Ui, t: number): SceneNode[] {
     );
   }
   kids.push(
-    label('a-w-el', 'ELAPSED', 608, 82, F.tiny, UI.faint, { align: 'right' }),
+    label('a-w-el', 'elapsed', 608, 82, F.meta, UI.faint, { align: 'right' }),
     label('a-w-clock', clockText(elapsed(t)), 608, 100, F.clock, done ? UI.good : UI.text, {
       align: 'right',
     }),
@@ -1402,7 +1444,7 @@ function workViewA(ui: Ui, t: number): SceneNode[] {
       icon(`${id}-ic`, 'search', 51, y + 25, 18, UI.violet),
       label(`${id}-name`, res.name, 84, y + 4, F.bodyStrong),
       label(`${id}-focus`, res.focus, 84, y + 28, F.small, UI.sub),
-      label(`${id}-sl`, 'Searches', 470, y + 4, F.tiny, UI.faint, { align: 'right' }),
+      label(`${id}-sl`, 'searches', 470, y + 4, F.meta, UI.faint, { align: 'right' }),
       label(
         `${id}-s`,
         grouped(lerp(res.searches[0], res.searches[1], pace)),
@@ -1412,7 +1454,7 @@ function workViewA(ui: Ui, t: number): SceneNode[] {
         UI.text,
         { align: 'right' },
       ),
-      label(`${id}-il`, 'Items read', 608, y + 4, F.tiny, UI.faint, { align: 'right' }),
+      label(`${id}-il`, 'items read', 608, y + 4, F.meta, UI.faint, { align: 'right' }),
       label(
         `${id}-i`,
         grouped(lerp(res.items[0], res.items[1], pace)),
@@ -1450,8 +1492,8 @@ function workViewA(ui: Ui, t: number): SceneNode[] {
 function reportA(ui: Ui, t: number, top: number): SceneNode {
   // As the report lands in the library, the sheet shrinks into the top row.
   const land = progress(t, T.b1.land, 0.6, easing.camera);
-  const from = { x: 0, y: top, w: WIN.w, h: WIN.h - top + 30, r: 22 };
-  const to = { x: LIB.x, y: LIB.top, w: LIB.w, h: LIB.row - 8, r: 14 };
+  const from = { x: 0, y: top, w: WIN.w, h: WIN.h - top + 30, r: R.card };
+  const to = { x: LIB.x, y: LIB.top, w: LIB.w, h: LIB.row - 8, r: R.input };
   const f = {
     x: lerp(from.x, to.x, land),
     y: lerp(from.y, to.y, land),
@@ -1471,19 +1513,18 @@ function reportA(ui: Ui, t: number, top: number): SceneNode {
   if (content > 0) {
     const y = f.y;
     const inner: SceneNode[] = [
-      label('a-rep-kicker', 'REPORT · v1', 32, y + 24, F.tiny, UI.faint),
+      label('a-rep-kicker', 'report · v1', 32, y + 24, F.meta, UI.faint),
       label('a-rep-title', 'Supplier delays and promises', 32, y + 44, F.title),
       label(
         'a-rep-meta',
-        'Level 3 · 38 sources · 18 min 40 s · saved to Reports',
+        'level 3 · 38 sources · 18 min 40 s · saved to reports',
         32,
-        y + 76,
-        F.small,
-        UI.sub,
+        y + 78,
+        F.meta,
+        UI.faint,
       ),
-      box('a-rep-bl', 24, y + 110, 592, 112, 14, { fill: UI.accentSoft }),
-      box('a-rep-blbar', 24, y + 110, 4, 112, 2, { fill: UI.accent }),
-      label('a-rep-bll', 'BOTTOM LINE', 44, y + 124, F.tiny, UI.accent),
+      box('a-rep-bl', 24, y + 110, 592, 112, 18, { fill: UI.accentSoft }),
+      label('a-rep-bll', 'bottom line', 44, y + 124, F.meta, UI.accent),
       paragraph(ui, 'a-rep-blt', BOTTOM_LINE, 44, y + 146, F.body, 552).node,
       label('a-rep-ch', 'Average days late, by supplier', 32, y + 246, F.smallStrong),
     ];
@@ -1493,7 +1534,7 @@ function reportA(ui: Ui, t: number, top: number): SceneNode {
       const w = (b.days / 10) * 330 * p;
       inner.push(
         label(`a-rep-b${k}-n`, b.name, 32, by + 1, F.small, UI.sub),
-        box(`a-rep-b${k}`, 176, by + 2, Math.max(w, 0.01), 20, 6, {
+        box(`a-rep-b${k}`, 176, by + 2, Math.max(w, 0.01), 20, 10, {
           fill: k < 3 ? UI.accent : UI.line,
         }),
         label(`a-rep-b${k}-v`, `${b.days.toFixed(1)} d`, 184 + w, by + 2, F.mono, UI.text, {
@@ -1572,7 +1613,8 @@ function libraryViewA(ui: Ui, t: number): SceneNode[] {
     const fresh = 1 - progress(t, T.b1.land + 0.7, 1.4);
     const refreshed = t >= T.b2.v2;
     const cfo = progress(t, T.b1.cfo, 0.45, easing.snap);
-    const people = cfo > 0 ? [UI.warm, UI.accent] : [UI.warm];
+    // The COO's avatar is there from the start; the CFO's pops in as it is shared.
+    const people: Person[] = ['CO', 'CF'];
     const meta = refreshed
       ? 'COO · Level 3 · Updated 30 Sep'
       : t >= T.b2.refresh + 0.05
@@ -1580,11 +1622,11 @@ function libraryViewA(ui: Ui, t: number): SceneNode[] {
         : 'COO · Level 3 · Updated 30 Jun';
     const glow = Math.max(fresh, 1 - progress(t, T.b2.v2 + 0.3, 1.2));
     kids.push(
-      box('a-l-new-bg', LIB.x, LIB.top, LIB.w, LIB.row - 8, 14, {
+      box('a-l-new-bg', LIB.x, LIB.top, LIB.w, LIB.row - 8, R.input, {
         fill: UI.surface,
         stroke: { color: UI.line, width: 1.2 },
       }),
-      box('a-l-new-glow', LIB.x, LIB.top, LIB.w, LIB.row - 8, 14, {
+      box('a-l-new-glow', LIB.x, LIB.top, LIB.w, LIB.row - 8, R.input, {
         fill: UI.accentSoft,
         opacity: clamp(glow),
       }),
@@ -1625,16 +1667,16 @@ function libRow(
   title: string,
   meta: string,
   version: string,
-  people: readonly string[],
+  people: readonly Person[],
   y: number,
   newest: number,
   extra: { refresh?: number | null; v2?: number } = {},
 ): SceneNode {
   const kids: SceneNode[] = [
-    box(`${id}-ic-bg`, LIB.x + 14, y + 16, 44, 44, 12, { fill: UI.wash }),
-    icon(`${id}-ic`, 'doc', LIB.x + 36, y + 38, 22, UI.sub),
+    box(`${id}-ic-bg`, LIB.x + 14, y + 16, 44, 44, 14, { fill: UI.sourceSoft }),
+    icon(`${id}-ic`, 'doc', LIB.x + 36, y + 38, 22, UI.sourceText),
     label(`${id}-title`, ui.fit(title, F.bodyStrong, 300), LIB.x + 72, y + 15, F.bodyStrong),
-    label(`${id}-meta`, meta, LIB.x + 72, y + 40, F.small, UI.sub),
+    label(`${id}-meta`, meta.toLowerCase(), LIB.x + 72, y + 43, F.meta, UI.faint),
   ];
   const v = ui.chip(`${id}-v`, version, 0, 0, {
     fill: UI.wash,
@@ -1646,7 +1688,7 @@ function libRow(
   const vs = 1 + 0.25 * Math.sin(Math.PI * clamp(extra.v2 ?? 0));
   kids.push(
     groupNode(`${id}-vpos`, [v.node], {
-      transform: { x: 420 + v.w / 2, y: y + 27 + 11, scale: vs, originX: v.w / 2, originY: 11 },
+      transform: { x: 410 + v.w / 2, y: y + 27 + 11, scale: vs, originX: v.w / 2, originY: 11 },
     }),
   );
   people.forEach((c, k) => {
@@ -1657,9 +1699,9 @@ function libRow(
         `${id}-p${k}`,
         [
           box(`${id}-p${k}-ring`, -14, -14, 28, 28, 14, { fill: UI.surface }),
-          avatar(`${id}-p${k}-av`, 0, 0, 12, c),
+          face(`${id}-p${k}-av`, c, 0, 0, 12),
         ],
-        { transform: { x: 474 + k * 18, y: y + 38, scale: s } },
+        { transform: { x: 466 + k * 23, y: y + 38, scale: s } },
       ),
     );
   });
@@ -1684,19 +1726,19 @@ function sharePopover(ui: Ui, t: number, p: number): SceneNode {
   return groupNode(
     'a-pop',
     [
-      box('a-pop-bg', x, y, 280, 160, 14, {
+      box('a-pop-bg', x, y, 280, 160, 20, {
         fill: UI.surface,
         stroke: { color: UI.line, width: 1 },
         shadow: elevationShadows(lighting, 'mid', { strength: 0.4 }),
       }),
       label('a-pop-title', 'Share with', x + 18, y + 16, F.smallStrong),
-      box('a-pop-input', x + 14, y + 42, 252, 34, 9, {
+      box('a-pop-input', x + 14, y + 42, 252, 34, 17, {
         fill: UI.wash,
         stroke: { color: UI.line, width: 1 },
       }),
       label('a-pop-ph', 'Add people or teams', x + 26, y + 50, F.small, UI.faint),
-      box('a-pop-hover', x + 8, y + 86, 264, 56, 10, { fill: UI.accentSoft, opacity: hover }),
-      avatar('a-pop-av', x + 36, y + 114, 15, UI.accent),
+      box('a-pop-hover', x + 8, y + 86, 264, 56, 14, { fill: UI.accentSoft, opacity: hover }),
+      face('a-pop-av', 'CF', x + 36, y + 114, 15),
       label('a-pop-name', 'CFO', x + 60, y + 96, F.bodyStrong),
       label('a-pop-team', 'Finance', x + 60, y + 118, F.small, UI.sub),
       icon('a-pop-plus', 'plus', x + 248, y + 114, 18, UI.accent),
@@ -1741,12 +1783,12 @@ function buildsOn(ui: Ui, t: number, p: number): SceneNode {
     }),
   );
   const card: SceneNode[] = [
-    box('a-b-bg', x, y + 8, LIB.w - 44, 88, 14, {
+    box('a-b-bg', x, y + 8, LIB.w - 44, 88, R.input, {
       fill: UI.surface,
       stroke: { color: UI.accentLine, width: 1.2 },
       shadow: elevationShadows(lighting, 'low', { strength: 0.3 }),
     }),
-    avatar('a-b-av', x + 26, y + 36, 12, UI.pink),
+    face('a-b-av', 'FT', x + 26, y + 36, 12),
     label('a-b-who', 'Finance team asked', x + 46, y + 26, F.small, UI.sub),
     label('a-b-q', 'How will supplier delays affect Q3 margins?', x + 18, y + 54, F.bodyStrong),
   ];
@@ -1767,81 +1809,92 @@ function buildsOn(ui: Ui, t: number, p: number): SceneNode {
 }
 
 // ---------------------------------------------------------------------------
-// D: the HR head and the intern, side by side
+// D: the HR head and the intern, one above the other
 // ---------------------------------------------------------------------------
 
 const ANSWER_D =
   "This year's revision averaged *7.2%*, effective 1 April. Bands 3 to 5 rose 8 to 10%, and 412 people were included.";
 
-function stationD(ui: Ui, t: number): SceneNode[] {
+export function stationD(ui: Ui, t: number): SceneNode[] {
   const nodes: SceneNode[] = [];
   const swap = progress(t, T.d3.swap, 0.7, easing.camera);
-  const hrX = DESK.d - WIN.w / 2;
-  const inX = DESK.d - WIN.w / 2 + HALF.w + HALF.gap;
-  // D3: the HR head's window slides away; the intern's opens out to the full width.
+  const x = DESK.d - WIN.w / 2;
+  // D3: the HR head's window lifts away; the intern's rises and opens out to the full height.
   if (swap < 1) {
     const away = progress(t, T.d3.swap, 0.6, easing.exit);
+    const cx = x + WIN.w / 2;
+    const cy = WIN.top + PANE.h / 2;
     nodes.push(
       groupNode(
         'd-hr',
-        [
-          personTag(ui, 'd-hr-tag', 'HR head', UI.pink, hrX + HALF.w / 2, WIN.top - 30),
-          windowNode(
-            'd-hr-win',
-            { x: hrX, y: WIN.top, w: HALF.w, h: WIN.h },
-            paneD(ui, t, 'hr', HALF.w),
-          ),
-        ],
-        { transform: { y: 980 * away } },
+        [windowNode('d-hr-win', { x, y: WIN.top, w: WIN.w, h: PANE.h }, paneD(ui, t, 'hr'))],
+        {
+          opacity: 1 - away,
+          transform: { x: cx, y: cy - 60 * away, scale: 1 - 0.06 * away, originX: cx, originY: cy },
+        },
       ),
     );
   }
-  const w = lerp(HALF.w, WIN.w, swap);
-  const x = lerp(inX, hrX, swap);
+  const y = WIN.top + lerp(LOW, 0, swap);
+  const h = lerp(PANE.h, WIN.h, swap);
   nodes.push(
-    personTag(ui, 'd-in-tag', 'Intern', UI.warm, x + w / 2, WIN.top - 30),
-    windowNode('d-in-win', { x, y: WIN.top, w, h: WIN.h }, [
+    windowNode('d-in-win', { x, y, w: WIN.w, h }, [
       ...(swap < 0.4
-        ? [groupNode('d-in-old', paneD(ui, t, 'intern', HALF.w), { opacity: 1 - clamp(swap * 3) })]
+        ? [groupNode('d-in-old', paneD(ui, t, 'intern'), { opacity: 1 - clamp(swap * 3) })]
         : []),
-      ...(swap > 0 ? linkPaneD(ui, t, w, swap) : []),
+      ...(swap > 0 ? linkPaneD(ui, t, WIN.w, swap) : []),
     ]),
   );
   return nodes;
 }
 
-function paneD(ui: Ui, t: number, who: 'hr' | 'intern', w: number): SceneNode[] {
+/** A window header: the Cowork mark and name, and who is signed in (right). */
+function paneHeader(ui: Ui, id: string, role: string, who: Person, w: number): SceneNode[] {
+  const rw = ui.measure(role, F.role);
+  return [
+    mark(`${id}-mark`, 38, 32, 22),
+    label(`${id}-name`, 'Cowork', 58, 21, F.heading),
+    face(`${id}-user-av`, who, w - 32 - rw - 22, 32, 13),
+    label(`${id}-user`, role, w - 32, 22, F.role, UI.sub, { align: 'right' }),
+    rule(`${id}-rule`, 0, 63, w),
+  ];
+}
+
+function paneD(ui: Ui, t: number, who: 'hr' | 'intern'): SceneNode[] {
   const k = who === 'hr' ? TYPE.hr : TYPE.intern;
   const sendAt = who === 'hr' ? T.d1.sendHr : T.d1.sendIntern;
   const id = `d-${who}`;
+  const w = WIN.w;
   const kids: (SceneNode | null)[] = [
-    mark(`${id}-mark`, 30, 32, 18),
-    label(`${id}-name`, 'Cowork', 46, 22, F.heading),
-    rule(`${id}-rule`, 0, 63, w),
+    ...paneHeader(ui, id, who === 'hr' ? 'HR head' : 'Intern', who === 'hr' ? 'HR' : 'IN', w),
   ];
-  // Composer
+  // Composer: one line, at the bottom of the pane.
   const sent = progress(t, sendAt, 0.25, easing.exit);
-  const cy = WIN.h - 116;
+  const ch = 64;
+  const cy = PANE.h - ch - 14;
+  const typing = sent < 1 && t > (k.times[0] ?? 0) - 0.3;
   kids.push(
-    box(`${id}-comp`, 12, cy, w - 24, 104, 18, {
-      fill: UI.wash,
-      stroke: {
-        color: sent < 1 && t > (k.times[0] ?? 0) - 0.3 ? UI.accentLine : UI.line,
-        width: 1.2,
-      },
+    box(`${id}-comp-ring`, 13, cy - 3, w - 26, ch + 6, ch / 2 + 3, {
+      stroke: { color: withAlpha(C.stroke.focus, typing ? 1 : 0), width: 3 },
+    }),
+    box(`${id}-comp`, 16, cy, w - 32, ch, ch / 2, {
+      fill: UI.surface,
+      stroke: { color: typing ? UI.accentLine : UI.line, width: 1 },
+      shadow: elevationShadows(lighting, 'low', { strength: 0.3 }),
     }),
   );
+  const ty = cy + (ch - F.body.size * (F.body.lineHeight ?? 1.2)) / 2;
   if (sent < 1) {
     if (t < (k.times[0] ?? 0))
-      kids.push(label(`${id}-ph`, 'Ask Cowork…', 28, cy + 16, F.body, UI.faint));
+      kids.push(label(`${id}-ph`, 'Ask Cowork…', 40, ty, F.body, UI.faint));
     kids.push(
-      groupNode(`${id}-typed`, typedText(ui, `${id}-q`, k, t, 28, cy + 14, F.body, w - 90, 1), {
+      groupNode(`${id}-typed`, typedText(ui, `${id}-q`, k, t, 40, ty, F.body, w - 140, 1), {
         opacity: 1 - sent,
       }),
     );
   } else {
     kids.push(
-      label(`${id}-ph`, 'Ask a follow-up', 28, cy + 16, F.body, UI.faint, {
+      label(`${id}-ph`, 'Ask a follow-up', 40, ty, F.body, UI.faint, {
         opacity: clamp((t - sendAt - 0.3) / 0.3),
       }),
     );
@@ -1852,64 +1905,49 @@ function paneD(ui: Ui, t: number, who: 'hr' | 'intern', w: number): SceneNode[] 
     groupNode(
       `${id}-send`,
       [
-        box(`${id}-send-bg`, -17, -17, 34, 34, 17, { fill: typedAll ? UI.accent : UI.line }),
-        icon(`${id}-send-ic`, 'send', 0, 0, 18, UI.surface),
+        box(`${id}-send-bg`, -18, -18, 36, 36, 18, { fill: typedAll ? UI.accent : UI.line }),
+        icon(`${id}-send-ic`, 'send', 0, 0, 18, UI.surface, { width: 1.8 }),
       ],
-      { transform: { x: w - 42, y: cy + 104 - 32, scale: 1 - 0.1 * press } },
+      { transform: { x: w - 52, y: cy + ch / 2, scale: 1 - 0.1 * press } },
     ),
   );
   // The question rises into the conversation.
   const rise = progress(t, sendAt + 0.04, 0.5, easing.enter);
   if (rise > 0) {
-    const q = bubble(ui, `${id}-qb`, Q.d, w - 16, lerp(cy, 84, rise), w - 70);
+    const q = bubble(ui, `${id}-qb`, Q.d, w - 24, lerp(cy, 84, rise), w - 120);
     kids.push(groupNode(`${id}-qbg`, [q.node], { opacity: clamp(rise * 2) }));
     const y0 = 84 + q.h + 22;
     const thinking = clamp((t - sendAt - 0.4) / 0.3);
+    const wait = (opacity: number) =>
+      groupNode(
+        `${id}-wait`,
+        [
+          skeleton(`${id}-sk1`, 32, y0 + 38, w - 140, 12, t),
+          skeleton(`${id}-sk2`, 32, y0 + 62, w - 260, 12, t + 0.1),
+        ],
+        { opacity },
+      );
     if (who === 'hr') {
       const streamed = lerp(0, 22, progress(t, T.d2.stream, T.d2.streamEnd - T.d2.stream));
       kids.push(
         groupNode(
           `${id}-whoo`,
-          [answerer(`${id}-who`, 16, y0, streamed > 0 ? '· 3 sources' : undefined)],
+          [answerer(`${id}-who`, 32, y0, streamed > 0 ? '· 3 sources' : undefined)],
           { opacity: thinking },
         ),
       );
       if (streamed <= 0) {
-        kids.push(
-          groupNode(
-            `${id}-wait`,
-            [
-              skeleton(`${id}-sk1`, 16, y0 + 36, w - 60, 11, t),
-              skeleton(`${id}-sk2`, 16, y0 + 58, w - 100, 11, t + 0.1),
-            ],
-            { opacity: thinking },
-          ),
-        );
+        kids.push(wait(thinking));
       } else {
-        const para = paragraph(ui, `${id}-ans`, ANSWER_D, 16, y0 + 32, F.body, w - 32, {
+        const para = paragraph(ui, `${id}-ans`, ANSWER_D, 32, y0 + 32, F.body, w - 64, {
           shown: streamed,
         });
         kids.push(para.node);
         const cites = progress(t, T.d2.streamEnd, 0.35, easing.enter);
         if (cites > 0) {
-          const c1 = citation(
-            ui,
-            `${id}-c1`,
-            1,
-            'doc',
-            'Revision policy 2026',
-            16,
-            y0 + 44 + para.height,
-          );
-          const c2 = citation(
-            ui,
-            `${id}-c2`,
-            2,
-            'doc',
-            'Pay committee notes',
-            16,
-            y0 + 84 + para.height,
-          );
+          const cy2 = y0 + 46 + para.height;
+          const c1 = citation(ui, `${id}-c1`, 1, 'doc', 'Revision policy 2026', 32, cy2);
+          const c2 = citation(ui, `${id}-c2`, 2, 'doc', 'Pay committee notes', 40 + c1.w, cy2);
           kids.push(
             groupNode(`${id}-cites`, [c1.node, c2.node], {
               opacity: cites,
@@ -1920,38 +1958,26 @@ function paneD(ui: Ui, t: number, who: 'hr' | 'intern', w: number): SceneNode[] 
       }
     } else {
       const empty = progress(t, T.d2.empty, 0.5, easing.enter);
-      kids.push(groupNode(`${id}-whoo`, [answerer(`${id}-who`, 16, y0)], { opacity: thinking }));
-      if (empty < 1) {
-        kids.push(
-          groupNode(
-            `${id}-wait`,
-            [
-              skeleton(`${id}-sk1`, 16, y0 + 36, w - 60, 11, t),
-              skeleton(`${id}-sk2`, 16, y0 + 58, w - 100, 11, t + 0.1),
-            ],
-            { opacity: thinking * (1 - empty) },
-          ),
-        );
-      }
+      kids.push(groupNode(`${id}-whoo`, [answerer(`${id}-who`, 32, y0)], { opacity: thinking }));
+      if (empty < 1) kids.push(wait(thinking * (1 - empty)));
       if (empty > 0) {
+        // Nothing to show: a quiet lock, in the friction tint.
         kids.push(
           groupNode(
             `${id}-empty`,
             [
-              box(`${id}-e-disc`, w / 2 - 26, y0 + 70, 52, 52, 26, { fill: UI.wash }),
-              icon(`${id}-e-lock`, 'lock', w / 2, y0 + 96, 24, UI.faint),
-              paragraph(
-                ui,
+              box(`${id}-e-disc`, 32, y0 + 36, 44, 44, 22, { fill: UI.alertSoft }),
+              icon(`${id}-e-lock`, 'lock', 54, y0 + 58, 22, C.friction.fg),
+              label(
                 `${id}-e-t`,
                 "Nothing you're allowed to see answers this.",
-                w / 2,
-                y0 + 138,
-                F.small,
-                w - 70,
-                { color: UI.sub, align: 'center' },
-              ).node,
+                90,
+                y0 + 46,
+                F.body,
+                UI.sub,
+              ),
             ],
-            { opacity: empty },
+            { opacity: empty, transform: { y: 6 * (1 - empty) } },
           ),
         );
       }
@@ -1962,17 +1988,13 @@ function paneD(ui: Ui, t: number, who: 'hr' | 'intern', w: number): SceneNode[] 
 
 /** D3: the intern, given the report's link, and the page that won't open. */
 function linkPaneD(ui: Ui, t: number, w: number, swap: number): SceneNode[] {
-  const kids: SceneNode[] = [
-    mark('d-l-mark', 30, 32, 18),
-    label('d-l-name', 'Cowork', 46, 22, F.heading),
-    rule('d-l-rule', 0, 63, w),
-  ];
+  const kids: SceneNode[] = [...paneHeader(ui, 'd-l', 'Intern', 'IN', w)];
   const page = progress(t, T.d3.page, 0.4, easing.enter);
   const msg = progress(t, T.d3.message, 0.45, easing.enter);
   if (page < 1) {
     const chat: SceneNode[] = [
-      label('d-l-day', 'Today', w / 2, 86, F.tiny, UI.faint, { align: 'center' }),
-      avatar('d-l-av', 34, 136, 16, UI.warm),
+      label('d-l-day', 'today', w / 2, 86, F.meta, UI.faint, { align: 'center' }),
+      face('d-l-av', 'CO', 34, 136, 16),
       label('d-l-from', 'COO', 60, 116, F.bodyStrong),
       label('d-l-time', '11:02', 60 + ui.measure('COO ', F.bodyStrong) + 4, 118, F.small, UI.sub),
       label('d-l-text', 'Sharing the supplier report for Monday:', 60, 140, F.body),
@@ -2032,7 +2054,7 @@ function linkPaneD(ui: Ui, t: number, w: number, swap: number): SceneNode[] {
           ).node,
           groupNode('d-l-btnpos', [ui.button('d-l-btn', 'Request access', 0, 0, {}).node], {
             transform: {
-              x: w / 2 - (ui.measure('Request access', F.bodyStrong) + 36) / 2,
+              x: w / 2 - buttonWidth(ui, 'Request access') / 2,
               y: cy + 170,
             },
           }),
@@ -2045,87 +2067,120 @@ function linkPaneD(ui: Ui, t: number, w: number, swap: number): SceneNode[] {
 }
 
 // ---------------------------------------------------------------------------
-// The frame
+// Shots and highlights: where the film looks inside the screen in focus
 // ---------------------------------------------------------------------------
 
-export interface Apps {
-  readonly ui: Ui;
-  readonly coworkCaptions: CoworkCaptions;
-  readonly captions: readonly {
-    readonly draw: Caption;
-    readonly at: number;
-    readonly out: number;
-  }[];
+/**
+ * A view of the screen in focus: the window-local point the camera centres
+ * on, and how far it zooms in (1 = the whole window as the deck shows it).
+ */
+export interface ShotView {
+  readonly x: number;
+  readonly y: number;
+  readonly zoom: number;
+}
+const WIDE: ShotView = { x: WIN.w / 2, y: WIN.h / 2, zoom: 1 };
+/** A result, shown whole and a little larger. */
+const FULL: ShotView = { x: WIN.w / 2, y: WIN.h / 2 - 20, zoom: 1.1 };
+
+interface Shot {
+  /** When the camera starts moving to this view. */
+  readonly at: number;
+  readonly view: ShotView;
+  readonly duration?: number;
+}
+export interface Direction {
+  readonly shots: readonly Shot[];
 }
 
-export function createApps(ui: Ui): Apps {
+/**
+ * The film's direction inside the screens: typing and work in progress are
+ * seen close up on the component doing it; results are seen whole, a
+ * little larger. Wide between desks.
+ */
+function direct(ui: Ui): Direction {
+  const sheet = sheetLayout(ui);
+  const plan = planLayout(ui);
+  const d = paneLayout(ui);
+  const shots: Shot[] = [
+    // C1: the rep types into the ask bar.
+    { at: 1.3, view: { x: 270, y: DOCK.y + DOCK.h / 2, zoom: 1.9 }, duration: 0.55 },
+    { at: 3.05, view: WIDE, duration: 0.4 },
+    // A1: the COO's question, then the level and Ask.
+    { at: 3.75, view: { x: 320, y: COMPOSER.y + 96, zoom: 1.45 } },
+    { at: 5.5, view: { x: 330, y: LEVEL.y + 16, zoom: 1.55 }, duration: 0.4 },
+    { at: 6.12, view: WIDE, duration: 0.35 },
+    // D1: the HR head and the intern type the same question.
+    { at: 6.75, view: { x: 320, y: LOW + 120, zoom: 1.3 } },
+    { at: 8.25, view: WIDE, duration: 0.35 },
+    // A2: the plan unfolds; save it as a report, go ahead.
+    { at: 9.0, view: { x: 320, y: plan.cardY + 210, zoom: 1.2 } },
+    { at: 9.55, view: { x: 320, y: plan.fy + 34, zoom: 1.5 }, duration: 0.4 },
+    { at: 10.55, view: WIDE, duration: 0.35 },
+    // C2: the rep's answer, whole.
+    { at: 11.2, view: FULL },
+    { at: 12.85, view: WIDE, duration: 0.3 },
+    // A3: researchers in parallel against the clock, then the checklist.
+    { at: 13.6, view: { x: 320, y: 290, zoom: 1.3 } },
+    { at: 14.35, view: { x: 320, y: 650, zoom: 1.45 } },
+    { at: 15.9, view: WIDE, duration: 0.4 },
+    // D2: the HR head's answer streams in, the intern's stays empty; then both, whole.
+    { at: 16.95, view: { x: 320, y: d.answerY + 230, zoom: 1.3 } },
+    { at: 18.15, view: FULL },
+    { at: 19.1, view: WIDE, duration: 0.3 },
+    // C3: the source opens; the approval line.
+    { at: 19.95, view: { x: sheet.chip.x + 150, y: sheet.chip.y + 16, zoom: 1.7 }, duration: 0.45 },
+    { at: 20.6, view: FULL },
+    { at: 22.0, view: WIDE, duration: 0.3 },
+    // A5: the report, whole.
+    { at: 22.85, view: FULL },
+    // B1: the report in the library; share with the CFO.
+    { at: 25.75, view: { x: 470, y: SHARE.y + 90, zoom: 1.6 }, duration: 0.4 },
+    { at: 26.75, view: FULL },
+    { at: 27.8, view: WIDE, duration: 0.3 },
+    // D3: the intern's link, then the page that won't open.
+    { at: 28.6, view: { x: 220, y: 170, zoom: 1.6 }, duration: 0.4 },
+    { at: 29.25, view: FULL },
+    { at: 30.5, view: WIDE, duration: 0.3 },
+    // B2: one refresh, version 2, another team builds on it.
+    { at: 31.2, view: { x: 470, y: REFRESH.y + 10, zoom: 1.7 }, duration: 0.4 },
+    { at: 32.3, view: FULL },
+  ];
   return {
-    ui,
-    coworkCaptions: cowork.createCaptions(ui.measurer),
-    captions: CAPTIONS.map((c) => ({
-      draw: caption(
-        `cap-${c.id}`,
-        { text: c.text, at: c.at, font: HEADLINE, y: CAPTION_Y, maxWidth: 620, breaks: c.breaks },
-        ui.measurer,
-      ),
-      at: c.at[0] ?? 0,
-      out: c.out,
+    shots: shots.map((s) => ({
+      ...s,
+      at: onGrid(s.at),
+      ...(s.duration ? { duration: onGrid(s.duration) } : {}),
     })),
   };
 }
 
-/** Everything above the room at time `t` on the timeline. */
-export interface AppsView {
-  /** Override the camera (desk point at the frame centre, and zoom). */
-  readonly camera?: { readonly x: number; readonly y: number; readonly zoom: number };
-  /** Make the captions leave (0–1), or hide them. */
-  readonly captionExit?: number;
-  readonly captions?: boolean;
+/** Where the film looks inside the screen in focus at `t` (eased between shots). */
+export function shotAt(direction: Direction, t: number): ShotView {
+  let view = WIDE;
+  for (const s of direction.shots) {
+    const p = progress(t, s.at, s.duration ?? beats(1), easing.camera);
+    if (p <= 0) break;
+    view = {
+      x: lerp(view.x, s.view.x, p),
+      y: lerp(view.y, s.view.y, p),
+      zoom: Math.exp(lerp(Math.log(view.zoom), Math.log(s.view.zoom), p)),
+    };
+  }
+  return view;
 }
 
-export function appsWorld(apps: Apps, t: number, view: AppsView = {}): SceneNode[] {
-  const { ui } = apps;
-  const nodes: SceneNode[] = [];
-  // The previous scene, as it ended: its captions leave and the tile flies into the rep's ask bar.
-  const intro = t < 1.2;
-  const exit = progress(t, 0, T.intro.exit, easing.exit);
-  const from = intro ? cowork.state(cowork.duration, apps.coworkCaptions, exit) : null;
-  if (from) nodes.push(...paint({ ...from, dial: null, captions: [] }));
+// ---------------------------------------------------------------------------
+// What the screens need
+// ---------------------------------------------------------------------------
 
-  const cam = view.camera ?? { ...camera(t), y: MID };
-  const desks: SceneNode[] = [];
-  const visible = (x: number) => Math.abs(x - cam.x) < 720 / cam.zoom + 40;
-  if (visible(DESK.c)) desks.push(...stationC(ui, t));
-  if (visible(DESK.a) && t > 2.5) desks.push(...stationA(ui, t));
-  if (visible(DESK.d) && t > 5.5) desks.push(...stationD(ui, t));
-  // The tile: from the middle of the frame into the ask bar, where it stays.
-  const d = cowork.state(cowork.duration, apps.coworkCaptions).dial;
-  if (d) {
-    const p = progress(t, T.intro.tile, T.intro.tileMove, easing.camera);
-    const left = DESK.c - WIN.w / 2;
-    const to = { x: left + DOCK_ICON.x, y: WIN.top + DOCK_ICON.y };
-    desks.push(
-      tileNode({
-        ...d,
-        x: lerp(d.x, to.x, p),
-        y: lerp(d.y, to.y, p) - 40 * Math.sin(Math.PI * p),
-        scale: lerp(d.scale, DOCK_ICON.size / d.size, p),
-        sheen: 0,
-      }),
-    );
-  }
-  nodes.push(
-    groupNode('desks', desks, {
-      transform: { x: CX, y: MID, scale: cam.zoom, originX: cam.x, originY: cam.y },
-    }),
-  );
-  if (from) nodes.push(...from.captions);
-  if (view.captions === false) return nodes;
-  for (const c of apps.captions) {
-    if (t < c.at - 0.1 || t > c.out + 0.45) continue;
-    nodes.push(c.draw(t, Math.max(view.captionExit ?? 0, progress(t, c.out, 0.35, easing.exit))));
-  }
-  return nodes;
+export interface Apps {
+  readonly ui: Ui;
+  readonly direction: Direction;
+}
+
+export function createApps(ui: Ui): Apps {
+  return { ui, direction: direct(ui) };
 }
 
 // ---------------------------------------------------------------------------
@@ -2134,16 +2189,28 @@ export function appsWorld(apps: Apps, t: number, view: AppsView = {}): SceneNode
 
 const click = (gain = 0.5, pan = 0) => key({ degree: 4, take: 1, gain, pan });
 
+/**
+ * Typing's sound: one soft tap for every fifth keystroke (a stream of taps
+ * at the screen's typing speed runs together into a bubbling), each on the
+ * nearest sixteenth of the beat, never two on the same one.
+ */
 function typingCues(k: Typing, gain: number, pan: number): Cues {
-  return k.times.map((at, i) =>
-    k.text[i] === ' '
-      ? []
-      : cue(
-          at,
-          key({ degree: 7, take: i, gain: gain * (0.75 + 0.5 * random('keys', k.text, i)), pan }),
-        ),
-  );
+  const used = new Set<number>();
+  const cues: Cues[] = [];
+  let n = 0;
+  k.times.forEach((at, i) => {
+    if (k.text[i] === ' ' || n++ % TAP_EVERY !== 0) return;
+    const on = onGrid(at);
+    if (used.has(on)) return;
+    used.add(on);
+    cues.push(
+      cue(on, tap({ take: i, gain: gain * (0.75 + 0.5 * random('keys', k.text, i)), pan })),
+    );
+  });
+  return cues;
 }
+/** One tap per this many keystrokes. */
+const TAP_EVERY = 5;
 
 const CUES: readonly Cues[] = [
   // The window opens out of the tile; the inbox comes to rest.
@@ -2151,15 +2218,11 @@ const CUES: readonly Cues[] = [
   cue(T.intro.open + 0.5, pop({ degree: 4, gain: 0.45 })),
   cue(T.scroll.start, whoosh(1.2, { from: 900, to: 300, peak: 0.1, gain: 0.25 })),
   cue(T.c1.click, click()),
-  typingCues(TYPE.c, 0.3, -0.1),
   cue(T.c1.send, pop({ degree: 7, gain: 0.55 })),
   // A1
-  typingCues(TYPE.a, 0.26, 0.1),
   cue(T.a1.level, snap({ degree: 4, gain: 0.45 })),
   cue(T.a1.ask, pop({ degree: 9, gain: 0.5 })),
   // D1: two people typing at once.
-  typingCues(TYPE.hr, 0.22, -0.35),
-  typingCues(TYPE.intern, 0.22, 0.35),
   cue(T.d1.sendHr, pop({ degree: 4, gain: 0.4, pan: -0.3 })),
   cue(T.d1.sendIntern, pop({ degree: 7, gain: 0.4, pan: 0.3 })),
   // A2: the plan unfolds; save; go.
@@ -2227,13 +2290,24 @@ export const APPS_CHORDS = CHORD;
 const MIX = 1.6;
 
 /** The sounds on the timeline in [from, to), moved to start at `at`. */
+/** Typing's taps (already on the grid). */
+const TYPING: readonly Cues[] = [
+  typingCues(TYPE.c, 0.3, -0.1),
+  typingCues(TYPE.a, 0.26, 0.1),
+  typingCues(TYPE.hr, 0.22, -0.35),
+  typingCues(TYPE.intern, 0.22, 0.35),
+];
+
 export function cuesBetween(from: number, to: number, at: number): SoundEvent[] {
   const flat: SoundEvent[] = [];
-  const walk = (c: Cues) => {
-    if ('sound' in c) flat.push(c);
-    else c.forEach(walk);
-  };
-  CUES.forEach(walk);
+  const walk =
+    (grid: boolean) =>
+    (c: Cues): void => {
+      if ('sound' in c) flat.push(grid ? { ...c, at: onGrid(c.at, SFX_DIV) } : c);
+      else c.forEach(walk(grid));
+    };
+  CUES.forEach(walk(true));
+  TYPING.forEach(walk(true));
   return flat
     .filter((c) => c.at >= from && c.at < to)
     .map((c) => ({ ...c, at: c.at - from + at, gain: (c.gain ?? 1) * MIX }));
@@ -2242,43 +2316,5 @@ export function cuesBetween(from: number, to: number, at: number): SoundEvent[] 
 /** Timeline moments only the montage shows. */
 export const OFF_CAMERA = T.c1b;
 
-/** One scene's sounds, timed from its own start (cues from earlier scenes ring on in the video). */
-export function appsCues(scene: AppsScene): Cues[] {
-  const { start, end } = SCENES[scene];
-  const flat: SoundEvent[] = [];
-  const walk = (c: Cues) => {
-    if ('sound' in c) flat.push(c);
-    else c.forEach(walk);
-  };
-  CUES.forEach(walk);
-  return [
-    cue(0.05, pad(end - start - 0.4, { chord: CHORD[scene], attack: 0.5, release: 1, gain: 0.55 })),
-    ...flat
-      .filter((c) => c.at >= start && c.at < end)
-      .map((c) => ({ ...c, at: c.at - start, gain: (c.gain ?? 1) * MIX })),
-  ];
-}
-
-/** Every font the application scenes use. */
-export const APPS_FONTS = [...STORY_FONTS, ...UI_FONTS] as const;
-
-/** A scene of the queries video that shows `scene`'s stretch of this timeline. */
-export function defineAppsScene(scene: AppsScene, id: string, title: string) {
-  const { start, end } = SCENES[scene];
-  return defineSceneComposition({
-    ...phoneDefaults,
-    fonts: [...phoneDefaults.fonts, ...APPS_FONTS],
-    id,
-    seed: id,
-    title,
-    audio: soundtrack(appsCues(scene)),
-    duration: end - start,
-    background: theme.colors.paper,
-    renderer: 'svg',
-    setup: () => createApps(createUi(createCanvasMeasurer())),
-    scene: (t, _ctx, apps) => ({
-      camera: wall.camera(wall.end),
-      world: [wall.room, ...appsWorld(apps, start + t)],
-    }),
-  });
-}
+/** Every font the screens use. */
+export const APPS_FONTS = UI_FONTS;

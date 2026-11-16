@@ -7,19 +7,19 @@ import { frameShot, openCapture, renderAt } from './helpers.js';
  * the cut is invisible.
  */
 const VIDEOS: Record<string, readonly string[]> = {
-  'query-film': [
+  'cowork-film': [
     'query-bubbles',
     'query-crack',
-    'query-lost',
-    'query-criteria',
-    'query-cowork',
-    'query-ask',
-    'query-work',
-    'query-answers',
-    'query-library',
-    'query-proof',
-    'query-week',
-    'query-outro',
+    'cowork-lost',
+    'cowork-criteria',
+    'cowork-intro',
+    'cowork-ask',
+    'cowork-work',
+    'cowork-answers',
+    'cowork-library',
+    'cowork-proof',
+    'cowork-week',
+    'cowork-outro',
   ],
 };
 

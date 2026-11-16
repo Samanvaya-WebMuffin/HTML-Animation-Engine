@@ -6,6 +6,7 @@ export {
   multiply,
   rotate,
   scale,
+  skew,
   translate,
   type Matrix,
 } from './matrix.js';

@@ -4,8 +4,10 @@ import {
   geometryBounds,
   geometryToPath,
   shadowList,
+  type BlurLayer,
   type Geometry,
   type DrawItem,
+  type ImageNode,
   type Paint,
   type Shadows,
   type Stroke,
@@ -14,6 +16,8 @@ import {
   type TextNode,
 } from '@html-animation-engine/core';
 import { fixed, matrixString, type Renderer, type RendererOptions } from './renderer.js';
+import { loadedImage } from './images.js';
+import { layerBounds, layerRegion, type Bounds } from './layers.js';
 import { Slots } from './slots.js';
 import { TextLayouter } from './text.js';
 
@@ -27,10 +31,19 @@ interface SvgSlot {
   readonly content: SVGGElement;
   readonly clipPaths: SVGPathElement[];
   readonly parts?: SvgShapeParts;
+  readonly image?: SVGImageElement;
   readonly lines: SVGTextElement[];
   /** Per text shadow: its group (offset, filter) and one copy of each line. */
   readonly lineShadows: SvgTextShadow[];
   dispose(): void;
+}
+
+/** A blurred layer: a filtered group turned by the blur's angle, and an inner group turned back. */
+interface SvgLayer {
+  readonly outer: SVGGElement;
+  readonly inner: SVGGElement;
+  readonly filter: SVGFilterElement;
+  readonly blur: SVGFEGaussianBlurElement;
 }
 
 interface SvgTextShadow {
@@ -62,6 +75,7 @@ export function createSvgRenderer(host: HTMLElement, options: RendererOptions): 
 
   const signatureOf = (item: DrawItem): string => {
     const { node } = item;
+    if (node.type === 'image') return `image|${item.clips.length}`;
     if (node.type === 'text')
       return `text|${item.clips.length}|${text.layout(node).layout.lines.length}|${shadowSignature(node.shadow)}`;
     return `shape|${item.clips.length}|${shapeSignature(node)}`;
@@ -93,6 +107,21 @@ export function createSvgRenderer(host: HTMLElement, options: RendererOptions): 
     const dispose = () => slotDefs.forEach((def) => def.remove());
 
     const { node } = item;
+    if (node.type === 'image') {
+      const image = el('image');
+      image.setAttribute('preserveAspectRatio', 'none');
+      content.append(image);
+      return {
+        root,
+        signature: signatureOf(item),
+        content,
+        clipPaths,
+        image,
+        lines: [],
+        lineShadows: [],
+        dispose,
+      };
+    }
     if (node.type === 'text') {
       const count = text.layout(node).layout.lines.length;
       const makeLines = (parent: SVGGElement) =>
@@ -145,7 +174,10 @@ export function createSvgRenderer(host: HTMLElement, options: RendererOptions): 
   const updateText = (slot: SvgSlot, node: TextNode, item: DrawItem) => {
     const { layout, baseline } = text.layout(node);
     slot.content.setAttribute('transform', matrixString(item.matrix));
-    const style = `font: ${fontString(node.font)}; letter-spacing: ${node.font.letterSpacing ?? 0}px; white-space: pre`;
+    // geometricPrecision: exact font sizes. Otherwise Chrome reuses a cached font
+    // within ~0.01 px of a scaled size, so a frame's text depended on which sizes
+    // earlier frames had drawn (seen in cowork-film after its overview).
+    const style = `font: ${fontString(node.font)}; letter-spacing: ${node.font.letterSpacing ?? 0}px; white-space: pre; text-rendering: geometricPrecision`;
     const write = (elements: SVGTextElement[], fill: string) =>
       layout.lines.forEach((line, i) => {
         const element = elements[i];
@@ -167,12 +199,73 @@ export function createSvgRenderer(host: HTMLElement, options: RendererOptions): 
     write(slot.lines, node.fill ?? '#000');
   };
 
+  const updateImage = (slot: SvgSlot, node: ImageNode, item: DrawItem) => {
+    const image = slot.image;
+    if (!image) return;
+    const src = loadedImage(node.src).src;
+    if (image.getAttribute('href') !== src) image.setAttribute('href', src);
+    image.setAttribute('x', fixed(-node.width / 2));
+    image.setAttribute('y', fixed(-node.height / 2));
+    image.setAttribute('width', fixed(node.width));
+    image.setAttribute('height', fixed(node.height));
+    image.setAttribute('transform', matrixString(item.matrix));
+    image.setAttribute('opacity', fixed(item.opacity));
+  };
+
+  // Blurred layers: one filtered group per blurring node, reused by id.
+  const layers = new Map<string, SvgLayer>();
+  const layerFor = (id: string): SvgLayer => {
+    let entry = layers.get(id);
+    if (!entry) {
+      const { filter, blur } = createBlurFilter(doc, defs, `${prefix}-layer-${layers.size}-${id}`);
+      filter.setAttribute('filterUnits', 'userSpaceOnUse');
+      const outer = el('g');
+      const inner = el('g');
+      outer.setAttribute('filter', `url(#${filter.id})`);
+      outer.append(inner);
+      entry = { outer, inner, filter, blur };
+      layers.set(id, entry);
+    }
+    return entry;
+  };
+  const updateLayer = (layer: BlurLayer, bounds: Bounds | undefined) => {
+    const entry = layerFor(layer.id);
+    const region = bounds
+      ? layerRegion(bounds, layer, { width, height })
+      : { x: 0, y: 0, width: 0, height: 0 };
+    entry.filter.setAttribute('x', fixed(region.x));
+    entry.filter.setAttribute('y', fixed(region.y));
+    entry.filter.setAttribute('width', fixed(region.width));
+    entry.filter.setAttribute('height', fixed(region.height));
+    entry.blur.setAttribute('stdDeviation', `${fixed(layer.x)} ${fixed(layer.y)}`);
+    entry.outer.setAttribute('transform', `rotate(${fixed(layer.angle)})`);
+    entry.inner.setAttribute('transform', `rotate(${fixed(-layer.angle)})`);
+  };
+
   return {
     kind: 'svg',
     element: svg,
     render(scene: Scene) {
+      const items = flattenScene(scene);
+      const used = new Set<string>();
+      if (items.some((item) => item.layers.length > 0)) {
+        const bounds = layerBounds(items, text);
+        for (const item of items) {
+          for (const layer of item.layers) {
+            if (used.has(layer.id)) continue;
+            used.add(layer.id);
+            updateLayer(layer, bounds.get(layer.id));
+          }
+        }
+      }
+      for (const [id, entry] of layers) {
+        if (used.has(id)) continue;
+        entry.outer.remove();
+        entry.filter.remove();
+        layers.delete(id);
+      }
       slots.sync(
-        flattenScene(scene),
+        items,
         (item) => item.node.id,
         signatureOf,
         build,
@@ -185,6 +278,25 @@ export function createSvgRenderer(host: HTMLElement, options: RendererOptions): 
           if (item.node.type === 'shape' && slot.parts) {
             updateSvgShape(slot.parts, item.node, matrixString(item.matrix), item.opacity);
           } else if (item.node.type === 'text') updateText(slot, item.node, item);
+          else if (item.node.type === 'image') updateImage(slot, item.node, item);
+        },
+        {
+          signature: (item) => item.layers.map((l) => l.id).join('>'),
+          place: (entries) => {
+            const placed = new Set<string>();
+            for (const { slot, item } of entries) {
+              let parent: SVGGElement = layer;
+              for (const l of item.layers) {
+                const entry = layerFor(l.id);
+                if (!placed.has(l.id)) {
+                  parent.append(entry.outer);
+                  placed.add(l.id);
+                }
+                parent = entry.inner;
+              }
+              parent.append(slot.root);
+            }
+          },
         },
       );
     },
