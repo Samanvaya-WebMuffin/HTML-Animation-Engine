@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { exampleNames } from './helpers.js';
 
-test('playground boots with its controls and no console errors', async ({ page }) => {
+test('playground boots on the featured video, with its scenes, controls and no console errors', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
@@ -10,22 +11,19 @@ test('playground boots with its controls and no console errors', async ({ page }
 
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'HTML-Animation-Engine' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Examples' })).toBeAttached();
-  for (const name of ['Play', '◀ Frame', 'Frame ▶']) {
-    await expect(page.getByRole('button', { name })).toBeVisible();
+  await expect(page).toHaveTitle('HTML-Animation-Engine');
+  await expect(page.locator('[data-hae-stage="cowork-film"]')).toBeVisible();
+  // The featured video's scenes, listed on the left; each one jumps to its start.
+  const scenes = page.getByRole('navigation', { name: 'Scenes' }).getByRole('button');
+  await expect(scenes).toHaveCount(10);
+  for (const name of ['Play', '◀ Frame', 'Frame ▶', 'Export 4K']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
   }
   await expect(page.getByRole('slider', { name: 'Scrubber' })).toBeVisible();
   await expect(page.getByLabel('FPS')).toBeVisible();
   await expect(page.getByLabel('Resolution')).toBeVisible();
-
-  const exampleCount = await page
-    .getByRole('navigation', { name: 'Examples' })
-    .locator('a')
-    .count();
-  if (exampleCount === 0) {
-    await expect(page.getByText('No examples yet.')).toBeVisible();
-  }
+  await scenes.nth(2).click();
+  await expect(scenes.nth(2)).toHaveAttribute('aria-current', 'true');
   expect(errors).toEqual([]);
 });
 
@@ -33,9 +31,8 @@ test('plays examples, and reduced motion only shows key moments', async ({ page 
   await page.goto('/?example=shape-morph&fps=30');
   const stage = page.locator('[data-hae-stage="shape-morph"]');
   await expect(stage).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Examples' }).locator('a')).toHaveCount(
-    exampleNames().length,
-  );
+  // A single composition has no scene list.
+  await expect(page.locator('#scene-panel')).toBeHidden();
 
   await page.getByRole('button', { name: 'Frame ▶' }).click();
   await expect(page.locator('#timecode')).toHaveText(/^0\.033 s · 1 \//);

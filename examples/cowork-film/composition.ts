@@ -6,38 +6,21 @@ import ask from '../cowork-ask/composition.js';
 import criteria from '../cowork-criteria/composition.js';
 import intro from '../cowork-intro/composition.js';
 import library from '../cowork-library/composition.js';
-import lost from '../cowork-lost/composition.js';
 import outro from '../cowork-outro/composition.js';
+import pain from '../cowork-pain/composition.js';
 import proof from '../cowork-proof/composition.js';
-import crack from '../query-crack/composition.js';
-import queries from '../query-bubbles/composition.js';
 import week from '../cowork-week/composition.js';
 import work from '../cowork-work/composition.js';
 import type { theme } from '../index.js';
 import { bass, cue, hat, keys, kick, rim, soundtrack } from '../sounds.js';
 
-const SCENES = [
-  queries,
-  crack,
-  lost,
-  criteria,
-  intro,
-  ask,
-  work,
-  answers,
-  library,
-  proof,
-  week,
-  outro,
-];
+const SCENES = [pain, criteria, intro, ask, work, answers, library, proof, week, outro];
 const DURATION = SCENES.reduce((sum, s) => sum + s.duration, 0);
 const SYNTH = tempo({ bpm: BPM / 2 });
 const db = (x: number) => 10 ** (x / 20);
 
 /** Each scene's chord, matching the pads under it. */
 const CHORDS: readonly (keyof typeof theme.sound.chords)[] = [
-  'shadow',
-  'shadow',
   'shadow',
   'lift',
   'home',
@@ -81,18 +64,16 @@ const PUNCHY: Pattern = { ...LOUDER, rim: db(5), four: true, fatRim: true };
 const DRIVING: Pattern = { ...PUNCHY, hat: db(3), busyHats: true };
 /** The pattern under each scene: louder, punchy, driving, punchy, louder. */
 const PATTERNS: readonly Pattern[] = [
-  LOUDER, // 1 Queries pile up
-  LOUDER, // 2 The wall breaks
-  LOUDER, // 3 Knowledge gets lost
-  PUNCHY, // 4 What AI should do
-  PUNCHY, // 5 Introducing Cowork
-  PUNCHY, // 6 The ask
-  DRIVING, // 7 The work
-  DRIVING, // 8 The answers
-  DRIVING, // 9 The library
-  DRIVING, // 10 In use
-  PUNCHY, // 11 A week, condensed
-  LOUDER, // 12 Join the waitlist
+  LOUDER, // 1 The pain point
+  PUNCHY, // 2 Buying criteria
+  PUNCHY, // 3 Product introduction
+  PUNCHY, // 4 The ask
+  DRIVING, // 5 The work
+  DRIVING, // 6 The answers
+  DRIVING, // 7 The library
+  DRIVING, // 8 Social validation
+  PUNCHY, // 9 A week, condensed
+  LOUDER, // 10 Join the waitlist
 ];
 /** The synth is one part for the whole film: the same sound and level throughout. */
 const SYNTH_LEVEL = { bass: db(3), keys: db(3) } as const;
@@ -144,9 +125,9 @@ const music: Soundtrack = soundtrack([
 ]);
 
 /**
- * The Cowork film: the queries video's opening (the screen fills with
- * messages, cracks and falls away), then ten scenes on the mood board, each
- * a window of one board timeline. Every cut is pixel-identical.
+ * The Cowork film: ten scenes, as in the script, each a window of one board
+ * timeline (the first with the opening's paper wall over it). Every cut is
+ * pixel-identical.
  */
 export default defineSequence({
   id: 'cowork-film',

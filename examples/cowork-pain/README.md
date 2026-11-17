@@ -1,0 +1,1 @@
+Scene 1 of the Cowork film, the pain point: the opening line, the pinboard filling and flooding into a wall of paper, "is lost", the wall breaking and the board left with gaps, then an hour of searching (SVG + canvas).

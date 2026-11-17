@@ -51,6 +51,9 @@ const palette = {
   /** Alarm red: only for what is lost (the pinboard's question marks). */
   red: '#e5383b',
   redSoft: '#ffb3b0',
+  /** Coral: the words "is lost" in the opening line (warm, readable on Cloud). */
+  coral: '#f0533f',
+  coralSoft: '#ffc2b8',
   /** A clock running out: go, hurry, late. */
   go: '#22b45a',
   hurry: '#f28c18',
@@ -132,7 +135,7 @@ const components = {
   message: { bg: p.graphite, fg: p.cloud, unread: p.rose500 },
   confidence: { bg: p.sage100, fg: p.sage700, dot: p.sage500 },
   /** What is lost: red question marks where knowledge used to be. */
-  lost: { mark: p.red, glow: p.redSoft },
+  lost: { mark: p.red, glow: p.redSoft, coral: p.coral, coralGlow: p.coralSoft },
   /** A clock running out, start to end (mixed in OKLCH). */
   urgency: { start: p.go, middle: p.hurry, end: p.red },
   /** The Cowork mark: knowledge, people, insight and outcomes, together on a violet tile. */

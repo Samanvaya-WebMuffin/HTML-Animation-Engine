@@ -8,9 +8,7 @@ import { frameShot, openCapture, renderAt } from './helpers.js';
  */
 const VIDEOS: Record<string, readonly string[]> = {
   'cowork-film': [
-    'query-bubbles',
-    'query-crack',
-    'cowork-lost',
+    'cowork-pain',
     'cowork-criteria',
     'cowork-intro',
     'cowork-ask',

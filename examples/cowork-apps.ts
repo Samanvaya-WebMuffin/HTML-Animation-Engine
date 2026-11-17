@@ -32,7 +32,7 @@ import {
 } from '@html-animation-engine/core';
 import { elevationShadows } from '@html-animation-engine/renderers';
 import { SFX_DIV, beats, gridTimes, onGrid } from './cowork-beat.js';
-import { C, R, lighting, look } from './cowork-look.js';
+import { C, R, lighting, look, tone, type Meaning } from './cowork-look.js';
 import { phoneDefaults } from './index.js';
 import {
   F,
@@ -85,11 +85,77 @@ const CX = phoneDefaults.width / 2;
 /** Where each scene starts and ends on the timeline. */
 // The timeline starts on a beat of the film (`cowork-beat.ts`), so its
 // sixteenths are the film's: every moment below is moved onto them.
+
+/**
+ * Holds written into the timeline so each story beat can be read: at each
+ * settled moment (`at`, in the timeline as first written) the screens take
+ * `beats` longer, while the hints explain what is on them. Everything
+ * written at or after a hold comes that much later (`stretch`); motion that
+ * spans a hold (the elapsed clock racing, a spinner) simply takes longer.
+ * Each product scene adds exactly what makes it 30 beats in the film.
+ */
+export const HOLDS: readonly { readonly at: number; readonly beats: number }[] = [
+  // The ask (+12)
+  { at: 1.8, beats: 3 },
+  { at: 3.2, beats: 3 },
+  { at: 5.8, beats: 2 },
+  { at: 6.0, beats: 2 },
+  { at: 8.5, beats: 2 },
+  // The work (+13)
+  { at: 9.7, beats: 3 },
+  { at: 9.9, beats: 2 },
+  { at: 10.1, beats: 2 },
+  { at: 10.42, beats: 2 },
+  { at: 11.6, beats: 1 },
+  { at: 14.25, beats: 2 },
+  { at: 15.1, beats: 1 },
+  // The answers (+12)
+  { at: 18.4, beats: 2.5 },
+  { at: 19.0, beats: 1 },
+  { at: 20.45, beats: 2 },
+  { at: 21.6, beats: 2 },
+  { at: 23.3, beats: 1.5 },
+  { at: 23.9, beats: 1.5 },
+  { at: 24.5, beats: 1.5 },
+  // The library (+9)
+  { at: 25.8, beats: 1.5 },
+  { at: 27.0, beats: 1 },
+  { at: 28.95, beats: 1.5 },
+  { at: 29.8, beats: 1.5 },
+  { at: 32.4, beats: 1.5 },
+  { at: 32.6, beats: 1 },
+  { at: 33.4, beats: 1 },
+];
+/** A time as first written, moved past every hold at or before it. */
+export function stretch(t: number): number {
+  let s = t;
+  for (const h of HOLDS) if (t >= h.at) s += beats(h.beats);
+  return s;
+}
+/** Hold `k` in the stretched timeline: when it starts and ends. */
+export function holdWindow(k: number): { start: number; end: number } {
+  const h = HOLDS[k];
+  if (!h) return { start: 0, end: 0 };
+  const end = stretch(h.at);
+  return { start: end - beats(h.beats), end };
+}
+/** Every number in a table of written times, stretched past the holds. */
+function stretchAll<V>(table: V): V {
+  const walk = (value: unknown): unknown => {
+    if (typeof value === 'number') return Number.isFinite(value) ? stretch(value) : value;
+    if (Array.isArray(value)) return value.map(walk);
+    if (value && typeof value === 'object')
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, walk(v)]));
+    return value;
+  };
+  return walk(table) as V;
+}
+
 export const SCENES = {
-  ask: { start: 0, end: beats(16) },
-  work: { start: beats(16), end: beats(30) },
-  answers: { start: beats(30), end: beats(45) },
-  library: { start: beats(45), end: beats(63) },
+  ask: { start: 0, end: stretch(beats(16)) },
+  work: { start: stretch(beats(16)), end: stretch(beats(30)) },
+  answers: { start: stretch(beats(30)), end: stretch(beats(45)) },
+  library: { start: stretch(beats(45)), end: stretch(beats(63)) },
 } as const;
 export type AppsScene = keyof typeof SCENES;
 
@@ -124,7 +190,7 @@ const T_WRITTEN = {
   // B2: next quarter, one refresh, version 2, and another team builds on it.
   b2: { flip: 31.3, cursor: 31.35, refresh: 31.85, v2: 32.45, ask: 32.75 },
 } as const;
-const T = gridTimes(T_WRITTEN);
+const T = gridTimes(stretchAll(T_WRITTEN));
 
 /** Captions: each phrase arrives at its time, and the whole line leaves at `out`. */
 const CAPTIONS_WRITTEN: readonly {
@@ -167,8 +233,8 @@ const CAPTIONS_WRITTEN: readonly {
 /** Each caption arrives and leaves on a sixteenth. */
 export const CAPTIONS = CAPTIONS_WRITTEN.map((c) => ({
   ...c,
-  at: c.at.map((t) => onGrid(t)),
-  out: onGrid(c.out),
+  at: c.at.map((t) => onGrid(stretch(t))),
+  out: onGrid(stretch(c.out)),
 }));
 
 // ---------------------------------------------------------------------------
@@ -199,7 +265,11 @@ const MOVES_WRITTEN: readonly { to: number; at: number; duration: number }[] = [
   { to: DESK.a, at: 30.65, duration: 0.72 },
 ];
 /** Each move starts and lands on a sixteenth. */
-const MOVES = MOVES_WRITTEN.map((m) => ({ ...m, at: onGrid(m.at), duration: onGrid(m.duration) }));
+const MOVES = MOVES_WRITTEN.map((m) => ({
+  ...m,
+  at: onGrid(stretch(m.at)),
+  duration: onGrid(m.duration),
+}));
 
 /**
  * Which desk is in focus at `t` (0 = the rep, 1 = the COO, 2 = HR and intern),
@@ -571,19 +641,32 @@ export const DOCK_ICON = { x: 54, y: DOCK.y + DOCK.h / 2, size: 40 } as const;
 const ANSWER_C =
   "You approved *8.5%* for Arden Logistics' three-year renewal. The deal desk signed it off on 12 May, and the customer confirmed it in Teams the next day.";
 
-export function stationC(ui: Ui, t: number): SceneNode[] {
+/**
+ * The rep's window growing out of the tile (centred on it), as an app opens
+ * from its icon: its outline (window-local) and how far it is open (0–1).
+ */
+export function windowOpening(t: number): {
+  open: number;
+  shape: { cx: number; cy: number; w: number; h: number; r: number };
+} {
   const open = progress(t, T.intro.open, T.intro.openDur, easing.enter);
+  const tileY = 512 - WIN.top;
+  return {
+    open,
+    shape: {
+      cx: WIN.w / 2,
+      cy: lerp(tileY, WIN.h / 2, open),
+      w: lerp(200, WIN.w, open),
+      h: lerp(200, WIN.h, open),
+      r: lerp(50, R.card, open),
+    },
+  };
+}
+
+export function stationC(ui: Ui, t: number): SceneNode[] {
+  const { open, shape } = windowOpening(t);
   if (open <= 0) return [];
   const left = DESK.c - WIN.w / 2;
-  // The window grows out of the tile (centred on it), as an app opens from its icon.
-  const tileY = 512 - WIN.top;
-  const shape = {
-    cx: WIN.w / 2,
-    cy: lerp(tileY, WIN.h / 2, open),
-    w: lerp(200, WIN.w, open),
-    h: lerp(200, WIN.h, open),
-    r: lerp(50, 24, open),
-  };
   const kids: (SceneNode | null)[] = [];
 
   // Header
@@ -744,7 +827,7 @@ function sheetLayout(ui: Ui) {
   const q = layoutText(Q.c, F.body, { measurer: ui.measurer, maxWidth: 440 });
   const y0 = LIST.top + 22 + q.height + 20 + 26;
   const para = layoutText(plain(ANSWER_C), F.body, { measurer: ui.measurer, maxWidth: 576 });
-  return { chip: { x: 32, y: y0 + 34 + para.height + 16 } };
+  return { y0, chip: { x: 32, y: y0 + 34 + para.height + 16 } };
 }
 
 /** Where the HR head's answer starts (window-local). */
@@ -2067,6 +2150,485 @@ function linkPaneD(ui: Ui, t: number, w: number, swap: number): SceneNode[] {
 }
 
 // ---------------------------------------------------------------------------
+// Hints: what each part of a screen is, while the timeline holds on it
+// ---------------------------------------------------------------------------
+
+interface Box {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+interface Hint {
+  /** When it is on screen, in the timeline as first written (the holds inside it add to it). */
+  readonly from: number;
+  readonly until: number;
+  readonly desk: 0 | 1 | 2;
+  /** What it points at (window-local). */
+  readonly target: (ui: Ui) => Box;
+  readonly side: 'above' | 'below';
+  readonly align?: 'left' | 'center' | 'right';
+  /** Where the callout sits instead (window-local top left), for hints shown together. */
+  readonly place?: (ui: Ui) => { x: number; y: number };
+  readonly text: string;
+  readonly sub?: string;
+  readonly meaning: Meaning;
+  /** Dim the rest of the window (off when hints share a screen). */
+  readonly dim?: boolean;
+}
+
+const HINTS: readonly Hint[] = [
+  // The ask: the rep, the COO, the HR head and the intern.
+  {
+    from: 1.75,
+    until: 2.6,
+    desk: 0,
+    target: () => ({ x: DOCK.x, y: DOCK.y, w: DOCK.w, h: DOCK.h }),
+    side: 'above',
+    align: 'left',
+    text: 'Ask from your inbox',
+    sub: 'no new app to open',
+    meaning: 'brand',
+  },
+  {
+    from: 3.15,
+    until: 3.25,
+    desk: 0,
+    target: (ui) => ({ x: 20, y: sheetLayout(ui).y0 - 6, w: 600, h: 120 }),
+    side: 'below',
+    align: 'left',
+    text: 'Searches everything you can access',
+    sub: 'email · chats · files',
+    meaning: 'knowledge',
+  },
+  {
+    from: 5.5,
+    until: 5.8,
+    desk: 1,
+    target: () => ({ x: LEVEL.x - 4, y: LEVEL.y - 4, w: LEVEL.seg * 3 + 8, h: 48 }),
+    side: 'below',
+    align: 'left',
+    text: 'Pick the depth',
+    sub: 'level 1 quick · level 3 deep',
+    meaning: 'brand',
+  },
+  {
+    from: 5.95,
+    until: 6.12,
+    desk: 1,
+    target: () => ({ x: LEVEL.x - 4, y: LEVEL.y - 4, w: LEVEL.seg * 3 + 8, h: 48 }),
+    side: 'below',
+    align: 'left',
+    text: 'Level 3 · deep analysis',
+    sub: '15–100 min · weeks of work',
+    meaning: 'brand',
+  },
+  {
+    from: 6.9,
+    until: 8.5,
+    desk: 2,
+    target: () => ({ x: 0, y: 0, w: WIN.w, h: 64 }),
+    side: 'below',
+    align: 'left',
+    text: 'HR head · pay data access',
+    meaning: 'people',
+    dim: false,
+  },
+  {
+    from: 7.0,
+    until: 8.5,
+    desk: 2,
+    target: () => ({ x: 0, y: LOW, w: WIN.w, h: 64 }),
+    side: 'below',
+    align: 'left',
+    text: 'Intern · no pay data',
+    meaning: 'friction',
+    dim: false,
+  },
+  // The work: the plan, the quick answer, the deep run.
+  {
+    from: 9.3,
+    until: 9.7,
+    desk: 1,
+    target: (ui) => ({ x: PLAN_CARD.x, y: planLayout(ui).cardY, w: PLAN_CARD.w, h: PLAN_CARD.h }),
+    side: 'below',
+    align: 'left',
+    text: 'It plans first',
+    sub: 'who · what it measures · steps',
+    meaning: 'brand',
+  },
+  {
+    from: 9.7,
+    until: 9.9,
+    desk: 1,
+    target: (ui) => ({ x: PLAN_CARD.x + 12, y: planLayout(ui).cardY + 214, w: 568, h: 150 }),
+    side: 'below',
+    align: 'left',
+    text: 'The steps it will take',
+    meaning: 'brand',
+  },
+  {
+    from: 10.06,
+    until: 10.3,
+    desk: 1,
+    target: (ui) => {
+      const { save } = planLayout(ui);
+      return { x: save.x - 6, y: save.y - 6, w: 210, h: 34 };
+    },
+    side: 'above',
+    align: 'left',
+    text: 'Kept for next time',
+    meaning: 'outcome',
+  },
+  {
+    from: 10.3,
+    until: 10.42,
+    desk: 1,
+    target: (ui) => {
+      const { go } = planLayout(ui);
+      return { x: go.x - 4, y: go.y - 4, w: buttonWidth(ui, 'Go ahead') + 8, h: 52 };
+    },
+    side: 'above',
+    align: 'right',
+    text: 'Nothing runs until you say',
+    meaning: 'brand',
+  },
+  {
+    from: 11.5,
+    until: 13.0,
+    desk: 0,
+    target: (ui) => ({ x: 24, y: sheetLayout(ui).y0 - 4, w: 320, h: 28 }),
+    side: 'below',
+    align: 'left',
+    place: () => ({ x: 24, y: 560 }),
+    dim: false,
+    text: 'Answered in 6 s',
+    meaning: 'time',
+  },
+  {
+    from: 11.5,
+    until: 13.0,
+    desk: 0,
+    target: (ui) => ({ x: 28, y: sheetLayout(ui).chip.y - 4, w: 370, h: 40 }),
+    side: 'below',
+    align: 'left',
+    place: () => ({ x: 24, y: 630 }),
+    dim: false,
+    text: 'Every claim cited',
+    meaning: 'knowledge',
+  },
+  {
+    from: 11.5,
+    until: 13.0,
+    desk: 0,
+    target: (ui) => ({ x: 28, y: sheetLayout(ui).chip.y + 42, w: 176, h: 36 }),
+    side: 'below',
+    align: 'left',
+    place: () => ({ x: 24, y: 700 }),
+    dim: false,
+    text: 'Two sources agree',
+    meaning: 'outcome',
+  },
+  {
+    from: 13.75,
+    until: 14.25,
+    desk: 1,
+    target: () => ({ x: 16, y: 190, w: 608, h: 320 }),
+    side: 'below',
+    align: 'left',
+    text: '4 researchers at once',
+    sub: 'logs · emails · contracts · chats',
+    meaning: 'knowledge',
+  },
+  {
+    from: 14.25,
+    until: 15.1,
+    desk: 1,
+    target: () => ({ x: 470, y: 72, w: 150, h: 66 }),
+    side: 'below',
+    align: 'right',
+    text: '18 minutes of research',
+    sub: 'while you do other work',
+    meaning: 'time',
+  },
+  {
+    from: 15.1,
+    until: 16.25,
+    desk: 1,
+    target: () => ({ x: 24, y: 526, w: 592, h: 216 }),
+    side: 'below',
+    align: 'left',
+    text: 'Every step checked',
+    meaning: 'outcome',
+  },
+  // The answers: allowed, sourced, the report.
+  {
+    from: 17.3,
+    until: 18.4,
+    desk: 2,
+    target: (ui) => ({ x: 16, y: paneLayout(ui).answerY - 8, w: 608, h: 150 }),
+    side: 'below',
+    align: 'left',
+    text: 'Answered from pay policy',
+    sub: 'the HR head may see it',
+    meaning: 'people',
+  },
+  {
+    from: 18.4,
+    until: 19.0,
+    desk: 2,
+    target: (ui) => ({ x: 16, y: LOW + paneLayout(ui).answerY - 8, w: 608, h: 100 }),
+    side: 'below',
+    align: 'left',
+    text: "Nothing they can't see",
+    sub: "Cowork follows your company's access",
+    meaning: 'friction',
+  },
+  {
+    from: 20.0,
+    until: 20.45,
+    desk: 0,
+    target: (ui) => {
+      const { chip } = sheetLayout(ui);
+      return { x: chip.x - 4, y: chip.y - 4, w: 190, h: 40 };
+    },
+    side: 'below',
+    align: 'left',
+    text: 'Open any source',
+    meaning: 'knowledge',
+  },
+  {
+    from: 21.1,
+    until: 22.1,
+    desk: 0,
+    target: () => ({ x: 24, y: LIST.top + 222, w: 584, h: 64 }),
+    side: 'below',
+    align: 'left',
+    text: 'The exact line it used',
+    sub: 'deal desk · 12 May',
+    meaning: 'outcome',
+  },
+  {
+    from: 23.0,
+    until: 23.3,
+    desk: 1,
+    target: () => ({ x: 20, y: 256, w: 600, h: 120 }),
+    side: 'below',
+    align: 'left',
+    text: 'The answer first',
+    meaning: 'brand',
+  },
+  {
+    from: 23.3,
+    until: 23.9,
+    desk: 1,
+    target: () => ({ x: 20, y: 392, w: 600, h: 270 }),
+    side: 'below',
+    align: 'left',
+    text: 'Built from 38 sources',
+    meaning: 'knowledge',
+  },
+  {
+    from: 23.9,
+    until: 24.5,
+    desk: 1,
+    target: () => ({ x: 470, y: 72, w: 150, h: 66 }),
+    side: 'below',
+    align: 'right',
+    text: 'Done in 18:40',
+    meaning: 'outcome',
+  },
+  // The library: kept, shared, protected, building.
+  {
+    from: 25.6,
+    until: 25.8,
+    desk: 1,
+    target: () => ({ x: LIB.x, y: LIB.top, w: LIB.w, h: LIB.row - 8 }),
+    side: 'below',
+    align: 'left',
+    text: 'Saved to Reports',
+    sub: 'the whole company can build on it',
+    meaning: 'outcome',
+  },
+  {
+    from: 26.7,
+    until: 27.9,
+    desk: 1,
+    target: () => ({ x: 448, y: LIB.top + 16, w: 84, h: 44 }),
+    side: 'below',
+    align: 'right',
+    text: 'Shared with the CFO',
+    sub: 'access stays as set',
+    meaning: 'people',
+  },
+  {
+    from: 28.6,
+    until: 29.05,
+    desk: 2,
+    target: () => ({ x: 56, y: 168, w: 170, h: 44 }),
+    side: 'below',
+    align: 'left',
+    text: 'A shared link…',
+    meaning: 'brand',
+  },
+  {
+    from: 29.3,
+    until: 30.6,
+    desk: 2,
+    target: () => ({ x: WIN.w / 2 - 230, y: 290, w: 460, h: 270 }),
+    side: 'below',
+    align: 'center',
+    text: '…opens nothing extra',
+    sub: 'access is checked every time',
+    meaning: 'friction',
+  },
+  {
+    from: 31.9,
+    until: 32.4,
+    desk: 1,
+    target: () => ({ x: REFRESH.x - 20, y: LIB.top + 18, w: 40, h: 40 }),
+    side: 'below',
+    align: 'right',
+    text: 'One click: updated for Q3',
+    meaning: 'time',
+  },
+  {
+    from: 32.5,
+    until: 33.0,
+    desk: 1,
+    target: () => ({ x: 402, y: LIB.top + 22, w: 54, h: 32 }),
+    side: 'above',
+    align: 'right',
+    text: 'Version 2',
+    meaning: 'outcome',
+  },
+  {
+    from: 33.0,
+    until: 34.3,
+    desk: 1,
+    target: () => ({ x: LIB.x + 44, y: LIB.top + LIB.row + 8, w: LIB.w - 44, h: 92 }),
+    side: 'below',
+    align: 'right',
+    text: 'Another team builds on it',
+    meaning: 'people',
+  },
+];
+
+/** When a hint is on screen (stretched timeline). */
+function hintWindow(h: Hint): { from: number; to: number } {
+  return { from: onGrid(stretch(h.from)), to: onGrid(stretch(h.until)) };
+}
+
+/** The callouts' size on screen relative to the window's own type (as the deck shows it, wide). */
+export const HINT_SCALE = 1.5;
+
+/**
+ * The hints on desk `desk` at `t` (window-local): a soft violet ring round
+ * the part being explained, the rest of the window dimmed a little, and a
+ * Cloud callout beside it (a dot in its meaning's colour, a short label, a
+ * lowercase mono line) on a thin leader. `k` scales the callout about its
+ * anchor so it stays the same size on screen however far the camera has
+ * zoomed in.
+ */
+export function hintNodes(
+  ui: Ui,
+  desk: 0 | 1 | 2,
+  t: number,
+  k = 1,
+  /** The part of the window the camera shows (window-local), callouts kept inside it. */
+  view?: { x0: number; x1: number; y0: number; y1: number },
+): SceneNode[] {
+  const nodes: SceneNode[] = [];
+  HINTS.forEach((h, i) => {
+    if (h.desk !== desk) return;
+    const { from, to } = hintWindow(h);
+    const p = progress(t, from, 0.35, easing.enter);
+    const e = progress(t, to, 0.2, easing.exit);
+    const a = p * (1 - e);
+    if (a <= 0) return;
+    const id = `hint${i}`;
+    const b = h.target(ui);
+    const meaning = tone(h.meaning);
+    if (h.dim !== false) {
+      const veil = withAlpha(UI.ink, 0.07 * a);
+      const [x0, y0, x1, y1] = [b.x - 8, b.y - 8, b.x + b.w + 8, b.y + b.h + 8];
+      nodes.push(
+        box(`${id}-dim-t`, 0, 0, WIN.w, Math.max(0, y0), 0, { fill: veil }),
+        box(`${id}-dim-b`, 0, y1, WIN.w, Math.max(0, WIN.h - y1), 0, { fill: veil }),
+        box(`${id}-dim-l`, 0, y0, Math.max(0, x0), y1 - y0, 0, { fill: veil }),
+        box(`${id}-dim-r`, x1, y0, Math.max(0, WIN.w - x1), y1 - y0, 0, { fill: veil }),
+      );
+    }
+    nodes.push(
+      box(`${id}-ring`, b.x - 6, b.y - 6, b.w + 12, b.h + 12, 14, {
+        stroke: { color: withAlpha(C.stroke.focus, a), width: 2.5 },
+        shadow: { x: 0, y: 0, blur: 14, color: withAlpha(C.brand.soft, 0.55 * a) },
+      }),
+    );
+    // The callout: drawn in its own units, scaled by `k` from its top left.
+    const padX = 16;
+    const dotW = 16;
+    const tw = Math.max(ui.measure(h.text, F.bodyStrong), h.sub ? ui.measure(h.sub, F.meta) : 0);
+    const cw = tw + 2 * padX + dotW;
+    const ch = h.sub ? 62 : 42;
+    const [sw, sh] = [cw * k, ch * k];
+    const align = h.align ?? 'left';
+    const gap = 18;
+    const placed = h.place?.(ui);
+    let left = clamp(
+      placed
+        ? placed.x
+        : align === 'left'
+          ? b.x
+          : align === 'right'
+            ? b.x + b.w - sw
+            : b.x + b.w / 2 - sw / 2,
+      10,
+      WIN.w - 10 - sw,
+    );
+    let top = placed ? placed.y : h.side === 'above' ? b.y - 6 - gap - sh : b.y + b.h + 6 + gap;
+    if (view) {
+      left = clamp(left, view.x0 + 10, view.x1 - 10 - sw);
+      top = clamp(top, view.y0 + 8, view.y1 - 10 - sh);
+    }
+    // The leader: from the ring's edge to the callout's nearest edge.
+    const below = top > b.y + b.h / 2;
+    const ringY = below ? b.y + b.h + 6 : b.y - 6;
+    const cardY = below ? top : top + sh;
+    const lx = clamp(left + Math.min(sw / 2, 40 * k), b.x + 10, b.x + b.w - 10);
+    const cx = clamp(lx, left + 14 * k, left + sw - 14 * k);
+    nodes.push(
+      shapeNode(`${id}-lead`, {
+        geometry: pathGeometry(`M${lx} ${ringY}L${cx} ${cardY}`),
+        stroke: { color: withAlpha(C.stroke.focus, a), width: 1.5 * Math.max(k, 1), cap: 'round' },
+      }),
+      box(`${id}-lead-dot`, lx - 3.5, ringY - 3.5, 7, 7, 3.5, { fill: withAlpha(C.brand.fill, a) }),
+      groupNode(
+        `${id}-card`,
+        [
+          box(`${id}-bg`, 0, 0, cw, ch, 14, {
+            fill: withAlpha(C.surface.paper, 0.97),
+            stroke: { color: C.stroke.hairline, width: 1 },
+            shadow: elevationShadows(lighting, 'mid', { strength: 0.7 }),
+          }),
+          box(`${id}-dot`, padX, 17, 9, 9, 4.5, { fill: meaning.fill }),
+          label(`${id}-t`, h.text, padX + dotW, 9, F.bodyStrong, UI.text),
+          ...(h.sub ? [label(`${id}-s`, h.sub, padX + dotW, 36, F.meta, UI.faint)] : []),
+        ],
+        {
+          opacity: a,
+          transform: { x: left, y: top + (below ? -8 : 8) * (1 - p), scale: k },
+        },
+      ),
+    );
+  });
+  return nodes;
+}
+
+/** When each hint arrives (stretched timeline): a soft tick for each, on the beat. */
+export const HINT_TIMES: readonly number[] = HINTS.map((h) => hintWindow(h).from);
+
+// ---------------------------------------------------------------------------
 // Shots and highlights: where the film looks inside the screen in focus
 // ---------------------------------------------------------------------------
 
@@ -2079,7 +2641,7 @@ export interface ShotView {
   readonly y: number;
   readonly zoom: number;
 }
-const WIDE: ShotView = { x: WIN.w / 2, y: WIN.h / 2, zoom: 1 };
+export const WIDE: ShotView = { x: WIN.w / 2, y: WIN.h / 2, zoom: 1 };
 /** A result, shown whole and a little larger. */
 const FULL: ShotView = { x: WIN.w / 2, y: WIN.h / 2 - 20, zoom: 1.1 };
 
@@ -2149,7 +2711,7 @@ function direct(ui: Ui): Direction {
   return {
     shots: shots.map((s) => ({
       ...s,
-      at: onGrid(s.at),
+      at: onGrid(stretch(s.at)),
       ...(s.duration ? { duration: onGrid(s.duration) } : {}),
     })),
   };
@@ -2308,6 +2870,10 @@ export function cuesBetween(from: number, to: number, at: number): SoundEvent[] 
     };
   CUES.forEach(walk(true));
   TYPING.forEach(walk(true));
+  // Each hint arriving: a soft, high tick.
+  HINT_TIMES.forEach((at, i) =>
+    walk(true)(cue(at, tick({ degree: 7 + (i % 3), gain: 0.16, pan: 0.15 }))),
+  );
   return flat
     .filter((c) => c.at >= from && c.at < to)
     .map((c) => ({ ...c, at: c.at - from + at, gain: (c.gain ?? 1) * MIX }));

@@ -74,7 +74,11 @@ function showScenes(marks: readonly SceneMark[], duration: number): void {
       );
       button.addEventListener('click', () => {
         if (!player) return;
-        player.seek(timeToFrame(mark.start, player.state.fps), performance.now());
+        // The scene's first frame: the first one at or after its start (beat-grid
+        // starts rarely fall exactly on a frame).
+        const fps = player.state.fps;
+        const first = timeToFrame(mark.start, fps);
+        player.seek(first / fps < mark.start - 1e-9 ? first + 1 : first, performance.now());
       });
       return button;
     }),

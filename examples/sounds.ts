@@ -165,6 +165,91 @@ export function bell(options: HitOptions & { octave?: number } = {}): Sound {
   };
 }
 
+/**
+ * A reveal with no hit in it, about half a second long: a quick rising
+ * sparkle of soft bells up the scale (panned left to right), a detuned
+ * shimmer chord swelling underneath with its filter opening, and a breath
+ * of high air. For a name appearing (the Cowork lockup).
+ */
+export function magic(options: { gain?: number; octave?: number } = {}): Sound {
+  const { gain = 1.25, octave = 3 } = options;
+  const sparkle = [0, 1, 2, 3, 4, 5, 7].map((degree, k): Sound => ({
+    type: 'tone',
+    wave: 'sine',
+    freq: note(degree, octave),
+    fm: { ratio: 3, index: 0.9, decay: 0.12 },
+    envelope: { attack: 0.004, decay: 0.55 - k * 0.03 },
+    gain: level('bell') * (0.55 + 0.08 * k),
+    pan: -0.5 + (k / 6) * 1,
+    delay: k * 0.05,
+    send: 0.6,
+  }));
+  const shimmer = chord('home', octave - 1).map((freq): Sound => ({
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    unison: { voices: 4, detune: 14, width: 1 },
+    filter: { type: 'lowpass', freq: 700, q: 0.9, sweep: { to: 5200, time: 0.4 } },
+    envelope: { attack: 0.16, hold: 0.12, decay: 0.55 },
+    gain: db(tokens.levels.keys - 2),
+    send: 0.5,
+  }));
+  const air: Sound = {
+    type: 'noise',
+    color: 'pink',
+    stereo: true,
+    filter: { type: 'highpass', freq: 3500, sweep: { to: 9000, time: 0.45 } },
+    envelope: { attack: 0.22, decay: 0.35 },
+    gain: db(tokens.levels.whoosh - 22),
+    send: 0.4,
+  };
+  return layer([...sparkle, ...shimmer, air], { gain });
+}
+
+/**
+ * A synth string swell, about a second: violins high on the home chord
+ * (detuned saws, a small bowed scoop into pitch, the filter opening as
+ * they swell) over a cello and bass root in two low octaves, with a faint
+ * touch of bow noise. For the Cowork name appearing.
+ */
+export function strings(options: { gain?: number } = {}): Sound {
+  const { gain = 1 } = options;
+  const violins = chord('home', 3).map((freq, k): Sound => ({
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    pitch: { from: 0.985, time: 0.06 },
+    unison: { voices: 5, detune: 10, width: 1 },
+    filter: { type: 'lowpass', freq: 1800, q: 0.8, sweep: { to: 4200, time: 0.35 } },
+    envelope: { attack: 0.12, hold: 0.28, decay: 0.95 },
+    gain: db(tokens.levels.keys + 1),
+    pan: (k - 1) * 0.35,
+    delay: k * 0.015,
+    send: 0.55,
+  }));
+  const low = [note(0, 0), note(0, 1), note(4, 1)].map((freq, k): Sound => ({
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    pitch: { from: 0.99, time: 0.08 },
+    unison: { voices: 3, detune: 6, width: 0.5 },
+    filter: { type: 'lowpass', freq: k === 0 ? 420 : 750, q: 0.7 },
+    envelope: { attack: 0.16, hold: 0.3, decay: 1.0 },
+    gain: db(tokens.levels.bass + (k === 0 ? 3 : 0)),
+    send: 0.35,
+  }));
+  const bow: Sound = {
+    type: 'noise',
+    color: 'pink',
+    stereo: true,
+    filter: { type: 'bandpass', freq: 2600, q: 0.9 },
+    envelope: { attack: 0.1, decay: 0.3 },
+    gain: db(tokens.levels.whoosh - 26),
+    send: 0.3,
+  };
+  return layer([...violins, ...low, bow], { gain });
+}
+
 /** Tiny pitched click (typing, digits, small repeated events). */
 export function tick(options: HitOptions = {}): Sound {
   const { degree = 0, gain = 1, pan = 0 } = options;

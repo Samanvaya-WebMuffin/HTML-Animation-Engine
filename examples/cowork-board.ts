@@ -202,13 +202,23 @@ export function threads(
         d: roundedRoute(route, 60),
         color: withAlpha(tn.fill, 0.45),
         width,
-        start: flight ? start - 0.3 : 0,
+        start: flight ? start - 0.6 : 0,
         duration: flight ? 0.7 : 0.001,
         ease: flight ? easing.camera : easing.linear,
         dots: [0.15, 0.5, 0.85],
         dotColor: tn.fill,
-        pulses: [{ at: flight ? start : 0, duration, color: tn.fill, size: 2 * width }],
-        pulseEase: easing.camera,
+        // One glowing pulse runs the thread once, unhurried: it sets off just
+        // before the camera and arrives a little after it has landed.
+        pulses: [
+          {
+            at: flight ? start - 0.35 : 0,
+            duration: flight ? duration + 0.85 : duration,
+            color: tn.fill,
+            size: 2 * width,
+          },
+        ],
+        pulseEase: easing.drift,
+        glow: 1,
       })(flight ? t : 0.6 + 0.25 * random('thread', k)),
     ];
   });
@@ -266,11 +276,6 @@ export interface Board {
 
 /** The board's headlines, each on its card (title, then serif subtext). */
 const CARDS: Readonly<Record<string, HeadSpec>> = {
-  lostA: {
-    title: 'Most of the knowledge your company produces, is _lost._',
-    accent2: C.lost.mark,
-    breaks: [4, 7],
-  },
   lostB: {
     title: 'But every *hour* they spend tracking it down',
     sub: 'is an *hour* away from the work that needs their expertise.',
@@ -788,25 +793,55 @@ function crackNodes(
   return nodes;
 }
 
-/** Choreography of the lost-knowledge group, in seconds of its own time. */
+/**
+ * The film's opening (scene 1, the pain point, twenty beats), in seconds of
+ * the film: the line arrives at the centre; as the board's pieces start to
+ * appear and the camera moves down, the line breaks into grain and drifts
+ * away; the board fills and a flood of paper covers everything into a
+ * wall; the wall goes out of focus and "Most of it is lost." is printed on
+ * it; the wall (with the line) cracks and breaks onto bare ground. The
+ * paper wall is drawn by `cowork-wall.ts`; the pinboard under it is this
+ * file's `lost` group, whose local time is the film's.
+ */
+export const OPENING = {
+  text: 0,
+  /** The line breaks into grain and drifts away. */
+  dissolve: { start: beats(4.5), duration: beats(1.5) },
+  pan: { start: beats(4.5), duration: beats(1.25) },
+  fill: beats(4.5),
+  flood: { start: beats(5.25), end: beats(7.5) },
+  blur: { start: beats(7.5), duration: beats(0.5) },
+  /** "Most of it is lost." printed on the wall. */
+  lost: beats(8),
+  loosen: beats(8.75),
+  crack: { start: beats(9.25), duration: 0.4 },
+  break: beats(10),
+} as const;
+
+/** How many pinboard pieces are up from the first frame (the rest land as the camera arrives). */
+const PRE_LANDED = 6;
+
+/** Choreography of the lost-knowledge group, in seconds of the film. */
 const LOST_WRITTEN = {
-  /** Piece k lands at pieces.start + k × pieces.each, its pin pressed in just after. */
-  pieces: { start: 0.15, each: 0.075, drop: 0.45, pin: 0.16 },
-  headA: 0.55,
-  /** The loss spreads from the lower right. */
-  loss: { start: 2.0, duration: 1.6 },
-  /** Pieces tear free and fall (each piece's `falls`); a red question mark is left in each gap. */
-  fall: 0.95,
+  /** Piece k (from `PRE_LANDED` on) lands at pieces.start + (k − PRE_LANDED) × pieces.each, its pin pressed in just after. */
+  pieces: { start: OPENING.fill, each: 0.075, drop: 0.45, pin: 0.16 },
+  /** The board's colour drains from the lower right once the wall has broken. */
+  loss: { start: OPENING.break, duration: 1.6 },
+  /** Pieces tear free and fall as the wall breaks (`fallAt`); a red question mark is left in each gap. */
+  fall: 0.75,
   /** The question mark, this long after its piece starts to fall. */
   mark: 0.3,
   /** The second line: the board goes soft behind an hour of searching. */
-  b: { start: 4.4, search: 1.0, each: 0.3, ring: 1.0, sweep: 2.6, people: 1.5 },
+  b: { start: beats(10.5), search: 0.9, each: 0.3, ring: 0.9, sweep: 2.6 },
 } as const;
 /** On the film's beat grid: sixteenths, the landing stagger on thirty-seconds. */
 export const LOST = {
   ...gridTimes(LOST_WRITTEN),
   pieces: { ...gridTimes(LOST_WRITTEN.pieces), each: onGrid(LOST_WRITTEN.pieces.each, SFX_DIV) },
 };
+/** When piece `k` lands (before the film's first frame for the first few). */
+const landAt = (k: number) =>
+  k < PRE_LANDED ? -1 : LOST.pieces.start + (k - PRE_LANDED) * LOST.pieces.each;
 
 type PieceKind = 'page' | 'chart' | 'sticky' | 'index' | 'notebook';
 interface PieceSpec {
@@ -829,7 +864,10 @@ interface PieceSpec {
   readonly ink?: string;
   readonly pin?: string;
   readonly tape?: { readonly dy: number; readonly w: number; readonly rot: number };
-  /** When it tears free and falls (local time). */
+  /**
+   * Its order in tearing free when the wall breaks (the written times are
+   * squeezed into the half second after the break by `fallAt`).
+   */
   readonly falls?: number;
 }
 
@@ -1056,7 +1094,6 @@ function pieceHeight(s: PieceSpec): number {
 function pinboard(b: Board, o: { x: number; y: number }, lt: number): SceneNode[] {
   const tex = b.paper;
   const B = { x: o.x + 24, y: o.y + 320, w: 672, h: 860 };
-  const appear = progress(lt, 0, 0.5, easing.enter);
   const nodes: SceneNode[] = [
     groupNode(
       'pb-board',
@@ -1083,7 +1120,7 @@ function pinboard(b: Board, o: { x: number; y: number }, lt: number): SceneNode[
           stroke: { color: withAlpha(lighting.shadow, 0.12), width: 1.5 },
         }),
       ],
-      { opacity: clamp(appear * 1.5) },
+      {},
     ),
   ];
   const L = progress(lt, LOST.loss.start, LOST.loss.duration, easing.camera);
@@ -1096,13 +1133,13 @@ function pinboard(b: Board, o: { x: number; y: number }, lt: number): SceneNode[
   const drain = (color: string, l: number) => mixColors(color, C.stroke.hairline, 0.75 * l);
   const pins: SceneNode[] = [];
   PIECES.forEach((s, k) => {
-    const at = LOST.pieces.start + k * LOST.pieces.each;
+    const at = landAt(k);
     const p = progress(lt, at, LOST.pieces.drop, easing.enter);
     if (p <= 0) return;
     const bx = o.x + s.x;
     const by = o.y + s.y;
     const l = loss(bx, by);
-    const f = s.falls === undefined ? 0 : progress(lt, s.falls, LOST.fall, easing.exit);
+    const f = s.falls === undefined ? 0 : progress(lt, fallAt(s.falls), LOST.fall, easing.exit);
     const h = pieceHeight(s);
     const pinPos = { x: bx, y: by - h / 2 + 10 };
     // Landing: held a little off the board, then pressed down. Falling: down and turning, smeared by speed.
@@ -1202,7 +1239,7 @@ function pinboard(b: Board, o: { x: number; y: number }, lt: number): SceneNode[
   // Where knowledge was: a red question mark rises in each gap.
   PIECES.forEach((s) => {
     if (s.falls === undefined) return;
-    const q = progress(lt, s.falls + LOST.mark, 0.5, easing.snap);
+    const q = progress(lt, fallAt(s.falls) + LOST.mark, 0.5, easing.snap);
     if (q <= 0) return;
     const x = o.x + s.x;
     const y = o.y + s.y;
@@ -1239,39 +1276,34 @@ function pinboard(b: Board, o: { x: number; y: number }, lt: number): SceneNode[
 
 /** The pinboard's question marks. */
 const LOST_MARK = face('title', 84, { weight: 600, letterSpacing: 0 });
-/** When each piece tears free (local time of the lost group), in order: for sound. */
+/** When a piece written to fall at `written` (2.15–3.4) tears free: in the 0.4 s after the wall breaks. */
+function fallAt(written: number): number {
+  return onGrid(OPENING.break + 0.05 + (written - 2.15) * 0.32, SFX_DIV);
+}
+/** When each piece that lands during the film lands (film time): for sound. */
+export const LOST_LANDINGS: readonly number[] = PIECES.map((_, k) => landAt(k)).filter(
+  (t) => t >= 0,
+);
+/** When each piece tears free (film time), in order: for sound. */
 export const LOST_FALLS: readonly number[] = PIECES.flatMap((s) =>
-  s.falls === undefined ? [] : [s.falls],
+  s.falls === undefined ? [] : [fallAt(s.falls)],
 ).sort((a, b) => a - b);
 
 function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] {
   const L = b.look;
   const nodes: SceneNode[] = [];
   const B = LOST.b;
-  const soft = progress(lt, B.start, 0.6, easing.camera);
-  const wash = progress(lt, LOST.loss.start, LOST.loss.duration, easing.camera) * (1 - soft);
-  nodes.push(
-    groupNode(
-      'lost-board',
-      pinboard(b, o, lt),
-      soft > 0 ? { blur: 7 * soft, opacity: 1 - 0.45 * soft } : {},
-    ),
-  );
-  if (wash > 0) {
-    nodes.push(
-      shapeNode('lost-wash', {
-        geometry: rect(o.x + 600, o.y + 1000, 760, 760, 380),
-        fill: radialGradient(o.x + 600, o.y + 1000, 380, [
-          withAlpha(C.friction.glow, 0.3 * wash),
-          withAlpha(C.friction.glow, 0),
-        ]),
-      }),
-    );
-  }
-  const outA = progress(lt, B.start, 0.35, easing.exit);
-  if (outA < 1) nodes.push(head(b, 'lostA', o.x + HEAD.x, o.y + HEAD.y, lt - LOST.headA, outA));
+  // The board is only seen before the paper wall covers it; the wall breaks
+  // onto the bare ground, and the line, the searches and the clock hold the
+  // centre of the frame on their own.
+  if (lt < OPENING.flood.end) nodes.push(groupNode('lost-board', pinboard(b, o, lt)));
   if (lt >= B.start) {
-    nodes.push(head(b, 'lostB', o.x + HEAD.x, o.y + HEAD.y, lt - B.start - 0.2));
+    // The line on its card, then the searches beside the clock: one block in the middle of the frame.
+    const card = b.cards['lostB'];
+    const [cardW, cardH] = [card?.width ?? 640, card?.height ?? 220];
+    const top = o.y + (FH - (cardH + HOUR.gap + HOUR.row)) / 2;
+    const row = top + cardH + HOUR.gap;
+    nodes.push(head(b, 'lostB', o.x + (FW - cardW) / 2, top, lt - B.start - 0.2));
     // Searching for an hour: queries that come back empty, the hour running out.
     ['latest pricing deck', 'who approved the discount', 'Arden renewal terms'].forEach((s, k) => {
       const at = B.start + B.search + k * B.each;
@@ -1279,12 +1311,21 @@ function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] 
       if (p <= 0) return;
       const none = progress(lt, at + 0.4, 0.35, easing.snap);
       const w = L.measurer.measure(s, T.small) + 150;
-      const x = o.x + 48 + (k % 2) * 30;
-      const y = o.y + 470 + k * 64;
+      const x = o.x + 84 + (k % 2) * 30;
+      const y = row + 24 + k * 64;
+      // Who is searching: a profile icon left of each question, each person in their own tint.
+      const who = SEARCHERS[k] ?? SEARCHERS[0];
       nodes.push(
         groupNode(
           `search${k}-o`,
           [
+            shapeNode(`search${k}-who`, {
+              geometry: rect(x - 28, y, 40, 40, 20),
+              fill: litFill(lighting, who.fill, { y, height: 40 }, { sheen: 0.2, shade: 0.08 }),
+              stroke: { color: C.surface.paper, width: 2 },
+              shadow: elevationShadows(lighting, 'low'),
+            }),
+            icon(`search${k}-who-i`, 'person', x - 28, y, 20, P.white, 1.8),
             glassPanel(
               `search${k}`,
               x + w / 2,
@@ -1325,10 +1366,10 @@ function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] 
             timeRing(
               'hour',
               o.x + 572,
-              o.y + 520,
+              row + HOUR.clock,
               86,
-              0.97 * sweep,
-              `0:${String(Math.floor(58 * sweep)).padStart(2, '0')}`,
+              sweep,
+              hourLabel(sweep),
               'time',
               urgency(sweep),
             ),
@@ -1337,42 +1378,27 @@ function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] 
             opacity: clamp(ring * 1.5),
             transform: {
               x: o.x + 572,
-              y: o.y + 520,
+              y: row + HOUR.clock,
               scale: lerp(0.9, 1, ring),
               originX: o.x + 572,
-              originY: o.y + 520,
+              originY: row + HOUR.clock,
             },
           },
         ),
       );
     }
-    ['SR', 'AK', 'MJ'].forEach((n, k) => {
-      const p = progress(lt, B.start + B.people + k * 0.12, 0.4, easing.snap);
-      if (p <= 0) return;
-      const ax = o.x + 520 + k * 34;
-      const ay = o.y + 650;
-      nodes.push(
-        groupNode(
-          `lost-p${k}-o`,
-          [
-            L.avatar(
-              `lost-p${k}`,
-              n,
-              ax,
-              ay,
-              18,
-              [C.avatar.rep, C.avatar.hr, C.avatar.intern][k] ?? C.avatar.team,
-            ),
-          ],
-          {
-            transform: { x: ax, y: ay, scale: p, originX: ax, originY: ay },
-            opacity: clamp(p * 2),
-          },
-        ),
-      );
-    });
   }
   return nodes;
+}
+
+/** The hour of searching, laid out under its card: gap, the row's height, the clock's centre in it. */
+const HOUR = { gap: 44, row: 200, clock: 96 } as const;
+/** The three people searching, each in their own tint. */
+const SEARCHERS = [tone('knowledge'), tone('outcome'), tone('insight')] as const;
+/** The hour's clock: minutes counting up to a full hour (1:00). */
+export function hourLabel(sweep: number): string {
+  const minutes = Math.round(60 * clamp(sweep));
+  return minutes >= 60 ? '1:00' : `0:${String(minutes).padStart(2, '0')}`;
 }
 
 /** Choreography of the criteria group, in seconds of its own time. */

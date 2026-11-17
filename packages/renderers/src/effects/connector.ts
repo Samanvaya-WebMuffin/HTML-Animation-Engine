@@ -2,6 +2,7 @@ import {
   clamp,
   flattenPath,
   groupNode,
+  mixColors,
   parsePath,
   pathGeometry,
   progress,
@@ -85,6 +86,11 @@ export interface ConnectorOptions {
   readonly dotColor?: string;
   readonly pulses?: readonly ConnectorPulse[];
   readonly pulseEase?: Ease;
+  /**
+   * Make the pulses and junction dots glow (0–1): a wide soft halo, a
+   * brighter inner glow and a near-white core, as light rather than paint.
+   */
+  readonly glow?: number;
 }
 
 /** A routed line that draws itself on, with junction dots and light pulses travelling along it. */
@@ -110,6 +116,7 @@ export function connector(options: ConnectorOptions): (t: number) => GroupNode {
   };
   const geometry = pathGeometry(options.d);
   const width = options.width ?? 2;
+  const glow = clamp(options.glow ?? 0);
   return (t) => {
     const drawn = progress(t, options.start, options.duration, options.ease);
     const nodes: SceneNode[] = [];
@@ -130,11 +137,15 @@ export function connector(options: ConnectorOptions): (t: number) => GroupNode {
       const shown = clamp((drawn - f) / 0.04);
       if (shown <= 0) return;
       const p = pointAt(f);
+      const color = options.dotColor ?? options.color;
       nodes.push(
         shapeNode(`${options.id}-dot${k}`, {
           geometry: rect(p.x, p.y, 7, 7, 3.5),
-          fill: options.dotColor ?? options.color,
+          fill: color,
           opacity: shown,
+          ...(glow > 0
+            ? { shadow: { x: 0, y: 0, blur: 12, color: withAlpha(color, 0.7 * glow) } }
+            : {}),
         }),
       );
     });
@@ -144,19 +155,31 @@ export function connector(options: ConnectorOptions): (t: number) => GroupNode {
       const p = pointAt(f);
       const r = pulse.size ?? 3.5;
       const fade = Math.min(1, f * 6, (1 - f) * 6);
+      // The halo grows with the glow: a wide soft light round a bright core.
+      const reach = r * (4 + 6 * glow);
       nodes.push(
         shapeNode(`${options.id}-halo${k}`, {
-          geometry: rect(p.x, p.y, r * 8, r * 8, r * 4),
-          fill: radialGradient(p.x, p.y, r * 4, [
-            { offset: 0, color: withAlpha(pulse.color, 0.45) },
+          geometry: rect(p.x, p.y, 2 * reach, 2 * reach, reach),
+          fill: radialGradient(p.x, p.y, reach, [
+            { offset: 0, color: withAlpha(pulse.color, 0.45 + 0.25 * glow) },
+            { offset: 0.35, color: withAlpha(pulse.color, 0.18 + 0.14 * glow) },
             { offset: 1, color: withAlpha(pulse.color, 0) },
           ]),
           opacity: fade,
         }),
         shapeNode(`${options.id}-pulse${k}`, {
           geometry: rect(p.x, p.y, 2 * r, 2 * r, r),
-          fill: pulse.color,
+          fill:
+            glow > 0
+              ? radialGradient(p.x, p.y, r, [
+                  { offset: 0, color: mixColors(pulse.color, '#ffffff', 0.75 * glow) },
+                  { offset: 1, color: pulse.color },
+                ])
+              : pulse.color,
           opacity: fade,
+          ...(glow > 0
+            ? { shadow: { x: 0, y: 0, blur: 3 * r, color: withAlpha(pulse.color, 0.8 * glow) } }
+            : {}),
         }),
       );
     });

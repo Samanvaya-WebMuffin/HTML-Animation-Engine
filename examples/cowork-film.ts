@@ -4,20 +4,19 @@
  * group's choreography in turn. Scenes are windows of this timeline
  * (`defineFilmScene`), so every cut is the same frame on both sides.
  *
- * The film opens with the queries video's first two scenes (`query-bubbles`,
- * `query-crack`: the screen fills with messages, cracks and falls away),
- * drawn over this film's own ground and aurora (`openingBackdrop`), which
- * drifts on up to the pinboard. Its windows start at the pinboard
- * (`FILM.lost`), whose first frame is that ground and aurora alone; the
- * board comes in over them. The board timeline still runs from 0 (the
- * board's own wall, crack and dive), because the queries group sits on the
- * board.
+ * Ten scenes, as in the script. The first (the pain point, `cowork-pain`)
+ * opens on the line at the centre above the pinboard, moves down to the
+ * board as it fills, floods it into a wall of paper (`cowork-wall.ts`,
+ * drawn over this timeline), breaks the wall, and lands on the board with
+ * its gaps. Film time is board time.
  */
 import {
   clamp,
   createCanvasMeasurer,
   groupNode,
   lerp,
+  linearGradient,
+  mixColors,
   progress,
   rect,
   shapeNode,
@@ -44,11 +43,10 @@ import {
   FH,
   FW,
   GROUPS,
-  IMPACT,
   INTRO,
   LOST,
-  LOST_FALLS,
-  QUERIES,
+  LOST_LANDINGS,
+  OPENING,
   WEEK,
   tileSpot,
   BOARD_FONTS,
@@ -70,6 +68,7 @@ import {
   WIN,
   MID,
   OFF_CAMERA,
+  WIDE,
   createApps,
   cuesBetween,
   deskFocus,
@@ -77,15 +76,22 @@ import {
   stationA,
   stationC,
   stationD,
+  windowOpening,
+  HINT_SCALE,
+  hintNodes,
+  stretch,
   type Apps,
   type AppsScene,
+  type ShotView,
 } from './cowork-apps.js';
 import { SFX_DIV, beats, onGrid } from './cowork-beat.js';
-import { createUi } from './cowork-ui.js';
+import { F, UI, avatar, createUi, label, mark } from './cowork-ui.js';
+import { WALL_CUES } from './cowork-wall.js';
 import {
   C,
   LOOK_FONTS,
   HEAD,
+  R,
   face,
   glassPanel,
   headlineCard,
@@ -102,13 +108,12 @@ import { phoneDefaults } from './index.js';
 import {
   bell,
   changeTimes,
-  clap,
   cue,
   ding,
+  strings,
   pad,
   pluck,
   pop,
-  rustle,
   seeded,
   slap,
   snap,
@@ -127,71 +132,161 @@ const FRAME = { width: FW, height: FH };
 // ---------------------------------------------------------------------------
 
 /**
- * The board timeline is written in the film's beats (110 bpm, `cowork-beat.ts`):
- * the opening's five + seven beats replace board time 0–5.4, so board time `t`
- * is film time `t + OPEN`, and `at(n)` is the board time of the film's beat `n`.
- * Camera flights start and land on beats (two beats each), scene cuts fall
- * on beats, and each group's own choreography is on sixteenths from there.
+ * The timeline is written in the film's beats (110 bpm, `cowork-beat.ts`):
+ * `at(n)` is the time of beat `n`. Camera flights start and land on beats
+ * (two beats each), scene cuts fall on beats, and each group's own
+ * choreography is on sixteenths from there.
  */
-const OPEN = beats(12) - 5.4;
-const at = (n: number) => beats(n) - OPEN;
+const at = (n: number) => beats(n);
 const flight = (n: number) => ({ start: at(n), duration: beats(2) });
 
 /** When each group's choreography starts, and the moves between groups. */
 export const FILM = {
-  /** The dive through the crack, and the white the camera passes through. */
-  dive: flight(10),
-  white: { up: at(11.5), peak: at(12), down: beats(1) },
-  lost: at(12),
-  toCriteria: flight(27),
-  criteria: at(28),
-  pullBack: { start: at(29), duration: beats(4), zoom: 1.06 },
-  toIntro: flight(37),
+  /** The wall breaks over the pinboard (`OPENING` in `cowork-board.ts` times the opening). */
+  lost: OPENING.break,
+  toCriteria: flight(19),
+  criteria: at(20),
+  pullBack: { start: at(21), duration: beats(4), zoom: 1.06 },
+  toIntro: flight(29),
   /** The tile lands. */
-  intro: at(39),
-  introEnd: at(46),
+  intro: at(31),
+  introEnd: at(38),
   /** Down to the product row. */
-  toAsk: flight(45),
+  toAsk: flight(37),
   /**
-   * The product scenes replay the apps timeline (`cowork-apps.ts`): film
-   * time = apps time + this offset (on a beat, so the apps' sixteenths are
-   * the film's).
+   * The product scenes replay the apps timeline (`cowork-apps.ts`) from
+   * here (on a beat, so the apps' sixteenths are the film's), holding it
+   * for three beats under each scene's intro card (`appsTime`): so each
+   * product flight below comes three beats later per card before it.
    */
-  apps: at(45),
-  askToWork: flight(60),
-  workToAnswers: flight(74),
-  answersToLibrary: flight(89),
-  libraryEnd: at(108),
+  apps: at(37),
+  askToWork: flight(67),
+  workToAnswers: flight(97),
+  answersToLibrary: flight(127),
+  libraryEnd: at(158),
   /** Down to the payoff row: the montage, the week, then along the thread to Cowork. */
-  toProof: flight(107),
-  proof: at(109),
-  toWeek: flight(116),
-  week: at(117),
-  toOutro: flight(124),
+  toProof: flight(157),
+  proof: at(159),
+  toWeek: flight(166),
+  week: at(167),
+  toOutro: flight(174),
   /** A sixteenth before the camera lands, so the lockup's clap falls on the beat. */
-  outro: at(125.75),
-  end: at(133.5),
+  outro: at(175.75),
+  end: at(183.5),
 } as const;
+
+/**
+ * Each product scene opens on its intro card, the cover of the screen it
+ * starts on: seen as the camera flies in (the ask's opens out of the Cowork
+ * tile with the rep's window), read while the apps timeline holds at `at`
+ * (apps time, a settled moment), then lifted off the window like a blind.
+ */
+interface IntroCard {
+  readonly id: AppsScene;
+  /** Apps time the timeline holds at. */
+  readonly at: number;
+  /** The screen it covers (0 = the rep, 1 = the COO, 2 = HR head and intern). */
+  readonly desk: 0 | 1 | 2;
+  readonly eyebrow: string;
+  readonly title: string;
+  readonly sub: string;
+  readonly accent: string;
+  readonly people: readonly (readonly [string, string, string])[];
+}
+const INTRO_CARDS: readonly IntroCard[] = [
+  {
+    id: 'ask',
+    at: stretch(beats(2)),
+    desk: 0,
+    eyebrow: '01 · the ask',
+    title: 'Ask it *anything.*',
+    sub: 'One company, one Cowork.',
+    accent: C.text.accent,
+    people: [
+      ['SR', 'Sales rep', C.avatar.rep],
+      ['CO', 'COO', C.avatar.coo],
+      ['HR', 'HR head', C.avatar.hr],
+      ['IN', 'Intern', C.avatar.intern],
+    ],
+  },
+  {
+    id: 'work',
+    at: stretch(beats(17)),
+    desk: 1,
+    eyebrow: '02 · the work',
+    title: 'Then it gets to *work.*',
+    sub: 'You stay in charge.',
+    accent: C.text.accent,
+    people: [['CO', 'COO', C.avatar.coo]],
+  },
+  {
+    id: 'answers',
+    at: stretch(beats(31.25)),
+    desk: 2,
+    eyebrow: '03 · the answers',
+    title: 'Answers you can *trust.*',
+    sub: 'Right person, right source.',
+    accent: C.source.fg,
+    people: [
+      ['HR', 'HR head', C.avatar.hr],
+      ['IN', 'Intern', C.avatar.intern],
+      ['SR', 'Sales rep', C.avatar.rep],
+    ],
+  },
+  {
+    id: 'library',
+    at: stretch(beats(46)),
+    desk: 1,
+    eyebrow: '04 · the library',
+    title: 'Work that *stays.*',
+    sub: 'Kept for the whole company.',
+    accent: C.outcome.fg,
+    people: [
+      ['CO', 'COO', C.avatar.coo],
+      ['CF', 'CFO', C.avatar.cfo],
+      ['IN', 'Intern', C.avatar.intern],
+    ],
+  },
+];
+/** How long the apps timeline holds under each card, and the lift at its end. */
+const HOLD = beats(3);
+const LIFT = beats(0.75);
+
+/** Apps time at film time `t`: held under each intro card. */
+function appsTime(t: number): number {
+  let u = t - FILM.apps;
+  for (const c of INTRO_CARDS) {
+    if (u <= c.at) break;
+    if (u < c.at + HOLD) return c.at;
+    u -= HOLD;
+  }
+  return u;
+}
+/** Film time of apps time `tau` (a moment at a hold plays when the card has lifted). */
+function filmOfApps(tau: number): number {
+  return FILM.apps + tau + HOLD * INTRO_CARDS.filter((c) => tau >= c.at).length;
+}
+/** When the card's timeline hold ends (the card is fully lifted). */
+const cardResume = (c: IntroCard) => filmOfApps(c.at);
 
 /** The scenes, as windows of the timeline; every cut on a beat. */
 export const FILM_SCENES = {
-  lost: { start: FILM.white.peak, end: at(28), title: 'Knowledge gets lost' },
-  criteria: { start: at(28), end: at(38), title: 'What AI should do' },
-  intro: { start: at(38), end: FILM.introEnd, title: 'Introducing Cowork' },
-  ask: { start: FILM.introEnd, end: at(61), title: 'The ask' },
-  work: { start: at(61), end: at(75), title: 'The work' },
-  answers: { start: at(75), end: at(90), title: 'The answers' },
-  library: { start: at(90), end: FILM.libraryEnd, title: 'The library' },
-  proof: { start: FILM.libraryEnd, end: at(117), title: 'In use' },
-  week: { start: at(117), end: FILM.toOutro.start, title: 'A week, condensed' },
+  pain: { start: 0, end: at(20), title: 'The pain point' },
+  criteria: { start: at(20), end: at(30), title: 'What AI should do' },
+  intro: { start: at(30), end: FILM.introEnd, title: 'Introducing Cowork' },
+  ask: { start: FILM.introEnd, end: at(68), title: 'The ask' },
+  work: { start: at(68), end: at(98), title: 'The work' },
+  answers: { start: at(98), end: at(128), title: 'The answers' },
+  library: { start: at(128), end: FILM.libraryEnd, title: 'The library' },
+  proof: { start: FILM.libraryEnd, end: at(167), title: 'In use' },
+  week: { start: at(167), end: FILM.toOutro.start, title: 'A week, condensed' },
   outro: { start: FILM.toOutro.start, end: FILM.end, title: 'Join the waitlist' },
 } as const;
 export type FilmScene = keyof typeof FILM_SCENES;
 
 /** Each group's local time. */
 const local: Partial<Record<GroupId, (t: number) => number>> = {
-  queries: (t) => t,
-  lost: (t) => t - FILM.lost,
+  lost: (t) => t,
   criteria: (t) => t - FILM.criteria,
   intro: (t) => t - FILM.intro,
   week: (t) => t - FILM.week,
@@ -202,13 +297,9 @@ const local: Partial<Record<GroupId, (t: number) => number>> = {
 // The camera
 // ---------------------------------------------------------------------------
 
-const Q = group('queries');
 const V = {
-  /** Close on the first questions. */
-  start: { x: Q.x + 250, y: Q.y + 300, zoom: 1.9 },
-  queries: groupView('queries'),
-  impact: { x: Q.x + IMPACT.x, y: Q.y + IMPACT.y, zoom: 7 },
-  lostIn: groupView('lost', 1.6),
+  /** Above the pinboard, the opening line at the centre (the board just showing at the bottom). */
+  open: { ...groupView('lost'), y: groupView('lost').y - 700 },
   lost: groupView('lost'),
   criteria: groupView('criteria', FILM.pullBack.zoom),
   intro: groupView('intro'),
@@ -227,26 +318,12 @@ const drift = (
 
 /** Where the camera is at film time `t`. */
 export function camera(t: number): BoardView {
-  if (t < FILM.dive.start) {
-    // The pull back as the wall fills, then a small shake as it cracks.
-    const v = flightPath(V.start, V.queries, FW).at(progress(t, 0.25, 2.5, easing.camera));
-    const s = t - QUERIES.crack.start;
-    if (s <= 0 || s > 0.8) return v;
-    const decay = Math.exp(-7 * s);
-    return { ...v, x: v.x + 6 * decay * Math.sin(55 * s), y: v.y + 4 * decay * Math.cos(47 * s) };
-  }
   if (t < FILM.lost) {
-    return flightPath(V.queries, V.impact, FW).at(
-      progress(t, FILM.dive.start, FILM.dive.duration, easing.exit),
-    );
+    // Down from the line to the pinboard, then still while the wall builds and breaks.
+    const p = progress(t, OPENING.pan.start, OPENING.pan.duration, easing.camera);
+    return { ...V.lost, y: lerp(V.open.y, V.lost.y, p) };
   }
-  const lostView = (u: number) =>
-    drift(
-      flightPath(V.lostIn, V.lost, FW).at(progress(u, FILM.lost, beats(2), easing.enter)),
-      u,
-      FILM.lost + beats(2),
-      6.8,
-    );
+  const lostView = (u: number) => drift(V.lost, u, FILM.lost, 7.5);
   if (t < FILM.toCriteria.start) return lostView(t);
   const criteriaView = (u: number) => ({
     ...V.criteria,
@@ -374,9 +451,13 @@ export interface FilmState {
   readonly heads: Readonly<Record<string, KineticText>>;
   /** The product scenes' headline cards, pinned to their groups. */
   readonly cards: Readonly<Record<string, Headline>>;
+  /** Each product scene's intro card: its title and subtext. */
+  readonly intros: Readonly<Record<string, { title: KineticText; sub: KineticText }>>;
 }
 
 const isApps = (id: GroupId): id is AppsScene => id in APPS_SCENES;
+/** Hints stay below this line of the frame (clear of the headline cards). */
+const HINT_TOP = 300;
 /** Where the deck's screen in focus sits in its group, and its scale when wide. */
 const DECK_Y = 790;
 const DECK_SCALE = 0.86;
@@ -468,12 +549,129 @@ export async function createFilmState(): Promise<FilmState> {
     at: 0,
     ease: easing.enter,
   });
+  const intros: Record<string, { title: KineticText; sub: KineticText }> = {};
+  for (const c of INTRO_CARDS) {
+    const common = { measurer, x: 0, y: 0, at: 0, ease: easing.enter } as const;
+    intros[c.id] = {
+      title: kineticText({
+        ...common,
+        id: `intro-${c.id}-title`,
+        text: c.title,
+        font: CARD.title,
+        maxWidth: CARD.inner,
+        color: C.text.primary,
+        accent: c.accent,
+      }),
+      sub: kineticText({
+        ...common,
+        id: `intro-${c.id}-sub`,
+        text: c.sub,
+        font: CARD.sub,
+        maxWidth: CARD.inner,
+        color: C.text.secondary,
+      }),
+    };
+  }
   return {
     board: await createBoard(measurer),
     apps: createApps(createUi(measurer)),
     heads,
     cards,
+    intros,
   };
+}
+
+/** The intro card's type and layout (window-local px). */
+const CARD = {
+  pad: 56,
+  inner: WIN.w - 112,
+  eyebrow: face('mono', 17, { letterSpacing: 0.3 }),
+  title: face('headline', 58, { letterSpacing: -1.6, lineHeight: 1.08 }),
+  sub: face('subtext', 34, { lineHeight: 1.25 }),
+  top: 300,
+} as const;
+/** Long after any entrance: the card's text fully settled. */
+const SETTLED_TEXT = 1e4;
+
+/**
+ * An intro card over the window it covers (window-local, top left 0, 0):
+ * Cloud, the Cowork mark, a lowercase mono eyebrow, the Sora title, the
+ * Newsreader subtext, and who the scene follows. `lift` 0–1 rolls it up off
+ * the window from the bottom; for the ask, `shape` is the window's outline
+ * as it opens out of the tile, and `content` how far its content shows.
+ */
+function introCard(
+  state: FilmState,
+  card: IntroCard,
+  lift: number,
+  shape?: { cx: number; cy: number; w: number; h: number; r: number },
+  content = 1,
+): SceneNode | null {
+  const text = state.intros[card.id];
+  if (!text || lift >= 1) return null;
+  const ui = state.apps.ui;
+  const id = `ic-${card.id}`;
+  // Lifting, the card slides up off the window, cut at the window's top edge.
+  const d = WIN.h * lift;
+  const outline = shape
+    ? rect(shape.cx, shape.cy, shape.w, shape.h, shape.r)
+    : rect(WIN.w / 2, WIN.h / 2 - d, WIN.w, WIN.h, R.card);
+  const frame = shape ? outline : rect(WIN.w / 2, WIN.h / 2, WIN.w, WIN.h, R.card);
+  const { pad } = CARD;
+  const titleY = CARD.top + 40;
+  const subY = titleY + text.title.height + 18;
+  const kids: SceneNode[] = [
+    mark(`${id}-mark`, pad + 13, 64, 26),
+    label(`${id}-name`, 'Cowork', pad + 36, 49, F.title, C.text.primary),
+    label(`${id}-eyebrow`, card.eyebrow, pad, CARD.top, CARD.eyebrow, C.text.accent),
+    groupNode(`${id}-title`, [text.title(SETTLED_TEXT, 0)], {
+      transform: { x: pad, y: titleY },
+    }),
+    groupNode(`${id}-sub`, [text.sub(SETTLED_TEXT, 0)], { transform: { x: pad, y: subY } }),
+  ];
+  // Who the scene follows: monogram pills along the bottom.
+  let x = pad;
+  const y = WIN.h - 100;
+  card.people.forEach(([initials, role, color], k) => {
+    const w = Math.round(ui.measure(role, F.role) + 58);
+    kids.push(
+      shapeNode(`${id}-p${k}-bg`, {
+        geometry: rect(x + w / 2, y, w, 44, 22),
+        fill: UI.surface,
+        stroke: { color: C.stroke.hairline, width: 1 },
+      }),
+      avatar(`${id}-p${k}-av`, initials, x + 22, y, 14, color),
+      label(`${id}-p${k}-t`, role, x + 44, y - 10, F.role, C.text.secondary),
+    );
+    x += w + 10;
+  });
+  return groupNode(
+    id,
+    [
+      shapeNode(`${id}-sheet`, {
+        geometry: outline,
+        fill: linearGradient(0, -d, 0, WIN.h - d, [
+          C.surface.paper,
+          mixColors(C.surface.paper, C.brand.tint, 0.6),
+        ]),
+        ...(lift > 0
+          ? {
+              shadow: {
+                x: 0,
+                y: 12,
+                blur: 30,
+                color: withAlpha(lighting.shadow, 0.22 * (1 - lift)),
+              },
+            }
+          : {}),
+      }),
+      groupNode(`${id}-clip`, [groupNode(`${id}-content`, kids, { transform: { y: -d } })], {
+        clip: outline,
+        opacity: clamp(content),
+      }),
+    ],
+    { clip: frame },
+  );
 }
 
 /** A copy of a node tree with every id prefixed (so the same screens can appear in two groups at once). */
@@ -492,7 +690,10 @@ function prefixed(node: SceneNode, prefix: string): SceneNode {
 function deck(state: FilmState, id: AppsScene, t: number): SceneNode[] {
   const g = group(id);
   const win = APPS_SCENES[id];
-  const tau = clamp(t - FILM.apps, Math.max(win.start, 0.5), win.end);
+  const tau = clamp(appsTime(t), Math.max(win.start, 0.5), win.end);
+  const card = INTRO_CARDS.find((c) => c.id === id);
+  const resume = card ? cardResume(card) : -Infinity;
+  const lift = progress(t, resume - LIFT, LIFT, easing.wipe);
   const focus = deskFocus(tau);
   const ui = state.apps.ui;
   const screens = [stationC(ui, tau), stationA(ui, tau), stationD(ui, tau)];
@@ -516,6 +717,50 @@ function deck(state: FilmState, id: AppsScene, t: number): SceneNode[] {
         },
       ),
     );
+  }
+  // The intro card covers the screen the scene starts on, until it lifts off.
+  if (card && t < resume) {
+    const left = [DESK.c, DESK.a, DESK.d][card.desk] ?? DESK.c;
+    const opening = card.desk === 0 ? windowOpening(tau) : null;
+    const sheet = introCard(
+      state,
+      card,
+      lift,
+      opening && opening.open < 1 ? opening.shape : undefined,
+      opening ? clamp((opening.open - 0.45) / 0.45) : 1,
+    );
+    if (sheet) {
+      screens[card.desk]?.push(
+        groupNode(`${id}-intro-card`, [sheet], {
+          transform: { x: left - WIN.w / 2, y: WIN.top },
+        }),
+      );
+    }
+  }
+  // Wide on the intro card, easing into the scene's first shot as it lifts.
+  const shot =
+    t < resume
+      ? blendShot(WIDE, shotAt(state.apps.direction, tau), lift)
+      : shotAt(state.apps.direction, tau);
+  // Hints on the screens, held the same size on screen however close the camera is.
+  if (t >= resume) {
+    // What the camera shows of the screen in focus (window-local), below the headline card.
+    const sc = DECK_SCALE * shot.zoom;
+    const view = {
+      x0: shot.x - FW / 2 / sc,
+      x1: shot.x + FW / 2 / sc,
+      y0: shot.y + (HINT_TOP - DECK_Y) / sc,
+      y1: shot.y + (FH - DECK_Y) / sc,
+    };
+    const inFocus = Math.round(focus);
+    ([0, 1, 2] as const).forEach((d) => {
+      const hints = hintNodes(ui, d, tau, HINT_SCALE / shot.zoom, d === inFocus ? view : undefined);
+      if (hints.length === 0) return;
+      const left = [DESK.c, DESK.a, DESK.d][d] ?? DESK.c;
+      screens[d]?.push(
+        groupNode(`${id}-hints${d}`, hints, { transform: { x: left - WIN.w / 2, y: WIN.top } }),
+      );
+    });
   }
   const desks = [DESK.c, DESK.a, DESK.d];
   const layers = screens
@@ -545,7 +790,7 @@ function deck(state: FilmState, id: AppsScene, t: number): SceneNode[] {
   const heads: SceneNode[] = [];
   for (const c of CAPTIONS) {
     const at = c.at[0] ?? 0;
-    if (at < win.start || at >= win.end || tau < at - 0.1) continue;
+    if (t < resume || at < win.start || at >= win.end || tau < at - 0.1) continue;
     const exit = progress(tau, c.out, 0.35, easing.exit);
     const card = state.cards[c.id];
     if (!card || exit >= 1) continue;
@@ -555,7 +800,6 @@ function deck(state: FilmState, id: AppsScene, t: number): SceneNode[] {
   }
   // The camera inside the deck: close on the component at work, wide on results.
   // Window point (x, y) of the screen in focus sits at DECK_Y on screen, zoomed.
-  const shot = shotAt(state.apps.direction, tau);
   const s0 = DECK_SCALE;
   const centre = { x: g.x + FW / 2, y: g.y + FH / 2 };
   const target = { x: g.x + FW / 2, y: g.y + DECK_Y };
@@ -597,9 +841,9 @@ function deck(state: FilmState, id: AppsScene, t: number): SceneNode[] {
  */
 const PROOF_CLIPS: readonly { desk: 0 | 1 | 2; from: number }[] = [
   { desk: 0, from: OFF_CAMERA.stream - 0.15 },
-  { desk: 1, from: 13.65 },
-  { desk: 1, from: 22.7 },
-  { desk: 1, from: 25.95 },
+  { desk: 1, from: stretch(13.65) },
+  { desk: 1, from: stretch(22.7) },
+  { desk: 1, from: stretch(25.95) },
 ];
 /** Each clip is seven eighths (cuts land on the grid). */
 const PROOF_CLIP = beats(1.75);
@@ -723,6 +967,15 @@ function proofMontage(state: FilmState, t: number): SceneNode[] {
   return out;
 }
 
+/** A shot between two others (zoom eased in log space). */
+function blendShot(a: ShotView, b: ShotView, p: number): ShotView {
+  return {
+    x: lerp(a.x, b.x, p),
+    y: lerp(a.y, b.y, p),
+    zoom: Math.exp(lerp(Math.log(a.zoom), Math.log(b.zoom), p)),
+  };
+}
+
 /** Groups near the view. */
 function visible(view: BoardView): GroupId[] {
   const halfW = FW / 2 / view.zoom + FW;
@@ -737,10 +990,9 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
   const { board } = state;
   const view = camera(t);
   const content: SceneNode[] = [...threads(3, t, FLIGHTS)];
-  // Only while the camera passes through the wall; afterwards the wall rests cracked.
-  const dive =
-    t < FILM.lost ? progress(t, FILM.dive.start + 0.4, FILM.dive.duration - 0.4, easing.exit) : 0;
   for (const id of visible(view)) {
+    // The old opening's group is on the board, but not in the film.
+    if (id === 'queries') continue;
     if (isApps(id)) {
       content.push(groupNode(`group-${id}`, deck(state, id, t)));
       continue;
@@ -756,7 +1008,6 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
         `group-${id}`,
         groupArt(board, id, {
           lt,
-          ...(id === 'queries' ? { dive } : {}),
           ...(id === 'criteria' ? { hubGone: t >= FILM.toIntro.start } : {}),
           ...(id === 'intro' ? { tileHidden: t < FILM.intro } : {}),
         }),
@@ -765,10 +1016,6 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
   }
   content.push(...carrier(board, t));
   const blur = inFlight(t) ? motionBlur(screenVelocity(camera, t)) : undefined;
-  // The pinboard opens on query-crack's last frame, the ground and aurora
-  // alone, and the board comes in over them.
-  const reveal = t < FILM.lost ? 1 : progress(t, FILM.lost, FILM.white.down, easing.enter);
-  if (reveal <= 0) return backdrop(t, view);
   return [
     ...backdrop(t, view),
     groupNode(
@@ -778,7 +1025,7 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
         edgeFade('fade', FRAME, C.bg.canvas, 0.3),
         groupNode('board', content, { transform: viewTransform(view, FRAME) }),
       ],
-      { ...(blur ? { blur } : {}), ...(reveal < 1 ? { opacity: reveal } : {}) },
+      blur ? { blur } : {},
     ),
   ];
 }
@@ -804,34 +1051,20 @@ export function openingBackdrop(before: number): SceneNode[] {
 // Sound, timed from the same numbers as the motion
 // ---------------------------------------------------------------------------
 
-const L0 = FILM.lost;
 const C0 = FILM.criteria;
 const CUES: readonly Cues[] = [
-  // The pinboard: each piece lands, each pin pressed in.
-  Array.from({ length: 19 }, (_, k) => {
-    const at = L0 + LOST.pieces.start + k * LOST.pieces.each;
-    return [
-      cue(at + 0.12, slap({ gain: 0.22, pan: (seeded('pb', k) - 0.5) * 0.8 })),
-      k % 3 === 0 ? cue(at + LOST.pieces.pin + 0.05, tick({ degree: 2, gain: 0.25 })) : [],
-    ];
-  }),
-  cue(L0 + 0.2, rustle({ take: 1, gain: 3 })),
-  cue(L0 + LOST.headA, pluck({ degree: 4, octave: 1, gain: 0.35 })),
-  // The loss: a low fall, and the notes tearing free.
-  cue(L0 + LOST.loss.start, whoosh(1.4, { from: 1400, to: 160, peak: 0.2, gain: 0.55 })),
-  cue(L0 + LOST.loss.start, pad(4.5, { chord: 'shadow', attack: 0.8, release: 1.5, gain: 0.55 })),
-  // Pieces tear free one after another; a question mark is left in each gap.
-  LOST_FALLS.map((at, k) => [
-    cue(L0 + at, rustle({ take: k + 3, gain: 2.6, pan: k % 2 ? 0.3 : -0.3 })),
-    k % 3 === 2 ? cue(L0 + at + 0.6, thump({ gain: 0.18 })) : [],
-    cue(
-      L0 + at + LOST.mark + 0.05,
-      pluck({ degree: [2, 0, 4][k % 3] ?? 0, octave: 0, gain: 0.14 }),
-    ),
+  // The opening: the line, the flood, the wall out of focus, "is lost", the crack and the break.
+  WALL_CUES,
+  // The pinboard fills as the camera arrives: each piece lands, every third pin pressed in.
+  LOST_LANDINGS.map((at, k) => [
+    cue(at + 0.12, slap({ gain: 0.22, pan: (seeded('pb', k) - 0.5) * 0.8 })),
+    k % 3 === 0 ? cue(at + LOST.pieces.pin + 0.05, tick({ degree: 2, gain: 0.25 })) : [],
   ]),
+  // The wall has broken onto bare ground: a low bed under the hour of searching.
+  cue(LOST.loss.start, pad(4.5, { chord: 'shadow', attack: 0.8, release: 1.5, gain: 0.5 })),
   // An hour of searching, coming back empty.
   [0, 1, 2].map((k) => {
-    const at = L0 + LOST.b.start + LOST.b.search + k * LOST.b.each;
+    const at = LOST.b.start + LOST.b.search + k * LOST.b.each;
     return [
       cue(at, pluck({ degree: [7, 4, 2][k] ?? 0, octave: 1, gain: 0.3 })),
       cue(at + 0.4, pluck({ degree: 0, octave: 0, gain: 0.3 })),
@@ -840,10 +1073,10 @@ const CUES: readonly Cues[] = [
   changeTimes(
     (u) =>
       Math.floor(
-        (58 * progress(u, L0 + LOST.b.start + LOST.b.ring + 0.2, LOST.b.sweep, easing.camera)) / 4,
+        (58 * progress(u, LOST.b.start + LOST.b.ring + 0.2, LOST.b.sweep, easing.camera)) / 4,
       ),
-    L0 + LOST.b.start + LOST.b.ring,
-    L0 + LOST.b.start + LOST.b.ring + 3,
+    LOST.b.start + LOST.b.ring,
+    LOST.b.start + LOST.b.ring + 3,
   ).map((at, k) => cue(at, tick({ degree: 4, gain: 0.25, pan: k % 2 ? 0.2 : -0.2 }))),
   // The flight to the network.
   cue(
@@ -875,13 +1108,12 @@ const CUES: readonly Cues[] = [
     FILM.toIntro.start,
     whoosh(FILM.toIntro.duration, { from: 220, to: 4000, peak: 0.88, gain: 0.9 }),
   ),
-  cue(FILM.intro, clap({ big: true, chord: 'home' })),
-  cue(FILM.intro, thump({ gain: 0.55 })),
+  // Cowork appears: no hit, a swell of synth strings, high and low.
+  cue(FILM.intro, strings()),
   cue(
     FILM.intro + 0.05,
     pad(FILM.introEnd - FILM.intro - 0.3, { chord: 'home', attack: 0.3, release: 1.5 }),
   ),
-  cue(FILM.intro + INTRO.name + 0.05, bell({ degree: 4, gain: 0.6 })),
   // The product scenes keep their own sounds (typing, clicks, plucks), and each flight its air.
   LEGS.map((l) =>
     cue(l.arrive.start, whoosh(l.arrive.duration, { from: 260, to: 1500, peak: 0.5, gain: 0.45 })),
@@ -892,6 +1124,11 @@ const CUES: readonly Cues[] = [
       pluck({ degree, octave: 2, gain: 0.28, pan: (k - 2) * 0.15 }),
     ),
   ),
+  // Each intro card: a soft note as it settles in view, paper as it lifts off.
+  INTRO_CARDS.map((c, k) => [
+    cue(cardResume(c) - HOLD, pluck({ degree: [4, 7, 9, 7][k] ?? 4, octave: 1, gain: 0.28 })),
+    cue(cardResume(c) - LIFT, whoosh(LIFT, { from: 700, to: 2600, peak: 0.6, gain: 0.3 })),
+  ]),
   // The montage: a soft tick on every cut, a pluck as each card lands.
   PROOF_CLIPS.map((_, k) =>
     cue(
@@ -933,13 +1170,11 @@ const CUES: readonly Cues[] = [
       gain: 0.5,
     }),
   ),
-  cue(FILM.outro + 0.15, clap({ big: true, chord: 'home' })),
-  cue(FILM.outro + 0.15, thump({ gain: 0.5 })),
+  cue(FILM.outro + 0.15, strings()),
   cue(
     FILM.outro + 0.2,
     pad(FILM.end - FILM.outro - 0.2, { chord: 'home', attack: 0.3, release: 1.2 }),
   ),
-  cue(FILM.outro + INTRO.name + 0.05, bell({ degree: 4, gain: 0.55 })),
   [0, 2, 4, 7, 9].map((degree, k) =>
     cue(
       FILM.outro + INTRO.tagline + k * 0.08,
@@ -951,7 +1186,7 @@ const CUES: readonly Cues[] = [
 ];
 
 /** A board time moved to the nearest thirty-second of the film's beat. */
-const onBeat = (t: number) => onGrid(t + OPEN, SFX_DIV) - OPEN;
+const onBeat = (t: number) => onGrid(t, SFX_DIV);
 
 /**
  * Every sound, in board time: the film's own, each on the beat grid, and the
@@ -964,11 +1199,16 @@ const ALL_CUES: readonly SoundEvent[] = (() => {
     else c.forEach(walk);
   };
   CUES.forEach(walk);
-  return [...flat, ...cuesBetween(0.5, APPS_SCENES.library.end, FILM.apps + 0.5)];
+  // The product scenes' sounds, in apps time, moved past the holds under the intro cards.
+  const apps = cuesBetween(0.5, APPS_SCENES.library.end, 0.5).map((c) => ({
+    ...c,
+    at: filmOfApps(c.at),
+  }));
+  return [...flat, ...apps];
 })();
 
 /** One scene's sounds, timed from its own start (earlier cues ring on in the film). */
-function sceneCues(scene: FilmScene): SoundEvent[] {
+export function sceneCues(scene: FilmScene): SoundEvent[] {
   const { start, end } = FILM_SCENES[scene];
   return ALL_CUES.filter((c) => c.at >= start && c.at < end).map((c) => ({
     ...c,
@@ -977,17 +1217,20 @@ function sceneCues(scene: FilmScene): SoundEvent[] {
 }
 
 /** A scene of the Cowork film: its stretch of the timeline. */
+/** Every font the film's timeline draws with. */
+export const FILM_FONTS = [
+  ...phoneDefaults.fonts,
+  ...LOOK_FONTS,
+  ...BOARD_FONTS,
+  ...APPS_FONTS,
+  face('headline', 34, { letterSpacing: -0.6 }),
+];
+
 export function defineFilmScene(scene: FilmScene, id: string) {
   const { start, end, title } = FILM_SCENES[scene];
   return defineSceneComposition({
     ...phoneDefaults,
-    fonts: [
-      ...phoneDefaults.fonts,
-      ...LOOK_FONTS,
-      ...BOARD_FONTS,
-      ...APPS_FONTS,
-      face('headline', 34, { letterSpacing: -0.6 }),
-    ],
+    fonts: FILM_FONTS,
     id,
     seed: id,
     title,
