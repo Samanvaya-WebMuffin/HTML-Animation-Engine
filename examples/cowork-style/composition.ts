@@ -458,7 +458,7 @@ function groupB(state: State, t: number): SceneNode[] {
         py,
         56,
         progress(t, T0.land, 1.6, easing.enter) * 0.78,
-        '18:40',
+        '19:00',
       ),
       markTile('b-mark', o.x + 560, py, 112, { glow: 0.5 }),
     ]),

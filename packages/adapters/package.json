@@ -1,7 +1,7 @@
 {
   "name": "@html-animation-engine/adapters",
   "version": "0.0.0",
-  "description": "Seek-driven adapters for third-party animation libraries. Currently: Remotion (both directions). Each library is an optional peer dependency.",
+  "description": "Seek-driven adapters for third-party animation libraries. Currently: Remotion (both directions) and Three.js (a transparent WebGL layer drawn at time t). Each library is an optional peer dependency.",
   "license": "UNLICENSED",
   "type": "module",
   "sideEffects": false,
@@ -10,6 +10,11 @@
       "source": "./src/remotion.tsx",
       "types": "./dist/remotion.d.ts",
       "import": "./dist/remotion.js"
+    },
+    "./three": {
+      "source": "./src/three.ts",
+      "types": "./dist/three.d.ts",
+      "import": "./dist/three.js"
     },
     "./package.json": "./package.json"
   },
@@ -26,10 +31,11 @@
     "@html-animation-engine/renderers": "workspace:^"
   },
   "peerDependencies": {
-    "remotion": "^4.0.0",
     "@remotion/player": "^4.0.0",
     "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "react-dom": ">=18.0.0",
+    "remotion": "^4.0.0",
+    "three": ">=0.180.0"
   },
   "peerDependenciesMeta": {
     "remotion": {
@@ -43,15 +49,20 @@
     },
     "react-dom": {
       "optional": true
+    },
+    "three": {
+      "optional": true
     }
   },
   "devDependencies": {
+    "@remotion/player": "4.0.540",
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "remotion": "4.0.540",
-    "@remotion/player": "4.0.540",
+    "@types/three": "0.187.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "remotion": "4.0.540",
+    "three": "0.187.0"
   }
 }

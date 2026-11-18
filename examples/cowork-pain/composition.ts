@@ -39,10 +39,10 @@ const mounted = new WeakMap<HTMLElement, Mounted>();
  * Scene 1 of the Cowork film, the pain point: a window of the film's
  * timeline (the pinboard and its camera, drawn by `filmWorld`) with the
  * opening's paper wall over it (`cowork-wall.ts`). Layers, bottom to top:
- * the board (SVG), the wall, its shards and dust (one canvas, drawn from
- * pictures made at setup), and the line on its card with the cracks'
- * light (SVG). Once the wall has broken, only the board is left, so the
- * last frame is the next scene's first.
+ * the board (SVG), the wall and its paper in flight (one canvas, drawn
+ * from pictures made at setup), and the opening line and the piles the
+ * paper sorts into (SVG). Once the wall has gone the board's group draws
+ * the piles itself, so the last frame is the next scene's first.
  */
 export default defineComposition({
   ...phoneDefaults,
@@ -81,7 +81,7 @@ export default defineComposition({
     m.film.render({ width: W, height: H, world: filmWorld(m.state, at) });
     const g = m.canvas.getContext('2d');
     if (g) drawWall(g, m.wall, m.text, at);
-    m.top.render({ width: W, height: H, world: wallOverlay(m.text, at) });
+    m.top.render({ width: W, height: H, world: wallOverlay(m.text, m.state.board.paper, at) });
   },
   teardown(ctx) {
     const m = mounted.get(ctx.root);

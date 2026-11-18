@@ -1,3 +1,6 @@
 import { defineExampleConfig } from '../index.js';
 
-export default defineExampleConfig({ stills: [0.2, 0.7, 1.4, 2.6, 4.5], budgetMs: 40 });
+export default defineExampleConfig({
+  stills: [0.4, 0.9, 1.6, 2.62, 2.75, 3.05, 3.45, 4.1],
+  budgetMs: 40,
+});

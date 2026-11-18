@@ -250,6 +250,159 @@ export function strings(options: { gain?: number } = {}): Sound {
   return layer([...violins, ...low, bow], { gain });
 }
 
+/** How long before its landing a `meet` sound starts (its lead-in swell): cue it this much early. */
+export const MEET_LEAD = 0.55;
+
+/**
+ * The name appearing ("Meet Cowork"), three candidates. Each swells in for
+ * `MEET_LEAD` seconds and lands on the beat after it:
+ * - `rise`: a reversed-air swell, then the home chord run upwards as glassy
+ *   FM bells, landing on a shimmering string chord with a soft sub.
+ * - `bloom`: a filtered riser into a wide string-and-brass chord bloom, with
+ *   high sparkles scattered over its tail and a low boom.
+ * - `glass`: an airy vowel-like choir pad with a glass bell chord on top,
+ *   a shimmer of detuned high sines, and a breath of air.
+ */
+export function meet(variant: 'rise' | 'bloom' | 'glass', options: { gain?: number } = {}): Sound {
+  // Balanced by loudness: each lands about -19 LUFS (momentary) over the film's bed.
+  const gain = (options.gain ?? 1) * (variant === 'rise' ? 0.72 : 1);
+  const L = MEET_LEAD;
+  const swell: Sound = {
+    type: 'noise',
+    color: 'pink',
+    stereo: true,
+    filter: { type: 'bandpass', freq: 900, q: 0.8, sweep: { to: 5200, time: L } },
+    envelope: { attack: L * 0.95, decay: 0.12 },
+    gain: db(tokens.levels.whoosh - 14),
+    send: 0.5,
+  };
+  const sub: Sound = {
+    type: 'tone',
+    wave: 'sine',
+    freq: note(0, -2),
+    pitch: { from: 1.6, time: 0.05 },
+    envelope: { attack: 0.004, decay: 1.4 },
+    gain: db(tokens.levels.sub - 4),
+    delay: L,
+  };
+  const glassBell = (freq: number, at: number, g: number, pan = 0): Sound => ({
+    type: 'tone',
+    wave: 'sine',
+    freq,
+    fm: { ratio: 3.5, index: 1.6, decay: 0.25 },
+    envelope: { attack: 0.004, decay: 1.6 },
+    gain: db(tokens.levels.bell + 2) * g,
+    pan,
+    delay: at,
+    send: 0.6,
+  });
+  if (variant === 'rise') {
+    const run = [...chord('home', 1), ...chord('home', 2)].map((freq, k, all) =>
+      glassBell(
+        freq,
+        L - 0.42 + k * 0.06,
+        0.55 + (0.45 * k) / all.length,
+        -0.6 + (1.2 * k) / all.length,
+      ),
+    );
+    return layer(
+      [
+        swell,
+        ...run,
+        { ...violins('home', 1.6, { gain: 1.1, swell: 0.12 }), delay: L } as Sound,
+        ...chord('home', 3)
+          .slice(1, 4)
+          .map((f, k) => glassBell(f, L + 0.02 + k * 0.03, 0.7, k - 1)),
+        sub,
+      ],
+      { gain },
+    );
+  }
+  if (variant === 'bloom') {
+    const riser: Sound = {
+      type: 'tone',
+      wave: 'saw',
+      freq: note(0, 1),
+      pitch: { from: 0.5, time: L * 0.5 },
+      unison: { voices: 5, detune: 20, width: 1 },
+      filter: { type: 'lowpass', freq: 400, q: 1.1, sweep: { to: 4000, time: L } },
+      envelope: { attack: L * 0.9, decay: 0.15 },
+      gain: db(tokens.levels.keys - 4),
+      send: 0.5,
+    };
+    const brass = chord('home', 0).map((freq, k): Sound => ({
+      type: 'tone',
+      wave: 'saw',
+      freq,
+      unison: { voices: 3, detune: 8, width: 0.8 },
+      filter: { type: 'lowpass', freq: 700, q: 0.9, sweep: { to: 2600, time: 0.35 } },
+      envelope: { attack: 0.06, decay: 1.8, sustain: 0.3, length: 1.0, release: 1.2 },
+      gain: db(tokens.levels.keys - 3),
+      pan: (k / 4 - 0.5) * 0.6,
+      delay: L,
+      send: 0.55,
+    }));
+    const sparkles = Array.from({ length: 9 }, (_, k) => {
+      const notes = chord('home', 3);
+      const freq = notes[Math.floor(seeded('meet-bloom', k) * notes.length)] as number;
+      return glassBell(
+        freq,
+        L + 0.12 + k * 0.13 + 0.05 * seeded('meet-bloom-t', k),
+        0.45 * (1 - k / 12),
+        seeded('meet-bloom-p', k) * 1.6 - 0.8,
+      );
+    });
+    return layer(
+      [
+        swell,
+        riser,
+        ...brass,
+        { ...violins('home', 1.8, { gain: 1.2, swell: 0.1 }), delay: L } as Sound,
+        ...sparkles,
+        { ...sub, gain: db(tokens.levels.sub - 1) },
+      ],
+      { gain },
+    );
+  }
+  // glass
+  const choir = chord('home', 1)
+    .slice(0, 4)
+    .map((freq, k): Sound => ({
+      type: 'tone',
+      wave: 'saw',
+      freq,
+      fm: vibrato(freq, 4.4, 0.002),
+      unison: { voices: 6, detune: 18, width: 1 },
+      filter: { type: 'bandpass', freq: 1100 + 250 * k, q: 1.6 },
+      envelope: { attack: L, decay: 2, sustain: 0.8, length: L + 1.2, release: 1.4 },
+      gain: db(tokens.levels.keys + 4),
+      send: 0.7,
+    }));
+  const shimmer = chord('home', 3).map((freq, k): Sound => ({
+    type: 'tone',
+    wave: 'sine',
+    freq,
+    unison: { voices: 4, detune: 12, width: 1 },
+    envelope: { attack: 0.2, decay: 2.2 },
+    gain: db(tokens.levels.bell - 4),
+    pan: (k / 4 - 0.5) * 1.2,
+    delay: L + 0.04 * k,
+    send: 0.7,
+  }));
+  return layer(
+    [
+      swell,
+      ...choir,
+      ...chord('home', 2)
+        .slice(1)
+        .map((f, k) => glassBell(f, L + k * 0.02, 0.8, (k - 1.5) * 0.4)),
+      ...shimmer,
+      { ...sub, gain: db(tokens.levels.sub - 7) },
+    ],
+    { gain },
+  );
+}
+
 /** Tiny pitched click (typing, digits, small repeated events). */
 export function tick(options: HitOptions = {}): Sound {
   const { degree = 0, gain = 1, pan = 0 } = options;
@@ -591,6 +744,92 @@ export function keys(
     })),
     { gain, pan, send: 0.45 },
   );
+}
+
+/**
+ * A string player's vibrato as phase modulation: `rate` Hz, ±`depth` of the
+ * pitch (about 5 Hz and a few cents, as a section plays it).
+ */
+function vibrato(freq: number, rate = 5.1, depth = 0.003) {
+  return { ratio: rate / freq, index: (depth * freq) / rate };
+}
+
+/**
+ * A synth string section holding `chord` for `length` seconds, bowed in
+ * slowly and swelling, as in a film score: violins high on the chord with
+ * vibrato (detuned saws, the filter opening as the bow pressure builds),
+ * violas below them, and cellos and basses on the root in two low octaves.
+ * Soft at both ends, so one held chord flows into the next.
+ */
+export function violins(
+  name: keyof typeof tokens.chords,
+  length: number,
+  options: { gain?: number; swell?: number; pan?: number } = {},
+): Sound {
+  const { gain = 1, pan = 0 } = options;
+  const swell = Math.min(length * 0.45, options.swell ?? 0.9);
+  const envelope = (attack: number) => ({
+    attack,
+    decay: 2.5,
+    sustain: 0.9,
+    length,
+    release: 1.5,
+  });
+  const high = chord(name, 1).slice(1);
+  const violin = high.map((freq, k): Sound => ({
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    fm: vibrato(freq),
+    unison: { voices: 5, detune: 14, width: 1 },
+    filter: { type: 'lowpass', freq: 1300, q: 0.6, sweep: { to: 3400, time: swell * 1.6 } },
+    envelope: envelope(swell),
+    gain: (level('keys') * db(1)) / Math.sqrt(high.length),
+    pan: pan + (k / (high.length - 1) - 0.5) * 0.5,
+  }));
+  const mid = chord(name, 0).slice(1, 4);
+  const viola = mid.map((freq): Sound => ({
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    fm: vibrato(freq, 4.8, 0.0025),
+    unison: { voices: 4, detune: 10, width: 0.7 },
+    filter: { type: 'lowpass', freq: 900, q: 0.6, sweep: { to: 1900, time: swell * 1.6 } },
+    envelope: envelope(swell * 1.1),
+    gain: (level('keys') * db(-3)) / Math.sqrt(mid.length),
+  }));
+  const root = chord(name, 0)[0] as number;
+  const low = [root, root / 2].map((freq, k): Sound => ({
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    fm: vibrato(freq, 4.5, 0.002),
+    unison: { voices: 3, detune: 7, width: 0.4 },
+    filter: { type: 'lowpass', freq: k === 0 ? 650 : 380, q: 0.6 },
+    envelope: envelope(swell * 0.8),
+    gain: level('bass') * (k === 0 ? db(-2) : db(1)),
+  }));
+  return layer([...violin, ...viola, ...low], { gain, send: 0.55 });
+}
+
+/**
+ * One short bowed note (spiccato) at `freq` Hz: for a ticking string
+ * ostinato over held strings.
+ */
+export function spiccato(freq: number, options: { gain?: number; pan?: number } = {}): Sound {
+  const { gain = 1, pan = 0 } = options;
+  return {
+    type: 'tone',
+    wave: 'saw',
+    freq,
+    pitch: { from: 0.994, time: 0.02 },
+    unison: { voices: 3, detune: 9, width: 0.5 },
+    filter: { type: 'lowpass', freq: 2600, q: 0.7, sweep: { to: 1400, time: 0.2 } },
+    envelope: { attack: 0.01, decay: 0.32 },
+    gain: level('keys') * db(-1) * gain,
+    pan,
+    send: 0.5,
+  };
 }
 
 /** A soft sustained chord bed under a scene, `length` seconds long. */

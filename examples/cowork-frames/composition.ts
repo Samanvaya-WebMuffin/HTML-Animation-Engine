@@ -49,11 +49,7 @@ const FRAMES: readonly { group: GroupId | 'overview'; lt?: number; beat?: 'a' | 
   { group: 'intro' },
   { group: 'ask' },
   { group: 'work' },
-  { group: 'answers', beat: 'a' },
-  { group: 'answers', beat: 'b' },
-  { group: 'library' },
-  { group: 'proof' },
-  { group: 'week' },
+  { group: 'answers' },
   { group: 'outro' },
 ];
 

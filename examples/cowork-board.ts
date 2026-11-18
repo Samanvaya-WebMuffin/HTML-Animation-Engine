@@ -9,12 +9,12 @@
  * is a function of its board origin, laid out in a 720 × 1280 frame.
  */
 import {
+  baselineOffset,
   clamp,
   groupNode,
   imageNode,
   lerp,
   progress,
-  layoutText,
   mixColors,
   linearGradient,
   radialGradient,
@@ -32,7 +32,6 @@ import {
   connector,
   elbow,
   elevationShadows,
-  glowShadows,
   litFill,
   kineticText,
   roundedRoute,
@@ -50,10 +49,7 @@ import {
   icon,
   lighting,
   look,
-  markTile,
-  paperCard,
-  puck,
-  textLines,
+  sparkleStar,
   timeRing,
   tone,
   type IconName,
@@ -80,7 +76,9 @@ import {
   type Placed,
 } from './cowork-paper.js';
 import { SFX_DIV, beats, gridTimes, onGrid } from './cowork-beat.js';
-import { mark } from './cowork-ui.js';
+import { createUi, type Ui } from './cowork-ui.js';
+import { ASK, answersArt, askArt, workArt } from './cowork-scenes.js';
+import { PILES, TILE, pile, preloadPileLogos, type PileKind } from './cowork-piles.js';
 
 const { easing } = look;
 export const FW = 720;
@@ -91,17 +89,7 @@ export const FH = 1280;
 // ---------------------------------------------------------------------------
 
 export type GroupId =
-  | 'queries'
-  | 'lost'
-  | 'criteria'
-  | 'intro'
-  | 'ask'
-  | 'work'
-  | 'answers'
-  | 'library'
-  | 'proof'
-  | 'week'
-  | 'outro';
+  'queries' | 'lost' | 'criteria' | 'intro' | 'ask' | 'work' | 'answers' | 'outro';
 
 interface GroupSpec {
   readonly id: GroupId;
@@ -123,10 +111,7 @@ export const GROUPS: readonly GroupSpec[] = [
   { id: 'ask', x: 3 * COL, y: ROW, hint: 'knowledge' },
   { id: 'work', x: 2 * COL, y: ROW + 80, hint: 'time' },
   { id: 'answers', x: COL, y: ROW - 50, hint: 'insight' },
-  { id: 'library', x: 0, y: ROW + 60, hint: 'people' },
-  { id: 'proof', x: 0, y: 2 * ROW + 40, hint: 'knowledge' },
-  { id: 'week', x: COL, y: 2 * ROW - 30, hint: 'time' },
-  { id: 'outro', x: 2 * COL, y: 2 * ROW + 60, hint: 'outcome' },
+  { id: 'outro', x: COL, y: 2 * ROW + 40, hint: 'outcome' },
 ];
 
 export function group(id: GroupId): GroupSpec {
@@ -158,10 +143,7 @@ const THREADS: readonly { from: GroupId; to: GroupId; meaning: Meaning }[] = [
   { from: 'intro', to: 'ask', meaning: 'brand' },
   { from: 'ask', to: 'work', meaning: 'knowledge' },
   { from: 'work', to: 'answers', meaning: 'knowledge' },
-  { from: 'answers', to: 'library', meaning: 'outcome' },
-  { from: 'library', to: 'proof', meaning: 'brand' },
-  { from: 'proof', to: 'week', meaning: 'time' },
-  { from: 'week', to: 'outro', meaning: 'brand' },
+  { from: 'answers', to: 'outro', meaning: 'brand' },
 ];
 
 /** The route of a thread: out of one group's side, round the corner, into the next. */
@@ -268,6 +250,8 @@ export function auroraPools(): AuroraPool[] {
 
 export interface Board {
   readonly look: Look;
+  /** The product kit's measurer (for the product scenes' frames). */
+  readonly ui: Ui;
   readonly heads: Readonly<Record<string, KineticText>>;
   readonly cards: Readonly<Record<string, Headline>>;
   /** Pinboard fabric and paper grain, made from a seed at setup. */
@@ -291,7 +275,7 @@ const CARDS: Readonly<Record<string, HeadSpec>> = {
   ask: { title: '*Bigger* questions.', accent: C.text.accent },
   work: {
     title: 'Researchers, in *parallel.*',
-    sub: 'Every step _checked._',
+    sub: 'Every answer _checked._',
     accent: C.text.accent,
     accent2: C.outcome.fg,
   },
@@ -303,23 +287,86 @@ const CARDS: Readonly<Record<string, HeadSpec>> = {
     accent2: C.time.fg,
   },
   library: { title: 'Saved. Shared. Never _lost._', accent2: C.outcome.fg },
-  week: { title: 'A week of digging.', sub: 'Condensed into *minutes.*', accent: C.text.accent },
+  week: { title: 'Days of digging.', sub: 'One *run.*', accent: C.text.accent },
 };
+
+/** The call to action's type: violet Sora, large enough to read as the ask. */
+export const CTA_FONT = face('title', 38, { weight: 500, letterSpacing: -0.4, lineHeight: 1.2 });
+
+/** The reveal's type: a light Sora kicker over the name at display size. */
+export const MEET_FONTS = {
+  kicker: face('title', 34, { weight: 300, letterSpacing: 3 }),
+  name: face('display', 150, { weight: 500, letterSpacing: -5, lineHeight: 1.05 }),
+} as const;
+
+/**
+ * The outro's pitch, before the lockup: a quiet line naming the pain, and
+ * the answer larger beneath it.
+ */
+export const PITCH_FONTS = {
+  first: face('title', 40, { weight: 400, letterSpacing: -0.6, lineHeight: 1.2 }),
+  second: face('display', 68, { weight: 500, letterSpacing: -2.2, lineHeight: 1.1 }),
+} as const;
+/** The lockup's name: the reveal's weight and tracking, at a smaller size. */
+export const OUT_NAME_FONT = face('display', 92, {
+  weight: 500,
+  letterSpacing: -3,
+  lineHeight: 1.05,
+});
 
 /** The lockup's name and tagline (no card: they stand on the light). */
 const HEADLINES: Readonly<
-  Record<string, { text: string; font: FontSpec; color?: string; align?: 'left' | 'center' }>
+  Record<
+    string,
+    {
+      text: string;
+      font: FontSpec;
+      color?: string;
+      align?: 'left' | 'center';
+      /** Accent colours and arrival, where they differ from the defaults. */
+      motion?: {
+        accent?: string;
+        accent2?: string;
+        stagger?: number;
+        duration?: number;
+        blur?: number;
+        rise?: number;
+      };
+    }
+  >
 > = {
-  inName: { text: 'Cowork.', font: T.display },
-  inTag: {
-    text: 'Know what your company knows',
-    font: face('title', 28, { weight: 500 }),
+  /** The reveal: "Meet" small above a large "Cowork", no tagline. */
+  meetKicker: {
+    text: 'Meet',
+    font: MEET_FONTS.kicker,
     color: C.text.secondary,
     align: 'center',
   },
-  outName: { text: 'Cowork.', font: T.display },
+  /** The same name in light, shown only where the shimmer crosses it. */
+  meetShine: { text: 'Cowork', font: MEET_FONTS.name, color: C.meet.shine, align: 'center' },
+  /** Copies for the name's glow and the shimmer's halo (each layer needs its own nodes). */
+  meetName: { text: 'Cowork', font: MEET_FONTS.name, align: 'center' },
+  meetGlow: { text: 'Cowork', font: MEET_FONTS.name, align: 'center' },
+  meetHalo: { text: 'Cowork', font: MEET_FONTS.name, color: C.meet.shine, align: 'center' },
+  /** "Stop waiting for answers.": "waiting" in the coral of what is lost. */
+  pitchFirst: {
+    text: 'Stop _waiting_ for answers.',
+    font: PITCH_FONTS.first,
+    align: 'center',
+    motion: { accent2: C.lost.coral, stagger: 0.016, duration: 0.55 },
+  },
+  /** "Just ask Cowork.": larger, arriving from further out of focus, "Cowork." in violet. */
+  pitchSecond: {
+    text: 'Just ask *Cowork.*',
+    font: PITCH_FONTS.second,
+    align: 'center',
+    motion: { accent: C.text.accent, stagger: 0.022, duration: 0.6, blur: 18, rise: 18 },
+  },
+  outName: { text: 'Cowork.', font: OUT_NAME_FONT, align: 'center' },
+  ctaText: { text: 'Join the waitlist', font: CTA_FONT, color: C.text.accent, align: 'center' },
+  ctaShine: { text: 'Join the waitlist', font: CTA_FONT, color: C.meet.shine, align: 'center' },
   outTag: {
-    text: 'Know what your company knows',
+    text: 'Know what your company knows.',
     font: face('title', 28, { weight: 500 }),
     color: C.text.secondary,
     align: 'center',
@@ -328,6 +375,7 @@ const HEADLINES: Readonly<
 
 /** Everything the board needs, made once (textures are generated and preloaded). */
 export async function createBoard(measurer: TextMeasurer): Promise<Board> {
+  await preloadPileLogos();
   const heads: Record<string, KineticText> = {};
   for (const [key, h] of Object.entries(HEADLINES)) {
     heads[key] = kineticText({
@@ -342,6 +390,7 @@ export async function createBoard(measurer: TextMeasurer): Promise<Board> {
       color: h.color ?? C.text.primary,
       at: 0,
       ease: easing.enter,
+      ...h.motion,
     });
   }
   const cards: Record<string, Headline> = {};
@@ -349,6 +398,7 @@ export async function createBoard(measurer: TextMeasurer): Promise<Board> {
     cards[key] = makeHeadline(`card-${key}`, spec, measurer);
   return {
     look: createLook(measurer),
+    ui: createUi(measurer),
     heads,
     cards,
     paper: await createPaperTextures('cowork-paper'),
@@ -359,6 +409,12 @@ export async function createBoard(measurer: TextMeasurer): Promise<Board> {
 export const BOARD_FONTS = [
   face('title', 28, { weight: 500 }),
   face('title', 84, { weight: 600, letterSpacing: 0 }),
+  MEET_FONTS.kicker,
+  MEET_FONTS.name,
+  OUT_NAME_FONT,
+  CTA_FONT,
+  PITCH_FONTS.first,
+  PITCH_FONTS.second,
 ] as const;
 
 /** Local time long after everything in a group has arrived (its settled, style-frame state). */
@@ -382,103 +438,6 @@ const txt = (
   fill: string,
   extra: { maxWidth?: number; align?: 'left' | 'center' | 'right' } = {},
 ) => textNode(id, { text, font: f, fill, transform: { x, y }, ...extra });
-
-/** The Cowork mark, small, for app headers. */
-function miniMark(id: string, x: number, y: number, size: number): SceneNode {
-  // The same violet mark tile as the app screens.
-  return mark(id, x, y, size * 1.1);
-}
-
-/**
- * An app screen: paper with a header (mark, title, optional tabs). Content
- * is laid out from the screen's top-left corner, clipped to the screen.
- */
-function screen(
-  id: string,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  title: string,
-  kids: readonly SceneNode[],
-  options: {
-    tabs?: readonly string[];
-    active?: number;
-    blur?: number;
-    rotation?: number;
-    lift?: 0 | 1 | 2;
-    measure?: (s: string, f: FontSpec) => number;
-  } = {},
-): SceneNode {
-  const header: SceneNode[] = [
-    miniMark(`${id}-mk`, 30, 30, 20),
-    txt(`${id}-ttl`, title, 50, 19, T.heading, C.text.primary),
-  ];
-  const measure = options.measure;
-  if (options.tabs && measure) {
-    let tx = w - 24;
-    const xs: number[] = [];
-    for (let k = options.tabs.length - 1; k >= 0; k--) {
-      tx -= measure(options.tabs[k] ?? '', T.label);
-      xs[k] = tx;
-      tx -= 22;
-    }
-    options.tabs.forEach((name, k) => {
-      const active = k === (options.active ?? 0);
-      header.push(
-        txt(
-          `${id}-tab${k}`,
-          name,
-          xs[k] ?? 0,
-          22,
-          T.label,
-          active ? C.text.primary : C.text.tertiary,
-        ),
-      );
-      if (active)
-        header.push(
-          shapeNode(`${id}-tabl${k}`, {
-            geometry: rect(
-              (xs[k] ?? 0) + measure(name, T.label) / 2,
-              58,
-              measure(name, T.label),
-              3,
-              1.5,
-            ),
-            fill: C.brand.fill,
-          }),
-        );
-    });
-  }
-  header.push(
-    shapeNode(`${id}-rule`, { geometry: rect(w / 2, 60, w, 1), fill: C.stroke.hairline }),
-  );
-  return paperCard(id, x + w / 2, y + h / 2, w, h, {
-    lift: options.lift ?? 1,
-    radius: 20,
-    rotation: options.rotation ?? 0,
-    ...(options.blur ? { blur: options.blur } : {}),
-    children: [
-      groupNode(`${id}-in`, [...header, ...kids], {
-        transform: { x: -w / 2, y: -h / 2 },
-        clip: rect(w / 2, h / 2, w, h, 20),
-      }),
-    ],
-  });
-}
-
-/** A typed question in a composer, with its caret. */
-function composerText(id: string, text: string, x: number, y: number, width: number): SceneNode[] {
-  return [
-    textNode(`${id}-q`, {
-      text,
-      font: face('body', 20, { weight: 500 }),
-      fill: C.text.primary,
-      maxWidth: width,
-      transform: { x, y },
-    }),
-  ];
-}
 
 // ---------------------------------------------------------------------------
 // The groups, at their key moments
@@ -803,6 +762,9 @@ function crackNodes(
  * paper wall is drawn by `cowork-wall.ts`; the pinboard under it is this
  * file's `lost` group, whose local time is the film's.
  */
+/** When the wall's paper starts sorting into piles (`OPENING.sort.start`). */
+const OPENING_SORT_START = beats(8);
+
 export const OPENING = {
   text: 0,
   /** The line breaks into grain and drifts away. */
@@ -811,12 +773,81 @@ export const OPENING = {
   fill: beats(4.5),
   flood: { start: beats(5.25), end: beats(7.5) },
   blur: { start: beats(7.5), duration: beats(0.5) },
-  /** "Most of it is lost." printed on the wall. */
-  lost: beats(8),
-  loosen: beats(8.75),
-  crack: { start: beats(9.25), duration: 0.4 },
-  break: beats(10),
+  /**
+   * Once the wall is out of focus, its paper lifts off, top layer first, and
+   * sorts itself into the piles: departures spread over `span`, each flight
+   * `flight` long (seconds).
+   */
+  sort: { start: OPENING_SORT_START, span: 1.0, flight: 0.62 },
+  /** The last piece is in its pile and the wall is gone (the camera starts to drift). */
+  break: beats(11),
 } as const;
+
+/**
+ * Where the piles stand in the lost group (group-local px, the folders'
+ * front centres), under the hour: three over two, at `PILE_SCALE`. Until the
+ * wall has gone the camera stands still on the group, so these are also
+ * their places on screen.
+ */
+export const PILE_SPOTS: Readonly<Record<PileKind, { x: number; y: number }>> = {
+  mail: { x: 130, y: 860 },
+  files: { x: 360, y: 860 },
+  m365: { x: 590, y: 860 },
+  workspace: { x: 245, y: 1100 },
+  slack: { x: 475, y: 1100 },
+};
+export const PILE_SCALE = 0.72;
+/**
+ * The empty folders rise softly into place as the paper starts to lift,
+ * left to right across the frame, `each` apart.
+ */
+export const PILE_REVEAL = { start: OPENING_SORT_START - 0.1, duration: 0.5, each: 0.07 } as const;
+/** How far pile `kind` has risen into place at film time `t` (0–1). */
+export function pileReveal(kind: PileKind, t: number): number {
+  const order = [...PILES].sort((a, b) => PILE_SPOTS[a.kind].x - PILE_SPOTS[b.kind].x);
+  const k = order.findIndex((p) => p.kind === kind);
+  return progress(t, PILE_REVEAL.start + k * PILE_REVEAL.each, PILE_REVEAL.duration, easing.enter);
+}
+
+/**
+ * The five piles at their spots (offset by `o`), each `fills[kind]` full
+ * (0–1) and `reveal(kind)` (0–1) of the way into place.
+ */
+export function piles(
+  tex: PaperTextures,
+  o: { x: number; y: number },
+  fills: Readonly<Record<PileKind, number>>,
+  revealOf: (kind: PileKind) => number = () => 1,
+): SceneNode[] {
+  return PILES.flatMap(({ kind }) => {
+    const spot = PILE_SPOTS[kind];
+    const reveal = revealOf(kind);
+    if (reveal <= 0) return [];
+    return groupNode(
+      `pile-${kind}-o`,
+      [
+        pile(`pile-${kind}`, kind, o.x + spot.x, o.y + spot.y, tex, {
+          scale: PILE_SCALE,
+          fill: fills[kind],
+        }),
+      ],
+      reveal < 1
+        ? {
+            opacity: clamp(reveal * 1.4),
+            transform: { y: 22 * (1 - reveal) },
+            blur: 6 * (1 - reveal),
+          }
+        : {},
+    );
+  });
+}
+const FULL: Readonly<Record<PileKind, number>> = {
+  mail: 1,
+  files: 1,
+  m365: 1,
+  workspace: 1,
+  slack: 1,
+};
 
 /** How many pinboard pieces are up from the first frame (the rest land as the camera arrives). */
 const PRE_LANDED = 6;
@@ -832,7 +863,7 @@ const LOST_WRITTEN = {
   /** The question mark, this long after its piece starts to fall. */
   mark: 0.3,
   /** The second line: the board goes soft behind an hour of searching. */
-  b: { start: beats(10.5), search: 0.9, each: 0.3, ring: 0.9, sweep: 2.6 },
+  b: { start: beats(10.75), search: 0.9, each: 0.3, ring: 0.9, sweep: 2.6 },
 } as const;
 /** On the film's beat grid: sixteenths, the landing stagger on thirty-seconds. */
 export const LOST = {
@@ -1289,7 +1320,7 @@ export const LOST_FALLS: readonly number[] = PIECES.flatMap((s) =>
   s.falls === undefined ? [] : [fallAt(s.falls)],
 ).sort((a, b) => a - b);
 
-function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] {
+function lost(b: Board, o: { x: number; y: number }, lt = SETTLED, pilesGone = false): SceneNode[] {
   const L = b.look;
   const nodes: SceneNode[] = [];
   const B = LOST.b;
@@ -1297,11 +1328,13 @@ function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] 
   // onto the bare ground, and the line, the searches and the clock hold the
   // centre of the frame on their own.
   if (lt < OPENING.flood.end) nodes.push(groupNode('lost-board', pinboard(b, o, lt)));
+  // The piles, full, once the wall has gone (until then the wall's layer draws them, above it).
+  if (lt >= OPENING.break && !pilesGone) nodes.push(...piles(b.paper, o, FULL));
   if (lt >= B.start) {
-    // The line on its card, then the searches beside the clock: one block in the middle of the frame.
+    // The line on its card, then the searches beside the clock: one block above the piles.
     const card = b.cards['lostB'];
     const [cardW, cardH] = [card?.width ?? 640, card?.height ?? 220];
-    const top = o.y + (FH - (cardH + HOUR.gap + HOUR.row)) / 2;
+    const top = o.y + HOUR.top;
     const row = top + cardH + HOUR.gap;
     nodes.push(head(b, 'lostB', o.x + (FW - cardW) / 2, top, lt - B.start - 0.2));
     // Searching for an hour: queries that come back empty, the hour running out.
@@ -1392,7 +1425,7 @@ function lost(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] 
 }
 
 /** The hour of searching, laid out under its card: gap, the row's height, the clock's centre in it. */
-const HOUR = { gap: 44, row: 200, clock: 96 } as const;
+const HOUR = { top: 150, gap: 44, row: 200, clock: 96 } as const;
 /** The three people searching, each in their own tint. */
 const SEARCHERS = [tone('knowledge'), tone('outcome'), tone('insight')] as const;
 /** The hour's clock: minutes counting up to a full hour (1:00). */
@@ -1404,24 +1437,103 @@ export function hourLabel(sweep: number): string {
 /** Choreography of the criteria group, in seconds of its own time. */
 const CRITERIA_WRITTEN = {
   head: 0.3,
-  hub: 0.1,
-  sats: { start: 0.35, each: 0.08 },
-  links: { start: 0.55, each: 0.08, draw: 0.55 },
-  pulses: { start: 1.3, every: 1.1 },
-  reach: 0.8,
-  field: { start: 1.2, duration: 1.7 },
-  tasks: [2.3, 2.55],
-  done: 3.3,
+  /**
+   * The piles land as the circle's tiles (they are carried here on the
+   * flight from the opening, which lands a beat into this group's time).
+   */
+  tiles: beats(1),
+  /** "Cowork" at the centre, for the first time. */
+  word: beats(1) + 0.15,
+  spokes: { start: beats(1) + 0.3, each: 0.08, draw: 0.55 },
+  pulses: { start: 1.6, every: 1.1 },
+  reach: 1.0,
+  field: { start: 1.3, duration: 1.7 },
 } as const;
 /** On the film's beat grid: sixteenths, the staggers on thirty-seconds. */
 export const CRITERIA = {
   ...gridTimes(CRITERIA_WRITTEN),
-  sats: { ...gridTimes(CRITERIA_WRITTEN.sats), each: onGrid(CRITERIA_WRITTEN.sats.each, SFX_DIV) },
-  links: {
-    ...gridTimes(CRITERIA_WRITTEN.links),
-    each: onGrid(CRITERIA_WRITTEN.links.each, SFX_DIV),
+  spokes: {
+    ...gridTimes(CRITERIA_WRITTEN.spokes),
+    each: onGrid(CRITERIA_WRITTEN.spokes.each, SFX_DIV),
   },
 };
+
+/** The circle's centre (group-local): "Cowork" sits here, the tiles around it. */
+export const RING = { x: FW / 2, y: 760, r: 250 } as const;
+/**
+ * Each pile's place on the circle (group-local), evenly spaced from the top,
+ * in the order that keeps the carried piles from crossing on the way.
+ */
+export const TILE_SPOTS: Readonly<Record<PileKind, { x: number; y: number }>> = (() => {
+  const order: PileKind[] = ['files', 'm365', 'slack', 'workspace', 'mail'];
+  const spots = {} as Record<PileKind, { x: number; y: number }>;
+  order.forEach((kind, k) => {
+    const a = ((-90 + k * 72) * Math.PI) / 180;
+    spots[kind] = { x: RING.x + RING.r * Math.cos(a), y: RING.y + RING.r * Math.sin(a) };
+  });
+  return spots;
+})();
+/** "Cowork" at the circle's centre: the reveal's name (Sora 500) at this scale. */
+export const WORD_SCALE = 0.3;
+
+/**
+ * "Cowork" set as the reveal's name (Sora 500, its tracking), centred on
+ * (cx, cy) at `scale`: the circle's centre at `WORD_SCALE`, the reveal at 1,
+ * and every size between as it is carried from one to the other.
+ */
+export function coworkWord(b: Board, id: string, cx: number, cy: number, scale: number): SceneNode {
+  const name = b.heads['meetName'];
+  const lh = MEET_FONTS.name.size * (MEET_FONTS.name.lineHeight ?? 1.2);
+  if (!name) return groupNode(`${id}-none`, []);
+  return groupNode(id, [renamed(name(SETTLED, 0), `${id}-`)], {
+    transform: { x: cx, y: cy - (lh * scale) / 2, scale },
+  });
+}
+
+/**
+ * A spoke from (x1, y1) to (x2, y2): a thin line that is clear at both ends
+ * and solid only in its middle, so it seems to dissolve into the tile and
+ * into the name. `p` (0–1) draws it from the tile inwards; `pulses` are
+ * points of light (0–1 along it) travelling in, fading at the ends too.
+ */
+function spoke(
+  id: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  p: number,
+  pulses: readonly number[],
+  pulseColor: string,
+): SceneNode | null {
+  if (p <= 0) return null;
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+  const c = C.stroke.strong;
+  const kids: SceneNode[] = [
+    shapeNode(`${id}-line`, {
+      geometry: rect((len * p) / 2, 0, len * p, 3, 1.5),
+      fill: linearGradient(0, 0, len, 0, [
+        { offset: 0, color: withAlpha(c, 0) },
+        { offset: 0.3, color: withAlpha(c, 0.85) },
+        { offset: 0.7, color: withAlpha(c, 0.85) },
+        { offset: 1, color: withAlpha(c, 0) },
+      ]),
+    }),
+  ];
+  pulses.forEach((u, k) => {
+    if (u <= 0 || u >= 1 || u > p) return;
+    kids.push(
+      shapeNode(`${id}-pulse${k}`, {
+        geometry: rect(len * u, 0, 7, 7, 3.5),
+        fill: pulseColor,
+        shadow: { x: 0, y: 0, blur: 8, color: withAlpha(pulseColor, 0.7) },
+        opacity: Math.sin(Math.PI * u),
+      }),
+    );
+  });
+  return groupNode(id, kids, { transform: { x: x1, y: y1, rotation: angle } });
+}
 
 /** The hub, in board space relative to the group (the network plane pivots on it). */
 export const HUB = { x: FW / 2, y: 780 } as const;
@@ -1456,8 +1568,7 @@ function criteria(
   lt = SETTLED,
   hubGone = false,
 ): SceneNode[] {
-  const L = b.look;
-  const hub = { x: FW / 2, y: 760 };
+  const hub = { x: RING.x, y: RING.y };
   const nodes: SceneNode[] = [head(b, 'criteria', o.x + HEAD.x, o.y + HEAD.y, lt - CRITERIA.head)];
   const net: (SceneNode | null)[] = [];
   const field = progress(lt, CRITERIA.field.start, CRITERIA.field.duration, easing.enter);
@@ -1484,152 +1595,290 @@ function criteria(
       }),
     );
   }
-  const sats: [IconName, Meaning, number, number][] = [
-    ['doc', 'knowledge', -230, -150],
-    ['sheet', 'knowledge', 0, -235],
-    ['chart', 'knowledge', 230, -150],
-    ['chat', 'knowledge', -250, 70],
-    ['people', 'people', 250, 70],
-    ['mail', 'knowledge', -120, 220],
-    ['people', 'people', 130, 225],
-  ];
-  sats.forEach(([ic, meaning, dx, dy], k) => {
-    const end = { x: hub.x + dx, y: hub.y + dy };
-    const start = CRITERIA.links.start + k * CRITERIA.links.each;
-    net.push(
-      connector({
-        id: `cr-link${k}`,
-        d: roundedRoute(
-          elbow(end, hub, Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'),
-          24,
+  // The piles, now tiles on the circle, joined to "Cowork" at the centre by
+  // spokes that fade at both ends, with points of light travelling in.
+  const kinds = PILES.map((p) => p.kind);
+  if (lt >= CRITERIA.tiles) {
+    kinds.forEach((kind, k) => {
+      const spot = TILE_SPOTS[kind];
+      const dx = hub.x - spot.x;
+      const dy = hub.y - spot.y;
+      const d = Math.hypot(dx, dy);
+      const [ux, uy] = [dx / d, dy / d];
+      const from = TILE.r + 8;
+      const to = d - 78;
+      const start = CRITERIA.spokes.start + k * CRITERIA.spokes.each;
+      net.push(
+        spoke(
+          `cr-spoke${k}`,
+          spot.x + ux * from,
+          spot.y + uy * from,
+          spot.x + ux * to,
+          spot.y + uy * to,
+          progress(lt, start, CRITERIA.spokes.draw, easing.enter),
+          [0, 1, 2, 3, 4].map((n) =>
+            clamp((lt - (CRITERIA.pulses.start + n * CRITERIA.pulses.every + k * 0.13)) / 1.0),
+          ),
+          C.pile[kind].icon,
         ),
-        color: C.stroke.connector,
-        width: 2,
-        start,
-        duration: CRITERIA.links.draw,
-        ease: easing.enter,
-        dots: [0.45],
-        dotColor: C.stroke.strong,
-        pulses: [0, 1, 2, 3, 4].map((n) => ({
-          at: CRITERIA.pulses.start + n * CRITERIA.pulses.every + k * 0.13,
-          duration: 1,
-          color: tone(meaning).fill,
-          size: 4,
-        })),
-        pulseEase: easing.drift,
-      })(lt),
-      focusIn(
-        `cr-p${k}-o`,
-        end.x,
-        end.y,
-        progress(lt, CRITERIA.sats.start + k * CRITERIA.sats.each, 0.45, easing.enter),
-        [puck(`cr-p${k}`, end.x, end.y, 40, ic, meaning)],
-      ),
-    );
-  });
+      );
+    });
+    kinds.forEach((kind) => {
+      const spot = TILE_SPOTS[kind];
+      net.push(
+        pile(`cr-tile-${kind}`, kind, spot.x, spot.y, b.paper, { scale: PILE_SCALE, morph: 1 }),
+      );
+    });
+  }
   if (!hubGone) {
+    const w = progress(lt, CRITERIA.word, 0.5, easing.enter);
     net.push(
-      focusIn('cr-hub-o', hub.x, hub.y, progress(lt, CRITERIA.hub, 0.5, easing.enter), [
-        puck('cr-hub', hub.x, hub.y, 64, 'layers', 'brand'),
-      ]),
+      focusIn('cr-word-o', hub.x, hub.y, w, [coworkWord(b, 'cr-word', hub.x, hub.y, WORD_SCALE)]),
     );
   }
-  // Work they couldn't take on before: lit as insight; the second gets done.
-  const tasks: [string, number, number][] = [
-    ['Forecast Q3 demand', 200, 1100],
-    ['Audit 2,400 contracts', 540, 1100],
-  ];
-  tasks.forEach(([label, x, y], k) => {
-    const p = progress(lt, CRITERIA.tasks[k] ?? 0, 0.5, easing.enter);
-    const done = k === 1 ? progress(lt, CRITERIA.done, 0.4, easing.snap) : 0;
-    const meaning: Meaning = done > 0.5 ? 'outcome' : 'insight';
-    const w = L.measurer.measure(label, T.small) + 70;
-    net.push(
-      focusIn(`task${k}-o`, x, y, p, [
-        paperCard(`task${k}`, x, y, w, 56, {
-          lift: 1,
-          children: [
-            shapeNode(`task${k}-glow`, {
-              geometry: rect(0, 0, w, 56, 14),
-              stroke: { color: tone(meaning).glow, width: 3 },
-            }),
-            groupNode(
-              `task${k}-ic`,
-              [
-                icon(
-                  `task${k}-i`,
-                  meaning === 'outcome' ? 'check' : 'insight',
-                  0,
-                  0,
-                  18,
-                  tone(meaning).fill,
-                  2,
-                ),
-              ],
-              {
-                transform: {
-                  x: -w / 2 + 26,
-                  y: 0,
-                  scale: k === 1 ? 1 + 0.25 * Math.sin(Math.PI * done) : 1,
-                },
-              },
-            ),
-            txt(`task${k}-t`, label, -w / 2 + 46, -10, T.small, C.text.primary),
-          ],
-        }),
-      ]),
-    );
-  });
   nodes.push(
     groupNode(
       'cr-net',
       net.filter((n): n is SceneNode => n !== null),
-      {
-        // A slightly tilted plane, pivoting on the hub so nothing slides off the frame.
-        transform: {
-          x: o.x + hub.x,
-          y: o.y + hub.y + 20,
-          skewX: -6,
-          scaleY: 0.94,
-          originX: hub.x,
-          originY: hub.y,
-        },
-      },
+      { transform: { x: o.x, y: o.y } },
     ),
   );
   return nodes;
 }
 
-/** Choreography of the intro, from the moment the tile lands. */
-/** On the film's beat grid (sixteenths). */
-export const INTRO = gridTimes({ name: 0.35, tagline: 1.0, halo: 1.2 } as const);
-/** The lockup: a small Cowork tile on the left of the name, centred as a pair; the tagline below. */
-export const LOCKUP = { y: 560, tile: 76, gap: 22, tagline: 62, cta: 190 } as const;
+/**
+ * "Meet Cowork", from the moment the hub's light lands at the centre: the
+ * bright pools bloom out of that point, "Meet" and the name arrive into
+ * focus, then one band of light crosses the name. On the beat grid.
+ */
+export const MEET = gridTimes({
+  bloom: 0.75,
+  kicker: 0.05,
+  name: 0.15,
+  shine: { start: 0.8, duration: 0.9 },
+  glint: 1.2,
+} as const);
+/** Where the name sits (group-local): the centre of the frame. */
+export const MEET_AT = { y: 640, kicker: 108 } as const;
 
-/** Where the tile sits in a group's lockup (relative to the group), for the carrier to land on. */
-export function tileSpot(b: Board, cta = false): { x: number; y: number; size: number } {
-  const nameW = b.heads[cta ? 'outName' : 'inName']?.width ?? 240;
-  const width = LOCKUP.tile + LOCKUP.gap + nameW;
-  return { x: FW / 2 - width / 2 + LOCKUP.tile / 2, y: LOCKUP.y, size: LOCKUP.tile };
+/**
+ * The ball, from the moment the carried name lands (s): the name melts into
+ * drops that run together into the ball (`merge` long; the film's Three.js
+ * layer draws them), which is whole at `formed` and drops onto the floor.
+ */
+export const REVEAL = {
+  melt: beats(3.75),
+  merge: beats(1),
+  formed: beats(4.75),
+} as const;
+
+/** The reveal's light pools, around the name (offset from the centre, radii, colour, strength). */
+const MEET_POOLS: readonly {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  color: string;
+  alpha: number;
+  rot: number;
+}[] = [
+  { x: -170, y: -230, rx: 360, ry: 260, color: C.meet.violet, alpha: 0.62, rot: -18 },
+  { x: 210, y: -150, rx: 320, ry: 240, color: C.meet.blue, alpha: 0.55, rot: 24 },
+  { x: -230, y: 160, rx: 330, ry: 250, color: C.meet.pink, alpha: 0.5, rot: 12 },
+  { x: 190, y: 250, rx: 340, ry: 230, color: C.meet.amber, alpha: 0.46, rot: -20 },
+  { x: 40, y: 430, rx: 300, ry: 200, color: C.meet.teal, alpha: 0.4, rot: 6 },
+  { x: 20, y: -10, rx: 260, ry: 170, color: C.meet.lilac, alpha: 0.5, rot: 0 },
+];
+
+/** The reveal: bright pools of colour, "Meet" above the name, one shimmer across it. */
+function meet(b: Board, o: { x: number; y: number }, lt: number): SceneNode[] {
+  const cx = o.x + FW / 2;
+  const cy = o.y + MEET_AT.y;
+  const nodes: SceneNode[] = [];
+  // The pools bloom out of the centre, then breathe and drift slowly.
+  const bloom = progress(lt, 0, MEET.bloom, easing.enter);
+  if (bloom > 0) {
+    MEET_POOLS.forEach((pool, k) => {
+      const drift = lt * 0.6;
+      const dx = 18 * Math.sin(drift + k * 1.7);
+      const dy = 14 * Math.cos(drift * 0.8 + k * 2.3);
+      const s = lerp(0.25, 1, bloom) * (1 + 0.04 * Math.sin(drift * 1.3 + k));
+      nodes.push(
+        shapeNode(`meet-pool${k}`, {
+          geometry: rect(0, 0, 200, 200, 100),
+          fill: radialGradient(0, 0, 100, [
+            { offset: 0, color: withAlpha(pool.color, pool.alpha) },
+            { offset: 0.45, color: withAlpha(pool.color, pool.alpha * 0.55) },
+            { offset: 0.75, color: withAlpha(pool.color, pool.alpha * 0.18) },
+            { offset: 1, color: withAlpha(pool.color, 0) },
+          ]),
+          transform: {
+            x: cx + (pool.x + dx) * s,
+            y: cy + (pool.y + dy) * s,
+            rotation: pool.rot + 6 * lt,
+            scaleX: (pool.rx / 100) * s,
+            scaleY: (pool.ry / 100) * s,
+          },
+          opacity: clamp(bloom * 1.4),
+        }),
+      );
+    });
+  }
+  const name = b.heads['meetName'];
+  const glow = b.heads['meetGlow'];
+  const shine = b.heads['meetShine'];
+  const halo = b.heads['meetHalo'];
+  const nameTop = cy - (MEET_FONTS.name.size * (MEET_FONTS.name.lineHeight ?? 1.2)) / 2;
+  // "Meet" stays until the name melts.
+  const melting = progress(lt, REVEAL.melt, 0.35, easing.exit);
+  if (melting < 1)
+    nodes.push(
+      groupNode(
+        'meet-kicker-o',
+        [head(b, 'meetKicker', cx, nameTop - MEET_AT.kicker + 40, lt - MEET.kicker)],
+        melting > 0 ? { opacity: 1 - melting } : {},
+      ),
+    );
+  // The name itself, already whole (carried here from the circle's centre,
+  // growing on the way), with a soft light behind it; later its letters
+  // melt, one after another, each shrinking into its centre, where the
+  // film's ball layer grows its drop.
+  if (name && glow && lt >= 0) {
+    const melt = progress(lt, REVEAL.melt - 0.05, 0.5, easing.enter);
+    nodes.push(
+      groupNode('meet-name-glow', [glow(SETTLED, 0)], {
+        transform: { x: cx, y: nameTop },
+        opacity: 0.35 * bloom * (1 - melt),
+        blur: 22,
+      }),
+    );
+    if (melt <= 0) nodes.push(coworkWord(b, 'meet-name', cx, cy, 1));
+    else nodes.push(...meltingName(b, cx, cy, melt));
+  }
+  // The shimmer: a slanted band of light crossing the name once. Real light
+  // has soft edges, so the band is many thin slices whose strength follows a
+  // smooth curve (the letters' own edges stay sharp), with a faint bloom.
+  const sweep = progress(lt, MEET.shine.start, MEET.shine.duration, easing.camera);
+  if (shine && halo && sweep > 0 && sweep < 1) {
+    const width = name?.width ?? 520;
+    const h = MEET_FONTS.name.size * 1.3;
+    const x = lerp(cx - width / 2 - 160, cx + width / 2 + 160, sweep);
+    const slant = 60;
+    const slice = (x0: number, w: number) =>
+      pathGeometry(
+        `M${x0 + slant} ${nameTop - 20}L${x0 + w + slant} ${nameTop - 20}L${x0 + w - slant} ${nameTop + h}L${x0 - slant} ${nameTop + h}Z`,
+      );
+    const lit = Math.sin(Math.PI * sweep);
+    // Nested bands on one centre line, each narrower than the last, so their
+    // light adds up to a bell-shaped sheen (no two edges ever meet).
+    const BANDS = 16;
+    const sigma = 46;
+    const text = groupNode('meet-shine-t', [shine(SETTLED, 0)], {
+      transform: { x: cx, y: nameTop },
+    });
+    for (let k = 0; k < BANDS; k++) {
+      const level = (k + 0.5) / BANDS;
+      const w = 2 * sigma * Math.sqrt(2 * Math.log(1 / level));
+      nodes.push(
+        groupNode(`meet-shine${k}`, [renamed(text, `meet-shine${k}-`)], {
+          clip: slice(x - w / 2, w),
+          opacity: (1.6 / BANDS) * lit,
+        }),
+      );
+    }
+    nodes.push(
+      groupNode(
+        'meet-bloom',
+        [groupNode('meet-bloom-t', [halo(SETTLED, 0)], { transform: { x: cx, y: nameTop } })],
+        {
+          clip: slice(x - 50, 100),
+          opacity: 0.4 * lit,
+          blur: 10,
+        },
+      ),
+    );
+  }
+  // One small glint on the name's last letter as the light leaves it.
+  const glint = sparkleStar(
+    'meet-glint',
+    cx + (name?.width ?? 520) / 2 - 18,
+    nameTop + 26,
+    (lt - MEET.glint) / 0.7,
+  );
+  if (glint && lt < REVEAL.melt) nodes.push(glint);
+  return nodes;
 }
 
 /**
- * The Cowork tile (it has just landed, carried from the hub), its violet
- * halo blooming, then the name and the tagline arriving into focus. With
- * `cta`, the outro's call to action follows. `tileHidden` leaves the tile to
- * the carrier while it is still in flight.
+ * The reveal's name melting (`melt` 0–1): each letter, a little after the one
+ * before, shrinks into its own centre (mid x-height, where the ball's drop
+ * grows: `nameLetters` in the film uses the same place) and goes.
+ */
+function meltingName(b: Board, cx: number, cy: number, melt: number): SceneNode[] {
+  const font = MEET_FONTS.name;
+  const text = 'Cowork';
+  const m = b.ui.measurer;
+  const width = m.measure(text, font);
+  const lh = font.size * (font.lineHeight ?? 1.2);
+  const metrics = m.metrics?.(font) ?? { ascent: font.size * 0.95, descent: font.size * 0.25 };
+  const midY = baselineOffset(font, metrics) - font.size * 0.36 - lh / 2;
+  const n = text.length;
+  return [...text].flatMap((ch, i) => {
+    const own = clamp(melt * 1.5 - (i / Math.max(1, n - 1)) * 0.5);
+    const shrink = 1 - 0.8 * own * own;
+    const fade = 1 - clamp((own - 0.35) / 0.55);
+    if (fade <= 0) return [];
+    const a = m.measure(text.slice(0, i), font);
+    const right = m.measure(text.slice(0, i + 1), font);
+    const lx = (a + right) / 2 - width / 2;
+    return [
+      groupNode(
+        `meet-melt${i}`,
+        [
+          textNode(`meet-melt${i}-t`, {
+            text: ch,
+            font,
+            fill: C.text.primary,
+            transform: { x: a - width / 2 - lx, y: -lh / 2 - midY },
+          }),
+        ],
+        { transform: { x: cx + lx, y: cy + midY, scale: shrink }, opacity: fade },
+      ),
+    ];
+  });
+}
+
+/** A copy of a node tree with every id prefixed (the same drawing used more than once). */
+function renamed(node: SceneNode, prefix: string): SceneNode {
+  return node.type === 'group'
+    ? { ...node, id: prefix + node.id, children: node.children.map((c) => renamed(c, prefix)) }
+    : { ...node, id: prefix + node.id };
+}
+
+/** The lockup's choreography, from its first letter (on the film's beat grid, sixteenths). */
+export const INTRO = gridTimes({ tagline: 1.0, halo: 1.2 } as const);
+/** The lockup: the name, centred (no logo), the tagline and the call to action below. */
+export const LOCKUP = { y: 560, tagline: 68, cta: 196 } as const;
+
+/** Where the hub's light lands in the reveal (relative to the group). */
+export function revealSpot(): { x: number; y: number } {
+  return { x: FW / 2, y: MEET_AT.y };
+}
+
+/**
+ * The reveal (`meet`), or with `cta` the outro's lockup: a soft violet light
+ * blooming, the name arriving into focus at the centre, the
+ * tagline beneath it, then the call to action.
  */
 function intro(
   b: Board,
   o: { x: number; y: number },
   lt = SETTLED,
-  options: { cta?: boolean; tileHidden?: boolean } = {},
+  options: { cta?: boolean } = {},
 ): SceneNode[] {
-  const L = b.look;
-  const cta = options.cta ?? false;
-  const pre = cta ? 'out' : 'in';
+  if (!options.cta) return meet(b, o, lt);
+  const pre = 'out';
   const cx = o.x + FW / 2;
-  const spot = tileSpot(b, cta);
   const ly = o.y + LOCKUP.y;
   const halo = progress(lt, 0, INTRO.halo, easing.enter);
   const bloom = Math.max(0, Math.sin(Math.PI * clamp(lt / 0.6)));
@@ -1645,48 +1894,17 @@ function intro(
       }),
     );
   }
-  if (!options.tileHidden && lt >= 0)
-    nodes.push(markTile(`${pre}-mark`, o.x + spot.x, ly, spot.size, { glow: 0.9 + 0.8 * bloom }));
   nodes.push(
-    // The name sits beside the tile, its line box centred on the tile.
     head(
       b,
       `${pre}Name`,
-      o.x + spot.x + LOCKUP.tile / 2 + LOCKUP.gap,
-      ly - (T.display.size * (T.display.lineHeight ?? 1.2)) / 2,
-      lt - INTRO.name,
+      cx,
+      ly - (OUT_NAME_FONT.size * (OUT_NAME_FONT.lineHeight ?? 1.2)) / 2,
+      lt,
     ),
     head(b, `${pre}Tag`, cx, ly + LOCKUP.tagline, lt - INTRO.tagline),
   );
-  if (cta) {
-    const p = progress(lt, INTRO.tagline + 0.8, 0.5, easing.enter);
-    if (p > 0) {
-      // Once it has landed, one quick shimmer crosses the button, and as it
-      // leaves a single star twinkles at the button's top right.
-      const since = lt - (INTRO.tagline + CTA_SHIMMER.first);
-      const btn = L.button('cta', 'Join the waitlist.', 0, 0, {
-        primary: true,
-        ...(since > 0
-          ? {
-              shimmer: since / CTA_SHIMMER.sweep,
-              sparkle: (since - CTA_SHIMMER.sweep) / CTA_SHIMMER.star,
-            }
-          : {}),
-      });
-      nodes.push(
-        groupNode('cta-pos', [btn.node], {
-          transform: {
-            // originX is placed at x, so the button's centre sits on the lockup's axis.
-            x: cx,
-            y: ly + LOCKUP.cta + 10 * (1 - p),
-            scale: 1.25,
-            originX: btn.w / 2,
-          },
-          opacity: clamp(p * 1.6),
-        }),
-      );
-    }
-  }
+  nodes.push(...callToAction(b, cx, ly + LOCKUP.cta, lt - (INTRO.tagline + 0.8)));
   return nodes;
 }
 
@@ -1696,648 +1914,141 @@ function intro(
  */
 const CTA_SHIMMER = { first: beats(2.5), sweep: beats(0.75), star: 0.8 } as const;
 
-const ASK_QUESTION =
-  'Which suppliers slowed our deliveries this quarter, and what did we promise customers because of it?';
-const ASK_FONT = face('body', 20, { weight: 500 });
-
-function ask(b: Board, o: { x: number; y: number }): SceneNode[] {
-  const L = b.look;
-  const m = (s: string, f: FontSpec) => L.measurer.measure(s, f);
-  const nodes: SceneNode[] = [head(b, 'ask', o.x + HEAD.x, o.y + HEAD.y)];
-  // The caret sits just after the last typed character.
-  const typed = layoutText(ASK_QUESTION, ASK_FONT, { measurer: L.measurer, maxWidth: 500 });
-  const lastLine = typed.lines[typed.lines.length - 1];
-  const caret = {
-    x: 46 + (lastLine?.x ?? 0) + (lastLine?.width ?? 0) + 3,
-    y: 156 + (lastLine?.y ?? 0) + typed.lineHeight / 2,
-  };
-  // Behind, out of focus: the rep's quick question and the HR head and intern asking the same thing.
-  nodes.push(
-    screen(
-      'ask-rep',
-      o.x - 60,
-      o.y + 300,
-      400,
-      300,
-      'Inbox',
-      [
-        ...Array.from({ length: 4 }, (_, k) =>
-          textLines(`ask-rep-r${k}`, 24, 90 + k * 48, [200, 140], { gap: 16 }),
-        ),
-      ],
-      { blur: 7, rotation: -4, lift: 0 },
-    ),
-    screen(
-      'ask-hr',
-      o.x + 420,
-      o.y + 930,
-      320,
-      260,
-      'Cowork',
-      [...composerText('ask-hr', 'What were this year’s salary revisions?', 22, 90, 270)],
-      { blur: 6, rotation: 5, lift: 0 },
-    ),
-  );
-  const kids: SceneNode[] = [
-    txt('ask-coo-h', 'What do you need to know?', 28, 86, T.title, C.text.primary),
-    shapeNode('ask-coo-box', {
-      geometry: rect(300, 236, 552, 190, 18),
-      fill: C.surface.paper,
-      stroke: { color: C.stroke.focus, width: 1.5 },
-      shadow: glowShadows(lighting, C.brand.glow, { radius: 12, strength: 0.35 }),
-    }),
-    ...composerText('ask-coo', ASK_QUESTION, 46, 156, 500),
-    shapeNode('ask-coo-caret', {
-      geometry: rect(caret.x, caret.y, 2, 24, 1),
-      fill: C.brand.fill,
-    }),
-    shapeNode('ask-lvl', { geometry: rect(160, 360, 240, 40, 12), fill: C.surface.sunken }),
-    shapeNode('ask-lvl-sel', {
-      geometry: rect(240, 360, 74, 32, 9),
-      fill: C.surface.paper,
-      shadow: elevationShadows(lighting, 'low'),
-    }),
-    ...['Level 1', 'Level 2', 'Level 3'].map((n, k) =>
-      txt(`ask-lvl${k}`, n, 80 + k * 80, 351, T.label, k === 2 ? C.text.accent : C.text.tertiary, {
-        align: 'center',
-      }),
-    ),
-    L.chip('ask-deep', 'Deep analysis · 15–100 min', 300, 360, 'time', { icon: 'clock' }).node,
-    L.button('ask-go', 'Ask', 470, 430, { primary: true, icon: 'send' }).node,
-    txt('ask-rec', 'recent', 28, 480, T.caps, C.text.tertiary),
-    ...['Which accounts renew next quarter?', 'Why did churn rise in the north?'].map((q, k) =>
-      txt(`ask-rec${k}`, q, 56, 512 + k * 40, T.small, C.text.secondary),
-    ),
-    ...[0, 1].map((k) => icon(`ask-rec-i${k}`, 'search', 36, 522 + k * 40, 15, C.text.tertiary)),
-  ];
-  nodes.push(
-    screen('ask-coo', o.x + 60, o.y + 360, 600, 600, 'Cowork', kids, {
-      tabs: ['Ask', 'Work', 'Reports'],
-      active: 0,
-      measure: m,
-      lift: 2,
-    }),
-  );
-  return nodes;
-}
-
-function work(b: Board, o: { x: number; y: number }): SceneNode[] {
-  const L = b.look;
-  const m = (s: string, f: FontSpec) => L.measurer.measure(s, f);
-  const nodes: SceneNode[] = [head(b, 'work', o.x + HEAD.x, o.y + HEAD.y)];
-  nodes.push(
-    screen(
-      'wk-plan',
-      o.x - 40,
-      o.y + 290,
-      330,
-      360,
-      'Plan',
-      [
-        txt('wk-plan-s', 'steps', 24, 84, T.caps, C.text.tertiary),
-        ...[0, 1, 2, 3].map((k) => textLines(`wk-plan-l${k}`, 52, 122 + k * 40, [200])),
-      ],
-      { blur: 6, rotation: -5, lift: 0 },
-    ),
-  );
-  const rows: SceneNode[] = [
-    txt('wk-t', 'Supplier delays and promises', 28, 84, T.heading, C.text.primary),
-    L.chip('wk-run', 'Running · 4 researchers', 28, 132, 'time', { icon: 'clock' }).node,
-    txt('wk-el', 'elapsed', 572, 80, T.caps, C.text.tertiary, { align: 'right' }),
-    txt('wk-clock', '16:30', 572, 98, T.clock, C.time.fg, { align: 'right' }),
-    shapeNode('wk-rule', { geometry: rect(300, 168, 600, 1), fill: C.stroke.hairline }),
-  ];
-  [
-    ['Delivery logs · ERP', 0.92, '1,038'],
-    ['Supplier emails', 0.74, '702'],
-    ['Customer contracts', 0.61, '388'],
-    ['Teams threads', 0.83, '911'],
-  ].forEach(([name, p, items], k) => {
-    const y = 196 + k * 62;
-    rows.push(
-      shapeNode(`wk-r${k}-i`, { geometry: rect(46, y + 20, 36, 36, 11), fill: C.brand.tint }),
-      icon(`wk-r${k}-ic`, 'search', 46, y + 20, 17, C.brand.fill, 1.7),
-      txt(`wk-r${k}-n`, String(name), 76, y + 2, T.small, C.text.primary),
-      txt(`wk-r${k}-c`, `${items} read`, 572, y + 2, T.mono, C.text.secondary, { align: 'right' }),
-      shapeNode(`wk-r${k}-tr`, {
-        geometry: rect(76 + 248, y + 34, 496, 4, 2),
-        fill: C.surface.sunken,
-      }),
-      shapeNode(`wk-r${k}-b`, {
-        geometry: rect(76 + 248 * Number(p), y + 34, 496 * Number(p), 4, 2),
-        fill: C.brand.fill,
-      }),
-    );
-  });
-  rows.push(txt('wk-cl', 'checklist', 28, 462, T.caps, C.text.tertiary));
-  [
-    'Collected delivery logs for 46 suppliers',
-    'Matched 1,318 late order lines',
-    'Found 22 promises in emails and chats',
-    'Checking every figure against its source',
-  ].forEach((s, k) => {
-    const y = 494 + k * 40;
-    const done = k < 3;
-    rows.push(
-      shapeNode(`wk-c${k}`, {
-        geometry: rect(40, y + 11, 22, 22, 11),
-        fill: done ? C.status.done : C.surface.paper,
-        stroke: done ? undefined : { color: C.status.running, width: 2, dash: [10, 4] },
-      }),
-      ...(done ? [icon(`wk-c${k}-i`, 'check', 40, y + 11, 16, P.white, 2.2)] : []),
-      txt(`wk-c${k}-t`, s, 62, y, T.small, done ? C.text.primary : C.text.secondary),
-    );
-  });
-  nodes.push(
-    screen('wk-main', o.x + 60, o.y + 330, 600, 680, 'Cowork', rows, {
-      tabs: ['Ask', 'Work', 'Reports'],
-      active: 1,
-      measure: m,
-      lift: 2,
-    }),
-  );
-  // The rep's answer, already there, beside it (out of focus).
-  nodes.push(
-    screen(
-      'wk-rep',
-      o.x + 400,
-      o.y + 1000,
-      330,
-      230,
-      'Cowork',
-      [
-        textLines('wk-rep-l', 22, 90, [270, 250, 180]),
-        L.chip('wk-rep-c', 'High confidence', 22, 170, 'outcome', { icon: 'shield' }).node,
-      ],
-      { blur: 6, rotation: 4, lift: 0 },
-    ),
-  );
-  return nodes;
-}
-
-function answers(b: Board, o: { x: number; y: number }, beat: 'a' | 'b'): SceneNode[] {
-  const L = b.look;
-  if (beat === 'a') {
-    const nodes: SceneNode[] = [head(b, 'answersA', o.x + HEAD.x, o.y + HEAD.y)];
-    // The HR head's and the intern's screens, one above the other.
-    const W = 620;
-    const H = 262;
-    const pane = (
-      id: string,
-      y: number,
-      who: string,
-      color: string,
-      initials: string,
-      allowed: boolean,
-    ) => {
-      const kids: SceneNode[] = [
-        L.avatar(`${id}-av`, initials, W - 40, 30, 16, color),
-        shapeNode(`${id}-qb`, {
-          geometry: rect(W - 24 - 170, 100, 340, 44, 18),
-          fill: C.brand.tint,
-        }),
-        textNode(`${id}-q`, {
-          text: 'What were this year’s salary revisions?',
-          font: T.small,
-          fill: C.text.primary,
-          transform: { x: W - 24 - 340 + 20, y: 90 },
-        }),
-        txt(`${id}-who`, 'cowork', 24, 140, T.meta, C.text.tertiary),
-      ];
-      if (allowed) {
-        const c1 = L.citation(`${id}-c1`, 1, 'doc', 'Revision policy', 24, 226);
-        kids.push(
-          textNode(`${id}-a`, {
-            text: 'This year’s revision averaged 7.2%, effective 1 April. Bands 3 to 5 rose 8 to 10%.',
-            font: T.small,
-            fill: C.text.primary,
-            maxWidth: W - 48,
-            transform: { x: 24, y: 164 },
-          }),
-          c1.node,
-          L.citation(`${id}-c2`, 2, 'doc', 'Pay committee', 32 + c1.w, 226).node,
-        );
-      } else {
-        kids.push(
-          shapeNode(`${id}-lockd`, { geometry: rect(46, 196, 44, 44, 22), fill: C.friction.bg }),
-          icon(`${id}-lock`, 'lock', 46, 196, 22, C.friction.fg, 1.6),
-          textNode(`${id}-e`, {
-            text: 'Nothing you’re allowed to see answers this.',
-            font: T.small,
-            fill: C.text.secondary,
-            transform: { x: 82, y: 186 },
-          }),
-        );
-      }
-      return screen(id, o.x + 50, y, W, H, who, kids, { lift: 2 });
-    };
-    nodes.push(
-      pane('an-hr', o.y + 330, 'HR head', C.avatar.hr, 'HR', true),
-      pane('an-in', o.y + 330 + H + 24, 'Intern', C.avatar.intern, 'IN', false),
-    );
-    return nodes;
-  }
-  // The report opens on its bottom line, with the source email behind it.
-  const nodes: SceneNode[] = [head(b, 'answersB', o.x + HEAD.x, o.y + HEAD.y)];
-  nodes.push(
-    screen(
-      'an-mail',
-      o.x + 330,
-      o.y + 300,
-      380,
-      280,
-      'Re: Renewal terms',
-      [
-        shapeNode('an-mail-hl', { geometry: rect(190, 120, 330, 26, 6), fill: C.insight.marker }),
-        textLines('an-mail-l', 24, 120, [300, 260, 280, 200], { gap: 30 }),
-      ],
-      { blur: 6, rotation: 5, lift: 0 },
-    ),
-  );
-  const kids: SceneNode[] = [
-    txt('rp-k', 'REPORT · LEVEL 3', 28, 84, T.caps, C.text.tertiary),
-    txt('rp-t', 'Supplier delays and promises', 28, 106, T.title, C.text.primary),
-    L.chip('rp-done', 'Done · 18:40', 28, 160, 'outcome', { icon: 'check' }).node,
-    shapeNode('rp-bl', { geometry: rect(300, 252, 552, 120, 14), fill: C.surface.tint }),
-    shapeNode('rp-bl-bar', { geometry: rect(26, 252, 4, 120, 2), fill: C.brand.fill }),
-    txt('rp-bl-k', 'bottom line', 46, 204, T.caps, C.text.accent),
-    shapeNode('rp-bl-hl', {
-      geometry: rect(46 + 198 + 22, 240, 52, 26, 6),
-      fill: C.insight.marker,
-    }),
-    textNode('rp-bl-t', {
-      text: 'Three suppliers caused 71% of late deliveries. We promised 14 customers new dates or credits.',
-      font: T.body,
-      fill: C.text.primary,
-      maxWidth: 520,
-      transform: { x: 46, y: 228 },
-    }),
-    txt('rp-ch', 'Average days late, by supplier', 28, 340, T.label, C.text.secondary),
-  ];
-  [
-    ['Kestrel Alloys', 9.4],
-    ['Arbor Freight', 6.1],
-    ['Halden Plastics', 4.8],
-    ['All others', 1.2],
-  ].forEach(([n, d], k) => {
-    const y = 378 + k * 40;
-    const w = (Number(d) / 10) * 320;
-    kids.push(
-      txt(`rp-b${k}-n`, String(n), 28, y - 9, T.small, C.text.secondary),
-      shapeNode(`rp-b${k}`, {
-        geometry: rect(176 + w / 2, y + 2, w, 22, 6),
-        fill: k < 3 ? C.source.icon : C.stroke.strong,
-      }),
-      txt(`rp-b${k}-v`, `${Number(d).toFixed(1)} d`, 186 + w, y - 8, T.mono, C.text.primary),
-    );
-  });
-  kids.push(
-    txt('rp-src', 'SOURCES · 38', 28, 548, T.caps, C.text.tertiary),
-    L.chip('rp-s1', 'Delivery emails · 21', 28, 590, 'knowledge', { icon: 'mail' }).node,
-    L.chip('rp-s2', 'Logistics logs · 9', 230, 590, 'knowledge', { icon: 'doc' }).node,
-  );
-  nodes.push(screen('rp', o.x + 60, o.y + 380, 600, 650, 'Cowork', kids, { lift: 2 }));
-  return nodes;
-}
-
-function library(b: Board, o: { x: number; y: number }): SceneNode[] {
-  const L = b.look;
-  const m = (s: string, f: FontSpec) => L.measurer.measure(s, f);
-  const nodes: SceneNode[] = [head(b, 'library', o.x + HEAD.x, o.y + HEAD.y)];
-  const rows: SceneNode[] = [
-    txt('lib-t', 'Reports', 28, 80, T.title, C.text.primary),
-    L.chip('lib-q', 'Q3 2026', 470, 96, 'time', { icon: 'calendar' }).node,
-  ];
-  const list: [string, string, string, string[]][] = [
-    [
-      'Supplier delays and promises',
-      'COO · Level 3 · Updated 30 Sep',
-      'v2',
-      [C.avatar.coo, C.avatar.cfo],
-    ],
-    ['Renewals at risk, Q2', 'Sales ops · Level 3 · 24 Jun', 'v3', [C.avatar.rep, C.avatar.team]],
-    ['Vendor contract terms', 'Legal · Level 3 · 19 Jun', 'v2', [C.avatar.hr]],
-    ['Escalations this month', 'Support · Level 3 · 9 Jun', 'v4', [C.avatar.intern, C.avatar.rep]],
-  ];
-  list.forEach(([title, meta, v, people], k) => {
-    const y = 140 + k * 86 + (k > 0 ? 96 : 0);
-    if (k === 0)
-      rows.push(
-        shapeNode('lib-new', {
-          geometry: rect(300, y + 36, 568, 76, 14),
-          fill: C.surface.tint,
-          stroke: { color: C.brand.soft, width: 1.2 },
-        }),
-      );
-    rows.push(
-      shapeNode(`lib-r${k}-i`, { geometry: rect(52, y + 36, 40, 40, 11), fill: C.source.bg }),
-      icon(`lib-r${k}-ic`, 'doc', 52, y + 36, 20, C.source.icon),
-      txt(`lib-r${k}-t`, title, 86, y + 14, T.small, C.text.primary),
-      txt(`lib-r${k}-m`, meta, 86, y + 38, T.label, C.text.tertiary),
-      L.chip(`lib-r${k}-v`, v, 410, y + 36, k === 0 ? 'outcome' : 'brand').node,
-      ...people.map((c, i) =>
-        L.avatar(`lib-r${k}-p${i}`, ['CO', 'CF', 'SR', 'HR'][i] ?? '', 480 + i * 26, y + 36, 14, c),
-      ),
-      shapeNode(`lib-r${k}-rule`, { geometry: rect(300, y + 80, 560, 1), fill: C.stroke.hairline }),
-    );
-  });
-  // Another team's question, built on version 2.
-  rows.push(
-    paperCard('lib-build', 330, 290, 520, 76, {
-      lift: 1,
-      children: [
-        L.avatar('lib-build-av', 'FT', -232, 0, 14, C.avatar.team),
-        txt('lib-build-w', 'Finance team asked', -208, -24, T.label, C.text.tertiary),
-        txt(
-          'lib-build-q',
-          'How will supplier delays affect Q3 margins?',
-          -208,
-          -2,
-          T.small,
-          C.text.primary,
-        ),
-        L.chip('lib-build-c', 'Builds on v2', 120, -18, 'knowledge', { icon: 'link' }).node,
-      ],
-    }),
-    shapeNode('lib-thread', {
-      geometry: pathGeometry('M52 210V262Q52 290 72 290'),
-      stroke: { color: C.source.glow, width: 2, cap: 'round' },
-    }),
-  );
-  nodes.push(
-    screen('lib', o.x + 60, o.y + 330, 600, 640, 'Cowork', rows, {
-      tabs: ['Ask', 'Work', 'Reports'],
-      active: 2,
-      measure: m,
-      lift: 2,
-    }),
-  );
-  // Shared with the CFO.
-  const toastW = L.measurer.measure('Shared with CFO', T.small) + 70;
-  nodes.push(
-    groupNode(
-      'lib-toast',
-      [
-        shapeNode('lib-toast-bg', {
-          geometry: rect(0, 0, toastW, 50, 25),
-          fill: C.text.primary,
-          shadow: elevationShadows(lighting, 'mid'),
-        }),
-        shapeNode('lib-toast-ck', {
-          geometry: rect(-toastW / 2 + 26, 0, 22, 22, 11),
-          fill: C.status.done,
-        }),
-        icon('lib-toast-i', 'check', -toastW / 2 + 26, 0, 15, P.white, 2.2),
-        txt('lib-toast-t', 'Shared with CFO', -toastW / 2 + 46, -11, T.small, P.white),
-      ],
-      { transform: { x: o.x + FW / 2, y: o.y + 1040 } },
-    ),
-  );
-  return nodes;
-}
-
-function proof(b: Board, o: { x: number; y: number }): SceneNode[] {
-  const L = b.look;
-  const m = (s: string, f: FontSpec) => L.measurer.measure(s, f);
-  const nodes: SceneNode[] = [];
-  // A placeholder for a real screen recording: the product, tilted, shallow focus.
-  const rows: SceneNode[] = [
-    txt('pr-t', 'Supplier delays and promises', 28, 84, T.heading, C.text.primary),
-    txt('pr-clock', '12:08', 572, 84, T.clock, C.time.fg, { align: 'right' }),
-    ...[0, 1, 2, 3, 4].map((k) => textLines(`pr-l${k}`, 28, 160 + k * 60, [520, 420], { gap: 18 })),
-  ];
-  nodes.push(
-    groupNode(
-      'pr-tilt',
-      [
-        screen('pr-screen', 0, 0, 640, 560, 'Cowork', rows, {
-          tabs: ['Ask', 'Work', 'Reports'],
-          active: 1,
-          measure: m,
-          lift: 2,
-        }),
-      ],
-      {
-        transform: { x: o.x + 40, y: o.y + 230, skewY: -5, rotation: -2 },
-      },
-    ),
-    paperCard('pr-fg', o.x + 120, o.y + 860, 300, 200, {
-      lift: 2,
-      rotation: -9,
-      blur: 14,
-      children: [textLines('pr-fg-l', -110, -40, [200, 160, 180])],
-    }),
-  );
-  const cardText = 'Sparing hours of searching,';
-  const w = L.measurer.measure(cardText, face('headline', 34)) + 64;
-  nodes.push(
-    glassPanel(
-      'pr-card',
-      o.x + FW / 2,
-      o.y + 960,
-      w,
-      84,
-      [txt('pr-card-t', cardText, -w / 2 + 32, -20, face('headline', 34), C.text.primary)],
-      24,
-    ),
-    txt(
-      'pr-note',
-      'PLACEHOLDER · real screen recordings drop in here',
-      o.x + FW / 2,
-      o.y + 1060,
-      T.caps,
-      C.text.tertiary,
-      { align: 'center' },
-    ),
-  );
-  return nodes;
-}
-
-/** Choreography of the week hook, in seconds of its own time. */
-const WEEK_WRITTEN = {
-  head: 0.25,
-  /** Day k's column comes into focus at days.start + k × days.each; its pile lands item by item. */
-  days: { start: 0.1, each: 0.08, item: 0.07 },
-  /** The five days fold into one report. */
-  fold: { start: 1.6, duration: 0.8 },
-  report: { start: 1.8, center: 2.3 },
-  /** The clock runs its last seconds, stops, and turns green. */
-  clock: { start: 2.0, end: 2.9 },
-  chips: [3.1, 3.3, 3.5],
-} as const;
-/** On the film's beat grid: sixteenths, the piles' staggers on thirty-seconds. */
-export const WEEK = {
-  ...gridTimes(WEEK_WRITTEN),
-  days: {
-    start: onGrid(WEEK_WRITTEN.days.start),
-    each: onGrid(WEEK_WRITTEN.days.each, SFX_DIV),
-    item: onGrid(WEEK_WRITTEN.days.item, SFX_DIV),
-  },
-};
-
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
-const REPORT = { x: 578, y: 610, center: FW / 2 } as const;
-
 /**
- * The hook: a work week of digging, each day a column filling with emails,
- * files and chats; the five days fold together into one finished report
- * while its clock ticks to a stop at 18:40 and turns green; then it is
- * stamped Sourced, Checked and Shared.
+ * "Join the waitlist" as text, not a button, from `u` s after it starts
+ * arriving (centred on `cx`, its line box's centre at `y`): the letters
+ * come into focus, then one band of light crosses the words and a star
+ * twinkles at the end.
  */
-function week(b: Board, o: { x: number; y: number }, lt = SETTLED): SceneNode[] {
-  const L = b.look;
-  const nodes: SceneNode[] = [head(b, 'week', o.x + HEAD.x, o.y + HEAD.y, lt - WEEK.head)];
-  const fold = progress(lt, WEEK.fold.start, WEEK.fold.duration, easing.camera);
-  if (fold < 1) {
-    DAYS.forEach((d, k) => {
-      const at = WEEK.days.start + k * WEEK.days.each;
-      const p = progress(lt, at, 0.45, easing.enter);
-      if (p <= 0) return;
-      const x0 = o.x + 82 + k * 72;
-      // Folding: each day slides into the report, narrowing, smeared by speed.
-      const x = lerp(x0, o.x + REPORT.x, fold);
-      const kids: SceneNode[] = [
-        shapeNode(`wh-col${k}-g`, {
-          geometry: rect(0, 0, 64, 420, 20),
-          fill: linearGradient(0, -210, 0, 210, [
-            withAlpha(C.surface.glass, 0.85),
-            withAlpha(C.surface.glass, 0.6),
-          ]),
-          stroke: { color: withAlpha(P.white, 0.95), width: 1.2 },
-          shadow: elevationShadows(lighting, 'low'),
-        }),
-        txt(`wh-d${k}`, d, 0, -194, T.label, C.time.fg, { align: 'center' }),
-      ];
-      for (let n = 0; n < 3 + k; n++) {
-        const q = progress(lt, at + 0.2 + n * WEEK.days.item, 0.35, easing.enter);
-        if (q <= 0) continue;
-        const kind = (['mail', 'doc', 'chat'] as const)[(n + k) % 3] ?? 'mail';
-        kids.push(
-          groupNode(
-            `wh-d${k}-f${n}`,
-            [
-              shapeNode(`wh-d${k}-f${n}-bg`, {
-                geometry: rect(0, 0, 50, 36, 8),
-                fill: C.surface.paper,
-                stroke: { color: C.stroke.hairline, width: 1 },
-                shadow: elevationShadows(lighting, 'low'),
-              }),
-              icon(`wh-d${k}-f${n}-i`, kind, 0, 0, 17, C.time.ring, 1.6),
-            ],
-            {
-              transform: {
-                x: (random('wk', 'x', k, n) - 0.5) * 10,
-                y: 170 - n * 40 - 24 * (1 - q),
-                rotation: (random('wk', 'r', k, n) - 0.5) * 12,
-              },
-              opacity: clamp(q * 1.8),
-            },
-          ),
-        );
-      }
-      nodes.push(
-        groupNode(`wh-col${k}`, kids, {
-          transform: { x, y: o.y + 610, scaleX: lerp(1, 0.2, fold), scale: lerp(1.04, 1, p) },
-          opacity: clamp(p * 1.6) * (1 - fold),
-          ...(fold > 0.02
-            ? { blur: { x: 26 * Math.sin(Math.PI * fold), y: 1 } }
-            : p < 1
-              ? { blur: 6 * (1 - p) }
-              : {}),
-        }),
+function callToAction(b: Board, cx: number, y: number, u: number): SceneNode[] {
+  const text = b.heads['ctaText'];
+  const shine = b.heads['ctaShine'];
+  if (!text || u < 0) return [];
+  const lh = CTA_FONT.size * (CTA_FONT.lineHeight ?? 1.2);
+  const w = text.width;
+  const left = cx - w / 2;
+  const top = y - lh / 2;
+  const textCx = left + text.width / 2;
+  const nodes: SceneNode[] = [head(b, 'ctaText', textCx, top, u)];
+  // One band of light across the words, then a star at the end.
+  const since = u - (CTA_SHIMMER.first - 0.8);
+  const sweep = clamp(since / CTA_SHIMMER.sweep);
+  if (shine && sweep > 0 && sweep < 1) {
+    const x = lerp(left - 80, left + text.width + 80, sweep);
+    const lit = Math.sin(Math.PI * sweep);
+    const band = (bw: number) =>
+      pathGeometry(
+        `M${x - bw / 2 + 18} ${top - 6}L${x + bw / 2 + 18} ${top - 6}L${x + bw / 2 - 18} ${top + lh + 6}L${x - bw / 2 - 18} ${top + lh + 6}Z`,
       );
-    });
-  }
-  // The report the week becomes: it takes the centre once the days have folded into it.
-  const r = progress(lt, WEEK.report.start, 0.5, easing.enter);
-  if (r > 0) {
-    const cx = lerp(REPORT.x, REPORT.center, progress(lt, WEEK.report.center, 0.6, easing.camera));
-    const done = lt >= WEEK.clock.end;
-    const secs = Math.round(
-      lerp(1111, 1120, progress(lt, WEEK.clock.start, WEEK.clock.end - WEEK.clock.start)),
-    );
-    const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-    const bump = done ? Math.sin(Math.PI * clamp((lt - WEEK.clock.end) / 0.4)) : 0;
-    nodes.push(
-      groupNode(
-        'wh-report-o',
-        [
-          paperCard('wh-report', 0, 0, 220, 340, {
-            lift: 2,
-            children: [
-              shapeNode('wh-report-glow', {
-                geometry: rect(0, 0, 220, 340, 14),
-                stroke: { color: C.brand.glow, width: 2 },
-                shadow: glowShadows(lighting, C.brand.glow, {
-                  radius: 26,
-                  strength: 0.6 + 0.4 * fold,
-                }),
-              }),
-              txt('wh-report-k', 'report', -88, -150, T.caps, C.text.tertiary),
-              textNode('wh-report-t', {
-                text: 'Supplier delays and promises',
-                font: T.heading,
-                fill: C.text.primary,
-                maxWidth: 180,
-                transform: { x: -88, y: -128 },
-              }),
-              textLines('wh-report-l', -88, -54, [170, 140, 160]),
-              groupNode(
-                'wh-ring-o',
-                [timeRing('wh-ring', 0, 70, 52, 1, '', done ? 'outcome' : 'time')],
-                {
-                  transform: { x: 0, y: 70, scale: 1 + 0.08 * bump, originX: 0, originY: 70 },
-                },
-              ),
-              txt(
-                'wh-report-c',
-                clock,
-                0,
-                56,
-                face('mono', 22, { weight: 600 }),
-                done ? C.outcome.fg : C.time.fg,
-                { align: 'center' },
-              ),
-            ],
-          }),
-        ],
-        {
-          transform: { x: o.x + cx, y: o.y + REPORT.y, scale: lerp(0.9, 1, r) },
-          opacity: clamp(r * 1.6),
-          ...(r < 1 ? { blur: 8 * (1 - r) } : {}),
-        },
-      ),
-    );
-  }
-  const chips: [string, Meaning, IconName][] = [
-    ['Sourced', 'knowledge', 'doc'],
-    ['Checked', 'outcome', 'check'],
-    ['Shared', 'people', 'people'],
-  ];
-  const chipFont = face('label', 16, { weight: 600 });
-  const widths = chips.map(([label]) => L.measurer.measure(label, chipFont) + 44);
-  let cx = o.x + FW / 2 - (widths.reduce((a, w) => a + w, 0) + 24) / 2;
-  chips.forEach(([label, meaning, ic], k) => {
-    const p = progress(lt, WEEK.chips[k] ?? 0, 0.45, easing.snap);
-    const c = L.chip(`wh-chip${k}`, label, cx, o.y + 900, meaning, { icon: ic, font: chipFont });
-    if (p > 0) {
-      const mid = cx + c.w / 2;
+    for (let k = 0; k < 8; k++) {
+      const level = (k + 0.5) / 8;
+      const bw = 2 * 22 * Math.sqrt(2 * Math.log(1 / level));
       nodes.push(
-        groupNode(`wh-chip${k}-o`, [c.node], {
-          transform: {
-            x: mid,
-            y: o.y + 900,
-            scale: lerp(1.3, 1, p),
-            originX: mid,
-            originY: o.y + 900,
-          },
-          opacity: clamp(p * 2),
-        }),
+        groupNode(
+          `cta-shine${k}`,
+          [
+            renamed(
+              groupNode('cta-shine-t', [shine(SETTLED, 0)], { transform: { x: textCx, y: top } }),
+              `cta-shine${k}-`,
+            ),
+          ],
+          { clip: band(bw), opacity: (1.4 / 8) * lit },
+        ),
       );
     }
-    cx += c.w + 12;
-  });
+  }
+  const star = sparkleStar(
+    'cta-star',
+    left + w + 6,
+    top - 4,
+    (since - CTA_SHIMMER.sweep) / CTA_SHIMMER.star,
+  );
+  if (star) nodes.push(star);
   return nodes;
+}
+
+/**
+ * The pitch's choreography (s from its first letter, on sixteenths): the
+ * second line a second after the first, the light-violet marker once it has
+ * been read, then both leave for the lockup, which starts `lead` after the
+ * pitch (5.5 beats: 3 s).
+ */
+export const PITCH = {
+  ...gridTimes({ second: 1.0, mark: 2.05, leave: 2.6 } as const),
+  lead: beats(5.5),
+} as const;
+/** Where the two lines' tops sit in the outro group (centred on the frame's middle). */
+const PITCH_AT = { first: 516, second: 588 } as const;
+
+/**
+ * "Stop waiting for answers." arriving letter by letter, then a second
+ * later "Just ask Cowork." larger beneath it, as the first line steps back
+ * and a violet light swells behind the answer; a light-violet marker sweeps
+ * behind "ask Cowork." once it has been read; then both slide away in a
+ * motion blur, the first a moment ahead, for the lockup.
+ */
+function pitch(b: Board, o: { x: number; y: number }, u: number): SceneNode[] {
+  const first = b.heads['pitchFirst'];
+  const second = b.heads['pitchSecond'];
+  if (!first || !second || u < 0 || u >= PITCH.lead) return [];
+  const cx = o.x + FW / 2;
+  const out = (delay: number) => progress(u, PITCH.leave + delay, 0.36, easing.exit);
+  const step = progress(u, PITCH.second, 0.6, easing.enter);
+  const nodes: SceneNode[] = [];
+  // The answer's light: a soft violet pool swelling as it arrives, gone as it leaves.
+  const s = u - PITCH.second;
+  const swell = progress(s, 0, 0.9, easing.enter) * (1 - out(0.05));
+  if (swell > 0) {
+    const gy = o.y + PITCH_AT.second + 40;
+    const r = lerp(180, 360, swell);
+    nodes.push(
+      shapeNode('pitch-light', {
+        geometry: rect(cx, gy, 2 * r, 2 * r, r),
+        fill: radialGradient(cx, gy, r, [
+          withAlpha(C.brand.glow, 0.26 * swell),
+          withAlpha(C.brand.glow, 0),
+        ]),
+      }),
+    );
+  }
+  nodes.push(
+    groupNode('pitch-first', [head(b, 'pitchFirst', cx, o.y + PITCH_AT.first, u, out(0))], {
+      opacity: 1 - 0.4 * step,
+    }),
+  );
+  // The marker behind "ask Cowork.", swept once the line has been read.
+  const sweep = progress(u, PITCH.mark, 0.45, easing.enter);
+  if (sweep > 0) {
+    const lh = PITCH_FONTS.second.size * (PITCH_FONTS.second.lineHeight ?? 1.2);
+    const left = cx - second.width / 2 + b.ui.measure('Just ', PITCH_FONTS.second) - 10;
+    const w = (cx + second.width / 2 + 10 - left) * sweep;
+    nodes.push(
+      shapeNode('pitch-mark', {
+        geometry: rect(left + w / 2, o.y + PITCH_AT.second + lh * 0.58, w, lh * 0.66, 10),
+        fill: withAlpha(C.brand.soft, 0.85),
+        opacity: 1 - out(0.06),
+      }),
+    );
+  }
+  nodes.push(head(b, 'pitchSecond', cx, o.y + PITCH_AT.second, s, out(0.06)));
+  return nodes;
+}
+
+/**
+ * A product scene as the film shows it (`cowork-scenes.ts`), at content
+ * time `lt`; settled, a moment that shows the whole scene.
+ */
+const PRODUCT_SETTLED = { ask: ASK.pick - 0.05, work: 8.4, answers: 5.2 } as const;
+function productFrame(
+  b: Board,
+  id: 'ask' | 'work' | 'answers',
+  o: { x: number; y: number },
+  lt: number,
+): SceneNode {
+  const c = lt >= SETTLED ? PRODUCT_SETTLED[id] : lt;
+  const kit = { look: b.look, ui: b.ui };
+  const art = id === 'ask' ? askArt(kit, c) : id === 'work' ? workArt(kit, c) : answersArt(kit, c);
+  return groupNode(`${id}-frame`, art, { transform: { x: o.x, y: o.y } });
 }
 
 export interface ArtOptions {
@@ -2347,10 +2058,10 @@ export interface ArtOptions {
   readonly beat?: 'a' | 'b';
   /** The camera diving through the cracked wall (0–1). */
   readonly dive?: number;
-  /** The hub has left the criteria group (it is flying to the intro). */
+  /** "Cowork" has left the criteria group (it is flying to the intro). */
   readonly hubGone?: boolean;
-  /** The tile is still in flight (drawn by the carrier, not the intro). */
-  readonly tileHidden?: boolean;
+  /** The piles have left the lost group (they are flying to the circle). */
+  readonly pilesGone?: boolean;
 }
 
 /** Everything a group shows at local time `lt` (its style frame when settled). */
@@ -2358,29 +2069,20 @@ export function groupArt(b: Board, id: GroupId, options: ArtOptions = {}): Scene
   const g = group(id);
   const o = { x: g.x, y: g.y };
   const lt = options.lt ?? SETTLED;
-  const beat = options.beat ?? 'a';
   switch (id) {
     case 'queries':
       return queries(b, o, lt, options.dive ?? 0);
     case 'lost':
-      return lost(b, o, lt);
+      return lost(b, o, lt, options.pilesGone ?? false);
     case 'criteria':
       return criteria(b, o, lt, options.hubGone ?? false);
     case 'intro':
-      return intro(b, o, lt, { tileHidden: options.tileHidden ?? false });
+      return intro(b, o, lt);
     case 'ask':
-      return ask(b, o);
     case 'work':
-      return work(b, o);
     case 'answers':
-      return answers(b, o, beat);
-    case 'library':
-      return library(b, o);
-    case 'proof':
-      return proof(b, o);
-    case 'week':
-      return week(b, o, lt);
+      return [productFrame(b, id, o, lt)];
     case 'outro':
-      return intro(b, o, lt, { cta: true });
+      return [...pitch(b, o, lt + PITCH.lead), ...intro(b, o, lt, { cta: true })];
   }
 }

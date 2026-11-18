@@ -3,7 +3,10 @@
  * company's paper (pages, charts, sticky notes, index cards, notebook
  * pages, folders, file printouts, photos, receipts) lands on the pinboard
  * and spills past it until every pixel is covered, the wall goes out of
- * focus behind the opening line, and then cracks and breaks.
+ * focus, and then its paper lifts off, top layer first, and sorts itself into five
+ * piles by where it lives (`cowork-piles.ts`): each piece glides on a soft
+ * curve into the nearest pile, coming into focus on the way, and slips in
+ * behind the folder. The board beneath has gone; bare ground is left.
  *
  * Realism without a per-frame cost: every kind of paper is drawn once at
  * setup into a picture at the output resolution (with its grain, curl and
@@ -13,8 +16,9 @@
  * motion-blurred near the lens, its shadow wide, soft and far, then lands
  * with a small squash and turn, its shadow tight. Pieces buried under later
  * ones stop being drawn. Once the wall is whole it is one picture (and
- * three pre-blurred copies for the focus pull), and the break cuts that
- * picture into shards (`fracture.ts`).
+ * three pre-blurred copies for the focus pull); for the sorting each piece
+ * also has an out-of-focus picture, so the wall can come apart piece by
+ * piece.
  *
  * Everything is placed by a seeded layout and timed in film seconds, so any
  * frame can be drawn first.
@@ -22,19 +26,27 @@
 import {
   clamp,
   createRng,
-  fontString,
   groupNode,
   lerp,
   progress,
   withAlpha,
   type FontSpec,
-  type Point,
   type SceneNode,
   type TextMeasurer,
 } from '@html-animation-engine/core';
 import { createRenderer, kineticText, type KineticText } from '@html-animation-engine/renderers';
 import { SFX_DIV, onGrid } from './cowork-beat.js';
-import { FH, FW, OPENING } from './cowork-board.js';
+import {
+  FH,
+  FW,
+  OPENING,
+  PILE_REVEAL,
+  PILE_SCALE,
+  PILE_SPOTS,
+  pileReveal,
+  piles,
+} from './cowork-board.js';
+import { PILES, type PileKind } from './cowork-piles.js';
 import { C, P, face, lighting, look, tone } from './cowork-look.js';
 import {
   chartPage,
@@ -49,20 +61,7 @@ import {
   type PaperTextures,
   type Placed,
 } from './cowork-paper.js';
-import { createFracture, type ShadowSprite } from './fracture.js';
-import {
-  clap,
-  crack,
-  cue,
-  pad,
-  pluck,
-  seeded,
-  slap,
-  thump,
-  tick,
-  whoosh,
-  type Cues,
-} from './sounds.js';
+import { cue, pad, pluck, seeded, slap, thump, whoosh, type Cues } from './sounds.js';
 
 const { easing } = look;
 const W = FW;
@@ -319,6 +318,8 @@ interface Sprite {
   readonly sharp: HTMLCanvasElement;
   /** The same, smeared, for when it is moving fast. */
   readonly smear: HTMLCanvasElement;
+  /** The same, out of focus as the finished wall is, for the sorting. */
+  readonly soft: HTMLCanvasElement;
   /** Its shadow from the air: wide and soft. */
   readonly air: HTMLCanvasElement;
   readonly bw: number;
@@ -356,11 +357,8 @@ export interface Wall {
     readonly cell: number;
     readonly grains: readonly Grain[];
   };
-  /** The broken wall's picture: out of focus, "Most of it is lost." printed on it. */
-  readonly lost: HTMLCanvasElement;
   /** The finished wall, sharp, then three steps out of focus. */
   readonly stills: readonly HTMLCanvasElement[];
-  readonly shardShadows: readonly ShadowSprite[];
   readonly scale: number;
 }
 
@@ -397,22 +395,13 @@ function filtered(
   return out;
 }
 
-/** The opening line, and the line printed on the wall, laid out once. */
+/** The opening line, laid out once. */
 export interface WallText {
   readonly first: KineticText;
-  /** "Most of it is lost.": each letter placed (x from the line's left), and where "is lost" starts. */
-  readonly second: {
-    readonly letters: readonly { ch: string; x: number }[];
-    readonly width: number;
-    readonly lostFrom: number;
-  };
 }
 
 const LINE: FontSpec = face('headline', 46, { letterSpacing: -1.1, lineHeight: 1.12 });
-/** The line printed on the wall: large, across its middle, where it cracks. */
-const WALL_LINE: FontSpec = face('headline', 62, { letterSpacing: -1.6, lineHeight: 1.1 });
-export const WALL_FONTS: readonly FontSpec[] = [LINE, WALL_LINE];
-const SECOND = 'Most of it is lost.';
+export const WALL_FONTS: readonly FontSpec[] = [LINE];
 /** Long after any entrance: the opening line settled. */
 const SETTLED_TEXT = 1e4;
 
@@ -432,29 +421,8 @@ export function createWallText(measurer: TextMeasurer): WallText {
     at: 0,
     ease: easing.enter,
   });
-  const letters = [...SECOND].map((ch, k) => ({
-    ch,
-    x: measurer.measure(SECOND.slice(0, k), WALL_LINE),
-  }));
-  return {
-    first,
-    second: {
-      letters,
-      width: measurer.measure(SECOND, WALL_LINE),
-      lostFrom: SECOND.indexOf('is lost'),
-    },
-  };
+  return { first };
 }
-
-const FRACTURE = createFracture({
-  seed: 'cowork-wall',
-  width: W,
-  height: H,
-  crack: OPENING.crack,
-  fall: OPENING.break,
-  tint: C.surface.paper,
-  light: P.white,
-});
 
 /** Draws every picture the wall needs, once, at the output scale. */
 export function createWall(doc: Document, tex: PaperTextures, scale: number, text: WallText): Wall {
@@ -483,7 +451,16 @@ export function createWall(doc: Document, tex: PaperTextures, scale: number, tex
       g.fillStyle = withAlpha(lighting.shadow, 0.4);
       g.fillRect(cx - v.w / 2 + 4, cy - v.h / 2 + 4, v.w - 8, v.h - 8);
     }
-    return { sharp, smear: filtered(doc, sharp, `blur(${3.2 * scale}px)`), air, bw, bh, cx, cy };
+    return {
+      sharp,
+      smear: filtered(doc, sharp, `blur(${3.2 * scale}px)`),
+      soft: filtered(doc, sharp, `blur(${11 * scale}px)`),
+      air,
+      bw,
+      bh,
+      cx,
+      cy,
+    };
   });
   // The finished wall: every piece at rest, on the ground colour (nothing shows through).
   const still = canvasOf(doc, W * scale, H * scale);
@@ -501,20 +478,10 @@ export function createWall(doc: Document, tex: PaperTextures, scale: number, tex
     filtered(doc, still, `blur(${6 * scale}px)`, veil(0.04)),
     filtered(doc, still, `blur(${11 * scale}px)`, veil(0.06)),
   ];
-  // The broken wall's picture: out of focus, the line printed on it as it was when it broke.
-  const lost = canvasOf(doc, W * scale, H * scale);
-  const lg = lost.getContext('2d');
-  const blurred = stills.at(-1);
-  if (lg && blurred) {
-    lg.drawImage(blurred, 0, 0);
-    drawSecond(lg, text, OPENING.break, scale);
-  }
   return {
     sprites,
     first: lineGrains(doc, text, scale),
-    lost,
     stills,
-    shardShadows: FRACTURE.shadowSprites(doc, scale, 0.17, true),
     scale,
   };
 }
@@ -647,73 +614,160 @@ function drawPiece(
   g.globalAlpha = 1;
 }
 
-/** Paper dust thrown off as the wall breaks: specks that fly out, fall and fade. */
-const DUST = Array.from({ length: 110 }, (_, i) => {
-  const rng = createRng(`wall-dust-${i}`);
-  const a = rng.next() * Math.PI * 2;
-  const r = 30 + rng.next() * 420;
-  return {
-    x: W / 2 + Math.cos(a) * r,
-    y: H / 2 + Math.sin(a) * r * 1.4,
-    vx: Math.cos(a) * (40 + rng.next() * 160),
-    vy: Math.sin(a) * (40 + rng.next() * 120) - 60 - rng.next() * 90,
-    size: 0.8 + rng.next() * 2.6,
-    life: 0.6 + rng.next() * 0.9,
-    delay: rng.next() * 0.25 + (r / 450) * 0.35,
-    light: rng.next() < 0.6,
-  };
-});
+/** When the last piece is in its pile and the wall has gone. */
+export const WALL_GONE = OPENING.break;
 
-function drawDust(g: CanvasRenderingContext2D, t: number, scale: number): void {
-  const since = t - OPENING.break;
-  if (since <= 0) return;
+// ---------------------------------------------------------------------------
+// The sorting
+// ---------------------------------------------------------------------------
+
+interface Flight {
+  readonly p: Piece;
+  readonly pile: PileKind;
+  /** When it lifts off and when it is in its pile. */
+  readonly at: number;
+  readonly end: number;
+  /** Where it slips into the pile (the folder's mouth, on screen) and its tilt there. */
+  readonly tx: number;
+  readonly ty: number;
+  readonly trot: number;
+}
+
+/** The piles left to right, so each piece falls into the one below its column. */
+const BY_X: readonly PileKind[] = [...PILES]
+  .map((p) => p.kind)
+  .sort((a, b) => PILE_SPOTS[a].x - PILE_SPOTS[b].x);
+
+/**
+ * Every piece still showing on the finished wall, with its flight: the top
+ * layer leaves first (the flood in reverse), each into the pile under its
+ * column of the frame, departures easing out over `OPENING.sort.span`.
+ */
+const FLIGHTS: readonly Flight[] = (() => {
+  const { start, span, flight } = OPENING.sort;
+  const shown = PIECES.filter((p) => p.hiddenAt === Infinity).sort((a, b) => b.at - a.at);
+  const rng = createRng('cowork-sort');
+  const n = Math.max(1, shown.length - 1);
+  return shown.map((p, rank) => {
+    const band = Math.min(BY_X.length - 1, Math.max(0, Math.floor((p.x / W) * BY_X.length)));
+    const pile = BY_X[band] ?? 'files';
+    const spot = PILE_SPOTS[pile];
+    const at = start + span * (rank / n) ** 0.85;
+    return {
+      p,
+      pile,
+      at,
+      end: at + flight,
+      tx: spot.x + (rng.next() - 0.5) * 90 * PILE_SCALE,
+      ty: spot.y - 95 * PILE_SCALE,
+      trot: (rng.next() - 0.5) * 10,
+    };
+  });
+})();
+const FLIGHT_OF = new Map(FLIGHTS.map((f) => [f.p, f]));
+
+/** How full each pile is at `t` (0–1): the share of its pieces already in. */
+export function pileFills(t: number): Record<PileKind, number> {
+  const fills = { mail: 0, files: 0, m365: 0, workspace: 0, slack: 0 } as Record<PileKind, number>;
+  const totals = { ...fills };
+  for (const f of FLIGHTS) {
+    totals[f.pile] += 1;
+    if (t >= f.end) fills[f.pile] += 1;
+  }
+  for (const k of BY_X) fills[k] = totals[k] ? fills[k] / totals[k] : 1;
+  return fills;
+}
+
+/** One sprite placed at (x, y), turned `rot` degrees and scaled, at `alpha`. */
+function blit(
+  g: CanvasRenderingContext2D,
+  s: Sprite,
+  img: HTMLCanvasElement,
+  x: number,
+  y: number,
+  rot: number,
+  k: number,
+  alpha: number,
+  scale: number,
+): void {
+  if (alpha <= 0.002) return;
   g.setTransform(scale, 0, 0, scale, 0, 0);
-  for (const d of DUST) {
-    const tau = since - d.delay;
-    if (tau <= 0 || tau >= d.life) continue;
-    // A little air drag, then gravity.
-    const drag = (1 - Math.exp(-2.2 * tau)) / 2.2;
-    const x = d.x + d.vx * drag;
-    const y = d.y + d.vy * drag + 0.5 * 700 * tau * tau;
-    const fade = 1 - tau / d.life;
-    g.globalAlpha = 0.75 * fade;
-    g.fillStyle = d.light ? P.white : C.stroke.strong;
-    g.beginPath();
-    g.arc(x, y, d.size, 0, Math.PI * 2);
-    g.fill();
+  g.translate(x, y);
+  g.rotate((rot * Math.PI) / 180);
+  g.scale(k, k);
+  g.translate(-s.cx, -s.cy);
+  g.globalAlpha = alpha;
+  g.drawImage(img, 0, 0, s.bw, s.bh);
+}
+
+/**
+ * The wall coming apart into the piles at `t`: the pieces still waiting
+ * (out of focus, as the wall was), then those in the air, each lifting off
+ * on a soft curve, shrinking towards the pile's size, turning to its tilt
+ * there and coming into focus, its shadow growing and shrinking with its
+ * height; it fades as it slips behind the folder (which is drawn above).
+ */
+function drawSorting(g: CanvasRenderingContext2D, wall: Wall, t: number): void {
+  const { scale, sprites } = wall;
+  const { flight } = OPENING.sort;
+  for (const p of PIECES) {
+    const f = FLIGHT_OF.get(p);
+    if (!f || t >= f.at) continue;
+    const s = sprites[p.v];
+    if (s) blit(g, s, s.soft, p.x, p.y, p.rot, 1, 1, scale);
+  }
+  // The finished wall's own picture fades out over the first moment, so the switch is seamless.
+  const still = wall.stills[wall.stills.length - 1];
+  const veil = 1 - progress(t, OPENING.sort.start - 0.3, 0.3, easing.camera);
+  if (still && veil > 0) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = veil;
+    g.drawImage(still, 0, 0);
+  }
+  for (const p of PIECES) {
+    const f = FLIGHT_OF.get(p);
+    const s = sprites[p.v];
+    if (!f || !s || t < f.at || t >= f.end) continue;
+    const u = progress(t, f.at, flight, easing.camera);
+    const lift = Math.sin(Math.PI * u);
+    // A soft curve: up off the wall a little, then down into the pile.
+    const cx = lerp(p.x, f.tx, 0.35);
+    const cy = Math.min(p.y, f.ty) - 70;
+    const x = (1 - u) * (1 - u) * p.x + 2 * u * (1 - u) * cx + u * u * f.tx;
+    const y = (1 - u) * (1 - u) * p.y + 2 * u * (1 - u) * cy + u * u * f.ty;
+    const k = lerp(1, PILE_SCALE * 0.7, u) * (1 + 0.07 * lift);
+    const rot = lerp(p.rot, f.trot, u);
+    const fade = 1 - clamp((u - 0.82) / 0.18);
+    blit(
+      g,
+      s,
+      s.air,
+      x + 8 + 34 * lift,
+      y + 12 + 46 * lift,
+      rot,
+      k * (1 + 0.1 * lift),
+      0.4 * lift * fade,
+      scale,
+    );
+    const focus = clamp(u * 1.7);
+    blit(g, s, s.soft, x, y, rot, k, (1 - focus) * fade, scale);
+    blit(g, s, s.sharp, x, y, rot, k, focus * fade, scale);
   }
   g.globalAlpha = 1;
 }
 
-/** A small jolt as it breaks (applied to the shards only). */
-function shake(t: number): Point {
-  const tau = t - OPENING.break;
-  if (tau < 0) return { x: 0, y: 0 };
-  const e = 6 * Math.exp(-tau / 0.18);
-  return { x: e * Math.sin(tau * 2 * Math.PI * 7), y: e * Math.cos(tau * 2 * Math.PI * 5.3) };
-}
-
-/** When the last shard has fallen out of the frame and the dust has settled. */
-export const WALL_GONE = OPENING.break + 2.6;
-
 /**
  * The wall layer at film time `t` (screen space; the camera stands still
- * from the flood to the break): the flood, then the finished wall going out
- * of focus, then the shards and dust.
+ * from the flood until the wall has gone): the flood, then the finished
+ * wall going out of focus behind "Most of it is lost.", then the sorting.
  */
 export function drawWall(g: CanvasRenderingContext2D, wall: Wall, text: WallText, t: number): void {
   const { scale, stills } = wall;
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.clearRect(0, 0, g.canvas.width, g.canvas.height);
   if (t >= WALL_GONE) return;
-  if (t >= OPENING.break) {
-    FRACTURE.drawShards(g, wall.lost, wall.shardShadows, t, scale, shake(t), {
-      thickness: 5,
-      edge: 0.32,
-      underside: withAlpha(lighting.shadow, 0.26),
-      inFrame: true,
-    });
-    drawDust(g, t, scale);
+  if (t >= OPENING.sort.start - 0.3) {
+    drawSorting(g, wall, t);
     return;
   }
   if (t >= OPENING.flood.end) {
@@ -729,7 +783,6 @@ export function drawWall(g: CanvasRenderingContext2D, wall: Wall, text: WallText
       g.drawImage(b, 0, 0);
       g.globalAlpha = 1;
     }
-    if (t >= OPENING.lost) drawSecond(g, text, t, scale);
   } else if (t >= OPENING.flood.start) {
     for (const p of PIECES) drawPiece(g, wall.sprites, p, t, scale);
   }
@@ -780,60 +833,20 @@ function drawGrains(g: CanvasRenderingContext2D, wall: Wall, t: number): void {
   g.globalAlpha = 1;
 }
 
-/**
- * "Most of it is lost." printed across the middle of the wall: "Most of
- * it" rising softly into place, "is lost" in coral dropping in with
- * weight; then the letters of "lost." come loose (each slips a few px and
- * tilts, staggered, springing to rest) with one soft coral glow. Drawn on
- * the wall's canvas, so when the wall breaks the line breaks with it.
- */
-function drawSecond(g: CanvasRenderingContext2D, text: WallText, t: number, scale: number): void {
-  const { letters, width, lostFrom } = text.second;
-  const x0 = W / 2 - width / 2;
-  const baseline = H / 2 + WALL_LINE.size * 0.34;
-  const glow = Math.sin(Math.PI * clamp((t - OPENING.loosen) / 0.55));
-  g.font = fontString(WALL_LINE);
-  g.textBaseline = 'alphabetic';
-  letters.forEach(({ ch, x }, k) => {
-    if (ch === ' ') return;
-    const lost = k >= lostFrom;
-    const at = OPENING.lost + (lost ? 0.16 + (k - lostFrom) * 0.035 : k * 0.016);
-    const p = progress(t, at, lost ? 0.36 : 0.32, lost ? easing.snap : easing.enter);
-    if (p <= 0) return;
-    const loose = lost && k >= lostFrom + 3 ? looseness(k - lostFrom - 3, t) : { dy: 0, rot: 0 };
-    const dy = (lost ? -30 : 12) * (1 - p) + loose.dy;
-    g.setTransform(scale, 0, 0, scale, 0, 0);
-    g.translate(x0 + x, baseline + dy);
-    g.rotate((loose.rot * Math.PI) / 180);
-    g.globalAlpha = clamp(p * 2.2);
-    // A soft light round every letter keeps the line clear of the wall behind it.
-    g.shadowColor =
-      lost && glow > 0
-        ? withAlpha(C.lost.coralGlow, 0.5 + 0.4 * glow)
-        : withAlpha(C.surface.paper, 0.85);
-    g.shadowBlur = (lost && glow > 0 ? 16 + 10 * glow : 14) * scale;
-    g.fillStyle = lost ? C.lost.coral : C.text.primary;
-    g.fillText(ch, 0, 0);
-  });
-  g.shadowBlur = 0;
-  g.shadowColor = 'transparent';
-  g.globalAlpha = 1;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-}
-
 // ---------------------------------------------------------------------------
-// The line, and the cracks' light
+// The line, and the piles
 // ---------------------------------------------------------------------------
 
 /**
  * Above the wall: the opening line arriving at the centre and riding up
  * with the camera (until it breaks into grain on the wall's canvas), and
- * the light through the cracks.
+ * the piles while the paper sorts into them (drawn above the wall, so each
+ * piece slips in behind its folder). The camera is still on the lost group
+ * then, so group-local places are screen places; once the wall has gone
+ * the group draws the piles itself, identically.
  */
-export function wallOverlay(text: WallText, t: number): SceneNode[] {
-  const nodes: SceneNode[] = [...FRACTURE.cracks(t)];
-  const leak = FRACTURE.leak(t);
-  if (leak) nodes.unshift(leak);
+export function wallOverlay(text: WallText, tex: PaperTextures, t: number): SceneNode[] {
+  const nodes: SceneNode[] = [];
   if (t < OPENING.dissolve.start) {
     nodes.push(
       groupNode('open-first-o', [text.first(t - OPENING.text, 0)], {
@@ -841,21 +854,10 @@ export function wallOverlay(text: WallText, t: number): SceneNode[] {
       }),
     );
   }
+  if (t >= PILE_REVEAL.start && t < WALL_GONE) {
+    nodes.push(...piles(tex, { x: 0, y: 0 }, pileFills(t), (kind) => pileReveal(kind, t)));
+  }
   return nodes;
-}
-
-/** How far letter `i` of "lost." has slipped: a few px down and a small tilt, staggered, springing to rest. */
-const LOOSE = [
-  { dy: 3, rot: -4 },
-  { dy: 7, rot: 5 },
-  { dy: 4, rot: -6 },
-  { dy: 9, rot: 8 },
-  { dy: 6, rot: 0 },
-] as const;
-function looseness(i: number, t: number): { dy: number; rot: number } {
-  const target = LOOSE[i] ?? { dy: 0, rot: 0 };
-  const p = progress(t, OPENING.loosen + i * 0.05, 0.4, easing.snap);
-  return { dy: target.dy * p, rot: target.rot * p };
 }
 
 // ---------------------------------------------------------------------------
@@ -866,9 +868,8 @@ function looseness(i: number, t: number): { dy: number; rot: number } {
  * The opening's sound in film seconds: a low bed under the line; air as the
  * camera moves down; the flood a patter of paper landing, quieter the
  * faster it comes, under a rising rush; a muffled fall as the wall goes out
- * of focus; a low note and a soft thud as "is lost" lands, faint ticks as
- * its letters loosen; then the crack (the snap recording, slowed into a
- * crunch, running outwards) and the break.
+ * of focus; then a soft rush of air as the paper sorts itself
+ * into the piles, with a quiet patter as the pieces slip in.
  */
 export const WALL_CUES: readonly Cues[] = [
   cue(0, pad(OPENING.break, { chord: 'shadow', attack: 1.0, release: 1.0, gain: 0.85 })),
@@ -896,33 +897,15 @@ export const WALL_CUES: readonly Cues[] = [
     whoosh(OPENING.blur.duration + 0.3, { from: 2400, to: 200, peak: 0.15, gain: 0.5 }),
   ),
   cue(OPENING.blur.start, thump({ gain: 0.35 })),
-  cue(OPENING.lost + 0.16, thump({ gain: 0.55 })),
-  cue(OPENING.lost + 0.16, pluck({ degree: 0, octave: 0, gain: 0.5 })),
-  LOOSE.map((_, i) =>
-    cue(OPENING.loosen + i * 0.05, tick({ degree: 2 + i, gain: 0.12, pan: (i - 2) * 0.15 })),
-  ),
+  // The paper lifting off and sorting itself into the piles: a soft rush of
+  // air, a note as the empty folders settle, a quiet patter as pieces slip in.
   cue(
-    OPENING.crack.start,
-    whoosh(OPENING.break - OPENING.crack.start, { from: 140, to: 900, peak: 0.95, gain: 0.8 }),
+    OPENING.sort.start,
+    whoosh(OPENING.sort.span + OPENING.sort.flight, { from: 1800, to: 420, peak: 0.45, gain: 0.5 }),
   ),
-  cue(OPENING.crack.start, crack({ size: 0.85 })),
-  [60, 120, 190, 270, 360, 460, 570].map((r, i) =>
-    cue(
-      FRACTURE.crackReaches(r),
-      crack({
-        size: lerp(0.6, 0.2, i / 6),
-        take: i + 1,
-        pan: (seeded('wall-crack', i) - 0.5) * 1.2,
-      }),
-    ),
+  cue(PILE_REVEAL.start + 0.15, pluck({ degree: 2, octave: 1, gain: 0.22 })),
+  FLIGHTS.filter((_, i) => i % 3 === 0).map((f) =>
+    cue(f.end - 0.06, slap({ gain: 0.13, pan: clamp((f.tx - W / 2) / (W / 2), -1, 1) * 0.6 })),
   ),
-  cue(OPENING.break, clap({ big: true, chord: 'shadow' })),
-  cue(OPENING.break, crack({ size: 1 })),
-  cue(OPENING.break, whoosh(1.2, { from: 3000, to: 250, peak: 0.15, gain: 0.85 })),
-  Array.from({ length: 10 }, (_, i) =>
-    cue(
-      OPENING.break + 0.15 + seeded('wall-debris', i) * 1.0,
-      tick({ degree: 5 + (i % 5), gain: 0.5, pan: (seeded('wall-debris-pan', i) - 0.5) * 1.4 }),
-    ),
-  ),
+  cue(OPENING.break - 0.05, pluck({ degree: 4, octave: 1, gain: 0.24 })),
 ];

@@ -18,21 +18,18 @@ import {
   groupNode,
   layoutText,
   lerp,
-  linearGradient,
   pathGeometry,
   progress,
   random,
-  rect,
   shapeNode,
   textNode,
   withAlpha,
-  type FontSpec,
   type SceneNode,
   type SoundEvent,
 } from '@html-animation-engine/core';
 import { elevationShadows } from '@html-animation-engine/renderers';
 import { SFX_DIV, beats, gridTimes, onGrid } from './cowork-beat.js';
-import { C, R, lighting, look, tone, type Meaning } from './cowork-look.js';
+import { C, lighting, look, tone, type Meaning } from './cowork-look.js';
 import { phoneDefaults } from './index.js';
 import {
   F,
@@ -41,22 +38,45 @@ import {
   avatar,
   box,
   caret,
-  checkDisc,
   clickRing,
-  clockText,
   cursor,
   grouped,
   icon,
   label,
-  mark,
   pressAt,
-  rule,
-  skeleton,
-  spinner,
-  windowNode,
-  type IconName,
   type Ui,
 } from './cowork-ui.js';
+import {
+  G,
+  GR,
+  PF,
+  PRODUCT_FONTS,
+  TOP,
+  answerMeta,
+  answerText,
+  barChart,
+  checkbox,
+  composerFrame,
+  composerLayout,
+  dialog,
+  followUps,
+  gridButton,
+  gridWindow,
+  hairline,
+  levelMenu,
+  levelMenuBox,
+  miniChart,
+  monoChip,
+  plainAvatar,
+  popover,
+  popoverFoot,
+  popoverHeight,
+  searching,
+  tabs,
+  toast,
+  topBar,
+  userMessage,
+} from './cowork-product.js';
 import {
   bell,
   cue,
@@ -65,7 +85,6 @@ import {
   key,
   pluck,
   pop,
-  slap,
   snap,
   thump,
   tick,
@@ -162,33 +181,59 @@ export type AppsScene = keyof typeof SCENES;
 const T_WRITTEN = {
   /** The previous scene's captions leave; the rep's window opens out of the tile. */
   intro: { exit: 0.3, tile: 0.1, tileMove: 0.9, open: 0.3, openDur: 0.8 },
-  // C1: mid-scroll, the rep stops and asks.
-  scroll: { start: 0.15, duration: 1.5 },
+  // C1: the rep clicks into the composer and asks.
   c1: { cursor: 1.2, click: 1.72, type: 1.86, send: 3.1 },
-  // A1: the COO asks a bigger question at Level 3.
-  a1: { type: 3.72, level: 5.85, ask: 6.12 },
+  // A1: the COO asks a bigger question, picking Level 3 from the dropdown.
+  a1: { type: 3.72, cursor: 5.5, menu: 5.79, level: 5.85, ask: 6.12, chip: 6.75 },
   // D1: the HR head and the intern ask the same question.
   d1: { hr: 6.86, intern: 7.0, sendHr: 8.18, sendIntern: 8.3 },
-  // A2: the plan unfolds; save as a report; go ahead.
-  a2: { unfold: 9.12, cursor: 9.7, save: 10.06, go: 10.46, work: 10.62 },
+  // A2: the plan chip; Review opens the plan; save as a report; go ahead.
+  a2: { cursor: 9.45, review: 9.75, save: 10.06, go: 10.46, work: 10.62 },
   // C2: the rep's answer is already there.
   c2: { ready: 4.4, sweep: 11.35 },
   // Before the camera returns to the rep: the answer streams in and a source opens (for the montage).
   c1b: { stream: 4.5, streamEnd: 5.1, cursor: 4.95, click: 5.36, open: 5.4, close: 6.4 },
-  // A3: researchers in parallel, the elapsed clock racing.
-  a3: { race: 13.35, raceEnd: 15.95, steps: [11.9, 13.85, 14.5, 15.15] as const },
-  // D2: the HR head's answer streams in; the intern's side stays empty.
-  d2: { stream: 17.05, streamEnd: 18.0, empty: 17.25 },
-  // C3: the rep opens a citation: the approval email.
+  // A3: the agents at work, the elapsed clock racing; the panel closes off camera.
+  a3: {
+    race: 13.35,
+    raceEnd: 15.95,
+    steps: [11.9, 13.85, 14.5, 15.15] as const,
+    close: 16.9,
+    writing: 20.0,
+  },
+  // D2: the HR head's answer streams in; the intern's honest answer.
+  d2: { stream: 17.05, streamEnd: 18.0, empty: 17.25, emptyEnd: 17.95 },
+  // C3: the rep opens citation 1: a popover, its link to Outlook.
   c3: { cursor: 20.0, click: 20.48, open: 20.52, highlight: 21.0 },
-  // A5: the report opens; the clock freezes.
-  a5: { open: 22.75, bars: 23.1, done: 22.75 },
-  // B1: the report lands in the library and is shared with the CFO.
-  b1: { land: 25.15, cursor: 25.8, share: 26.18, cfo: 26.62, toast: 26.72, toastEnd: 28.05 },
+  // A5: the report card; the report page; its citation card.
+  a5: { done: 23.0, cursor: 23.15, open: 23.36, bars: 23.55, citeCursor: 23.92, cite: 24.02 },
+  // B1: Reports; the report is shared with the CFO.
+  b1: {
+    cursor: 25.15,
+    land: 25.33,
+    more: 25.98,
+    share: 26.18,
+    type: 26.26,
+    cfo: 26.62,
+    confirm: 27.05,
+    toast: 27.08,
+    toastEnd: 28.05,
+  },
   // D3: the intern opens the report's link and can't.
   d3: { swap: 28.0, message: 28.55, cursor: 28.7, click: 29.05, page: 29.18 },
-  // B2: next quarter, one refresh, version 2, and another team builds on it.
-  b2: { flip: 31.3, cursor: 31.35, refresh: 31.85, v2: 32.45, ask: 32.75 },
+  // B2: next quarter, a refresh, version 2; the CFO's answer cites the report.
+  b2: {
+    page: 29.6,
+    cursor: 31.4,
+    refresh: 31.62,
+    confirm: 31.66,
+    yes: 32.42,
+    v2: 32.46,
+    menu: 32.56,
+    menuEnd: 32.95,
+    cfo: 32.98,
+    cite: 33.22,
+  },
 } as const;
 const T = gridTimes(stretchAll(T_WRITTEN));
 
@@ -207,7 +252,7 @@ const CAPTIONS_WRITTEN: readonly {
   { id: 'seconds', text: 'Answered in *seconds.*', at: [11.38], out: 13.3 },
   {
     id: 'parallel',
-    text: 'Researchers, in *parallel.* | Every step *checked.*',
+    text: 'Researchers, in *parallel.* | Every answer *checked.*',
     at: [13.62, 14.3],
     out: 16.5,
   },
@@ -363,99 +408,7 @@ function pointer(t: number, ways: readonly Way[], hide = Infinity) {
   return { x, y, opacity };
 }
 
-interface Paragraph {
-  readonly node: SceneNode;
-  readonly height: number;
-}
-
-/**
- * A paragraph laid out once by `layoutText`. Words in `*stars*` take
- * `accent`. `shown` (words, fractional) streams it in word by word.
- */
-function paragraph(
-  ui: Ui,
-  id: string,
-  text: string,
-  x: number,
-  y: number,
-  f: FontSpec,
-  maxWidth: number,
-  options: { color?: string; accent?: string; shown?: number; align?: 'left' | 'center' } = {},
-): Paragraph {
-  const raw = text.split(/\s+/);
-  const accent = raw.map((w) => /^\*.+\*[.,;:]?$/.test(w));
-  const plain = raw.map((w) => w.replace(/\*/g, '')).join(' ');
-  const layout = layoutText(plain, f, { measurer: ui.measurer, maxWidth, align: options.align });
-  const shown = options.shown ?? Infinity;
-  const children: SceneNode[] = [];
-  for (const line of layout.lines) {
-    const whole =
-      line.words.every((w) => !accent[w.index]) &&
-      (line.words[line.words.length - 1]?.index ?? 0) < shown - 1;
-    if (whole) {
-      children.push(
-        textNode(`${id}-l${line.index}`, {
-          text: line.text,
-          font: f,
-          fill: options.color ?? UI.text,
-          align: options.align,
-          transform: { x: x + (options.align === 'center' ? 0 : line.x), y: y + line.y },
-        }),
-      );
-      continue;
-    }
-    for (const w of line.words) {
-      const o = clamp(shown - w.index);
-      if (o <= 0) continue;
-      children.push(
-        textNode(`${id}-w${w.index}`, {
-          text: w.text,
-          font: f,
-          fill: accent[w.index] ? (options.accent ?? UI.accent) : (options.color ?? UI.text),
-          transform: { x: x + w.x, y: y + w.y },
-          opacity: o,
-        }),
-      );
-    }
-  }
-  return { node: groupNode(id, children), height: layout.height };
-}
-
-/** Typed text with its caret; returns the node and the text's height. */
-function typedText(
-  ui: Ui,
-  id: string,
-  k: Typing,
-  t: number,
-  x: number,
-  y: number,
-  f: FontSpec,
-  maxWidth: number,
-  focus: number,
-): SceneNode[] {
-  const text = typed(k, t);
-  const nodes: (SceneNode | null)[] = [];
-  if (text.length > 0) {
-    nodes.push(
-      textNode(`${id}-text`, { text, font: f, fill: UI.text, maxWidth, transform: { x, y } }),
-    );
-  }
-  if (focus > 0) {
-    const layout = layoutText(text.length ? text : ' ', f, { measurer: ui.measurer, maxWidth });
-    const line = layout.lines[layout.lines.length - 1];
-    const lh = layout.lineHeight;
-    const space = text.endsWith(' ') ? ui.measure(' ', f) : 0;
-    const cx = text.length && line ? x + line.x + line.width + space + 1 : x;
-    const cy = y + (line?.y ?? 0) + lh * 0.14;
-    // Solid while typing; blinking before the first key and after the last.
-    const idle =
-      text.length === 0 ? (k.times[0] ?? 0) - 10 : text.length < k.text.length ? Infinity : k.end;
-    nodes.push(caret(`${id}-caret`, cx, cy, lh * 0.72, t, idle));
-  }
-  return nodes.filter((n): n is SceneNode => n !== null);
-}
-
-/** A person tag above a window: who is at this desk. */
+/** A person tag above a window: who is at this desk (a film label, not product UI). */
 function personTag(ui: Ui, id: string, role: string, who: Person, x: number, y: number) {
   const w = ui.measure(role, F.role) + 40;
   return groupNode(id, [
@@ -464,182 +417,223 @@ function personTag(ui: Ui, id: string, role: string, who: Person, x: number, y: 
   ]);
 }
 
-/** A message bubble (the asker's question), right-aligned at `right`. */
-function bubble(
+/** Monogram avatars for the film's person tags, every one in the people family (rose). */
+const PEOPLE = {
+  SR: C.avatar.rep,
+  CO: C.avatar.coo,
+  HR: C.avatar.hr,
+  IN: C.avatar.intern,
+  CF: C.avatar.cfo,
+} as const;
+type Person = keyof typeof PEOPLE;
+const face = (id: string, who: Person, x: number, y: number, r: number, opacity = 1) =>
+  avatar(id, who, x, y, r, PEOPLE[who], opacity);
+
+// ---------------------------------------------------------------------------
+// The product's frame and composer, shared by every Cowork window
+// ---------------------------------------------------------------------------
+
+/** The main column (the whole window: no sidebar), and the text column inside it (window-local). */
+const MAIN = { x: 0, w: WIN.w } as const;
+const COL = { x: 24, w: WIN.w - 48 } as const;
+/** The composer: under the greeting on an empty chat, at the foot once a question is sent. */
+const COMPOSER = { x: 16, w: WIN.w - 32, h: 56, empty: 336, greet: 270 } as const;
+const PLACEHOLDER = 'Ask across your workspace…';
+/** A sent question's widest line. */
+const MSG_W = 420;
+/** The conversation's first line. */
+const CHAT_TOP = TOP + 22;
+
+/** Pure layouts, worked out once per measurer (they depend on nothing else). */
+const LAYOUTS = new WeakMap<Ui, Map<string, unknown>>();
+function memo<V>(ui: Ui, key: string, make: () => V): V {
+  let m = LAYOUTS.get(ui);
+  if (!m) {
+    m = new Map();
+    LAYOUTS.set(ui, m);
+  }
+  if (!m.has(key)) m.set(key, make());
+  return m.get(key) as V;
+}
+
+/** The composer's height for `text`: one row while it fits beside the controls, else the text above them. */
+function composerFit(ui: Ui, text: string, w: number, level: 1 | 3) {
+  const row = composerLayout(ui, 0, 0, w, COMPOSER.h, level);
+  const inline = row.chip.x - 12 - 16;
+  const multi = text.length > 0 && ui.measure(text, PF.body) > inline;
+  const textH = multi
+    ? layoutText(text, PF.body, { measurer: ui.measurer, maxWidth: w - 32 }).height
+    : 0;
+  return { multi, h: multi ? Math.ceil(textH) + 14 + 52 : COMPOSER.h };
+}
+
+/** The composer with its text (typed or placeholder), caret and controls; `y` is its top. */
+function composer(
   ui: Ui,
   id: string,
-  text: string,
-  right: number,
+  x: number,
   y: number,
-  maxWidth: number,
-  f = F.body,
-) {
-  const layout = layoutText(text, f, { measurer: ui.measurer, maxWidth });
-  const w = layout.width + 30;
-  const h = layout.height + 20;
-  return {
-    node: groupNode(id, [
-      box(`${id}-bg`, right - w, y, w, h, 18, { fill: UI.accentSoft }),
+  w: number,
+  o: { text: string; t: number; focus: number; level: 1 | 3; press?: number; idle?: number },
+): { nodes: SceneNode[]; h: number; layout: ReturnType<typeof composerLayout> } {
+  const fit = composerFit(ui, o.text, w, o.level);
+  const L = composerLayout(ui, x, y, w, fit.h, o.level);
+  const empty = o.text.length === 0;
+  const nodes: (SceneNode | null)[] = composerFrame(ui, id, x, y, w, fit.h, {
+    focus: o.focus,
+    level: o.level,
+    ready: !empty,
+    press: o.press ?? 0,
+    empty: empty && o.focus < 0.5,
+  });
+  const tx = x + 16;
+  const lh = PF.body.size * PF.body.lineHeight;
+  const ty = fit.multi ? y + 14 : y + (COMPOSER.h - lh) / 2;
+  const maxWidth = fit.multi ? w - 32 : 2000;
+  if (empty) {
+    const room = (o.focus < 0.5 ? L.hint.x : L.chip.x) - 12 - tx;
+    nodes.push(label(`${id}-ph`, ui.fit(PLACEHOLDER, PF.body, room), tx, ty, PF.body, G.faint));
+  } else {
+    nodes.push(
       textNode(`${id}-text`, {
-        text,
-        font: f,
-        fill: UI.text,
+        text: o.text,
+        font: PF.body,
+        fill: G.ink,
         maxWidth,
-        transform: { x: right - w + 15, y: y + 10 },
+        transform: { x: tx, y: ty },
       }),
-    ]),
-    h,
-  };
+    );
+  }
+  if (o.focus > 0.5) {
+    const layout = layoutText(empty ? ' ' : o.text, PF.body, { measurer: ui.measurer, maxWidth });
+    const line = layout.lines[layout.lines.length - 1];
+    const space = o.text.endsWith(' ') ? ui.measure(' ', PF.body) : 0;
+    const cx = !empty && line ? tx + line.x + line.width + space + 1 : tx;
+    nodes.push(
+      caret(
+        `${id}-caret`,
+        cx,
+        ty + (line?.y ?? 0) + lh * 0.14,
+        lh * 0.72,
+        o.t,
+        o.idle ?? -10,
+        G.ink,
+      ),
+    );
+  }
+  return { nodes: nodes.filter((n): n is SceneNode => n !== null), h: fit.h, layout: L };
 }
 
-/** "Cowork" with its mark: who is answering. */
-function answerer(id: string, x: number, y: number, meta?: string) {
-  return groupNode(id, [
-    mark(`${id}-mark`, x + 9, y + 9, 18),
-    label(`${id}-name`, 'Cowork', x + 26, y, F.smallStrong, UI.text),
-    ...(meta ? [label(`${id}-meta`, meta, x + 90, y, F.small, UI.sub)] : []),
-  ]);
+/** Where a conversation's parts sit: the question, the answer, its meta row and pills. */
+interface ChatLayout {
+  readonly msgH: number;
+  readonly y0: number;
+  readonly answerH: number;
+  readonly cites: Record<string, Box>;
+  readonly metaY: number;
+  readonly meta: ReturnType<typeof answerMeta>;
+  readonly pillsY: number;
 }
-
-/** A light band sweeping across a box once (0–1). */
-function sweepBand(id: string, x: number, y: number, w: number, h: number, p: number) {
-  if (p <= 0 || p >= 1) return null;
-  const bx = x + lerp(-0.3, 1.3, p) * w;
-  return box(id, x, y, w, h, 12, {
-    fill: linearGradient(bx - 120, y, bx + 120, y + h, [
-      { offset: 0, color: withAlpha(UI.accent, 0) },
-      { offset: 0.5, color: withAlpha(UI.accent, 0.08) },
-      { offset: 1, color: withAlpha(UI.accent, 0) },
-    ]),
+interface ChatSpec {
+  readonly key: string;
+  readonly question: string;
+  readonly answer: string;
+  readonly meta: { confidence: 'High' | 'Low'; reason: string; sources: number };
+  /** The question's top (window-local). */
+  readonly top?: number;
+}
+function chatLayout(ui: Ui, spec: ChatSpec): ChatLayout {
+  return memo(ui, `chat-${spec.key}`, () => {
+    const top = spec.top ?? CHAT_TOP;
+    const msg = userMessage(ui, 'm', spec.question, COL.x + COL.w, top, MSG_W);
+    const y0 = top + msg.h + 20;
+    const ans = answerText(ui, 'm', spec.answer, COL.x, y0, COL.w);
+    const metaY = y0 + ans.h + 14;
+    const meta = answerMeta(ui, 'm', COL.x, metaY, { ...spec.meta, w: COL.w });
+    return {
+      msgH: msg.h,
+      y0,
+      answerH: ans.h,
+      cites: ans.cites,
+      metaY,
+      meta,
+      pillsY: metaY + meta.h + 6,
+    };
   });
 }
 
-/** A source chip: [n] icon label. */
-function citation(
+/** Words in an answer (for streaming it word by word). */
+const wordCount = (text: string) => text.split(/\s+/).length;
+
+/**
+ * A sent conversation: the question, an answer streaming in word by word
+ * (`shown`), then the access line, the meta row and (if `pills`) the
+ * follow-up pills fading in (`extras`). `hot` marks a citation as open.
+ */
+function chatNodes(
   ui: Ui,
   id: string,
-  n: number,
-  ic: IconName,
-  text: string,
-  x: number,
-  y: number,
-  hover = 0,
-) {
-  const numW = 22;
-  const f = F.small;
-  const w = Math.round(ui.measure(text, f) + numW + 44);
-  return {
-    node: groupNode(id, [
-      box(`${id}-bg`, x, y, w, 32, 16, {
-        fill: hover > 0.5 ? UI.sourceSoft : UI.wash,
-        stroke: { color: hover > 0.5 ? UI.source : UI.line, width: 1 },
+  spec: ChatSpec,
+  o: { shown: number; extras: number; pills?: boolean; hot?: string; hotP?: number },
+): SceneNode[] {
+  const L = chatLayout(ui, spec);
+  const msg = userMessage(
+    ui,
+    `${id}-msg`,
+    spec.question,
+    COL.x + COL.w,
+    spec.top ?? CHAT_TOP,
+    MSG_W,
+  );
+  const nodes: SceneNode[] = [msg.node];
+  const hot = o.hot ? L.cites[o.hot] : undefined;
+  if (hot && (o.hotP ?? 0) > 0)
+    nodes.push(
+      box(`${id}-hot`, hot.x - 1, hot.y - 1, hot.w + 2, hot.h + 2, 2, {
+        fill: G.selected,
+        opacity: o.hotP,
       }),
-      box(`${id}-n`, x + 6, y + 6, numW, 20, 10, { fill: UI.sourceSoft }),
-      label(`${id}-nt`, String(n), x + 6 + numW / 2, y + 7, F.smallStrong, UI.sourceText, {
-        align: 'center',
+    );
+  nodes.push(answerText(ui, `${id}-ans`, spec.answer, COL.x, L.y0, COL.w, { shown: o.shown }).node);
+  if (o.extras > 0) {
+    const extras: SceneNode[] = [
+      answerMeta(ui, `${id}-meta`, COL.x, L.metaY, { ...spec.meta, w: COL.w }).node,
+    ];
+    if (o.pills) extras.push(followUps(ui, `${id}-pills`, COL.x, L.pillsY, COL.w).node);
+    nodes.push(
+      groupNode(`${id}-extras`, extras, {
+        opacity: o.extras,
+        transform: { y: 8 * (1 - o.extras) },
       }),
-      icon(`${id}-ic`, ic, x + numW + 20, y + 16, 16, UI.sub),
-      label(`${id}-text`, text, x + numW + 32, y + 7, f, UI.text),
-    ]),
-    w,
-  };
+    );
+  }
+  return nodes;
 }
 
-function confidence(ui: Ui, id: string, x: number, y: number) {
-  const text = 'High confidence';
-  const w = Math.round(ui.measure(text, F.smallStrong) + 36);
-  return groupNode(id, [
-    box(`${id}-bg`, x, y, w, 28, 14, { fill: UI.goodSoft }),
-    box(`${id}-dot`, x + 11, y + 10, 8, 8, 4, { fill: UI.good }),
-    label(`${id}-text`, text, x + 25, y + 5, F.smallStrong, UI.good),
-  ]);
+/** A source popover under citation `n` of a conversation: its box. */
+function citePopoverBox(ui: Ui, spec: ChatSpec, n: string, body: string): Box {
+  const L = chatLayout(ui, spec);
+  const c = L.cites[n] ?? { x: COL.x, y: L.y0, w: 10, h: 14 };
+  const w = COL.w;
+  return { x: COL.x, y: c.y + c.h + 10, w, h: popoverHeight(ui, body, w) };
 }
 
 // ---------------------------------------------------------------------------
-// C: the sales rep (inbox + ask bar)
+// C: the sales rep, in the Cowork web app
 // ---------------------------------------------------------------------------
 
-const INBOX: readonly {
-  from: string;
-  subject: string;
-  time: string;
-  unread: boolean;
-  tag?: string;
-}[] = [
-  { from: 'Procurement', subject: 'PO 4471 waiting for your approval', time: '9:41', unread: true },
-  {
-    from: 'Arden Logistics',
-    subject: 'Re: Re: renewal paperwork',
-    time: '9:38',
-    unread: true,
-    tag: 'Renewal',
-  },
-  {
-    from: 'Calendar',
-    subject: 'Invitation: Pipeline review, Thu 11:00',
-    time: '9:30',
-    unread: false,
-  },
-  {
-    from: 'Finance ops',
-    subject: 'Q2 invoice reminder (3 overdue)',
-    time: '9:12',
-    unread: true,
-    tag: 'Urgent',
-  },
-  { from: 'Legal', subject: 'Redlines attached: MSA v4', time: '8:57', unread: true },
-  {
-    from: 'Sales ops',
-    subject: 'Updated pricing sheet (v7, final final)',
-    time: '8:40',
-    unread: false,
-  },
-  {
-    from: 'IT service desk',
-    subject: 'Your password expires in 3 days',
-    time: '8:31',
-    unread: false,
-  },
-  { from: 'Deal desk', subject: 'Re: discount approvals this week', time: '8:22', unread: true },
-  {
-    from: 'Customer success',
-    subject: 'Escalation: onboarding delay',
-    time: '8:05',
-    unread: true,
-    tag: 'Urgent',
-  },
-  { from: 'Marketing', subject: 'Webinar recap and slides', time: 'Yesterday', unread: false },
-  {
-    from: 'Arden Logistics',
-    subject: 'Fwd: Fwd: question about the rate',
-    time: 'Yesterday',
-    unread: true,
-    tag: 'Renewal',
-  },
-  { from: 'Payroll', subject: 'Reimbursement processed', time: 'Yesterday', unread: false },
-  { from: 'Sales ops', subject: 'Weekly forecast: please update', time: 'Yesterday', unread: true },
-  { from: 'Travel', subject: 'Your itinerary for Monday', time: 'Mon', unread: false },
-  {
-    from: 'Deal desk',
-    subject: 'Renewal terms: summary of the thread',
-    time: 'Mon',
-    unread: true,
-    tag: 'Renewal',
-  },
-  { from: 'Procurement', subject: 'Vendor onboarding form', time: 'Mon', unread: false },
-  { from: 'Finance ops', subject: 'Month-end close checklist', time: 'Mon', unread: true },
-  { from: 'Legal', subject: 'NDA countersigned', time: 'Sun', unread: false },
-  { from: 'Sales ops', subject: 'Territory changes from July', time: 'Sun', unread: true },
-  { from: 'Customer success', subject: 'QBR notes: Arden Logistics', time: 'Sat', unread: false },
-];
-const ROW = 68;
-const LIST = { top: 64, bottom: 744 } as const;
-const DOCK = { x: 16, y: 756, w: 608, h: 88 } as const;
-/** The tile lands here, as the ask bar's icon (window-local). */
-export const DOCK_ICON = { x: 54, y: DOCK.y + DOCK.h / 2, size: 40 } as const;
-
-const ANSWER_C =
-  "You approved *8.5%* for Arden Logistics' three-year renewal. The deal desk signed it off on 12 May, and the customer confirmed it in Teams the next day.";
+const C_CHAT: ChatSpec = {
+  key: 'c',
+  question: Q.c,
+  answer:
+    "You approved *8.5%* for Arden Logistics' three-year renewal.[1] The deal desk signed it off on 12 May, and the customer confirmed it in Teams the next day.[2]",
+  meta: { confidence: 'High', reason: 'Two sources agree on the rate.', sources: 2 },
+};
+const C_SOURCE = {
+  title: 'Re: Renewal terms – Arden Logistics',
+  body: 'The snippet, permission verdict, and live-freshness for this source resolve when you open it.',
+  foot: 'Outlook · Open',
+};
 
 /**
  * The rep's window growing out of the tile (centred on it), as an app opens
@@ -658,143 +652,122 @@ export function windowOpening(t: number): {
       cy: lerp(tileY, WIN.h / 2, open),
       w: lerp(200, WIN.w, open),
       h: lerp(200, WIN.h, open),
-      r: lerp(50, R.card, open),
+      r: lerp(50, 10, open),
     },
   };
+}
+
+/** Where the rep's composer sits: under the greeting, then at the foot once the question is sent. */
+const composerY = (move: number, h = COMPOSER.h) => lerp(COMPOSER.empty, WIN.h - 18 - h, move);
+
+function cLayout(ui: Ui) {
+  return memo(ui, 'c', () => {
+    const L = chatLayout(ui, C_CHAT);
+    const pop = citePopoverBox(ui, C_CHAT, '1', C_SOURCE.body);
+    const cite = L.cites['1'] ?? { x: COL.x, y: L.y0, w: 10, h: 14 };
+    return { ...L, pop, cite, foot: popoverFoot(ui, pop, C_SOURCE.foot) };
+  });
 }
 
 export function stationC(ui: Ui, t: number): SceneNode[] {
   const { open, shape } = windowOpening(t);
   if (open <= 0) return [];
+  const L = cLayout(ui);
   const left = DESK.c - WIN.w / 2;
+  const sent = t >= T.c1.send;
+  const move = progress(t, T.c1.send + 0.05, 0.5, easing.camera);
   const kids: (SceneNode | null)[] = [];
-
-  // Header
-  kids.push(
-    icon('c-h-icon', 'mail', 36, 32, 22, UI.text),
-    label('c-h-title', 'Inbox', 56, 19, F.title),
-    label('c-h-count', '248 unread', 56 + ui.measure('Inbox', F.title) + 12, 26, F.meta, UI.faint),
-    icon('c-h-search', 'search', 604, 32, 20, UI.sub),
-    rule('c-h-rule', 0, 63, WIN.w),
-  );
-
-  // The cluttered inbox, mid-scroll, coming to rest.
-  const scroll = lerp(120, 742, progress(t, T.scroll.start, T.scroll.duration, easing.enter));
-  const rows: SceneNode[] = [];
-  INBOX.forEach((m, k) => {
-    const y = LIST.top + k * ROW - scroll;
-    if (y < LIST.top - ROW || y > LIST.bottom) return;
-    const id = `c-row${k}`;
-    if (m.unread) rows.push(box(`${id}-dot`, 18, y + 21, 8, 8, 4, { fill: UI.accent }));
-    rows.push(
-      label(`${id}-from`, m.from, 36, y + 12, m.unread ? F.bodyStrong : F.body, UI.text),
-      label(`${id}-time`, m.time, 616, y + 14, F.small, UI.sub, { align: 'right' }),
-      label(
-        `${id}-subj`,
-        ui.fit(m.subject, F.small, m.tag ? 430 : 560),
-        36,
-        y + 37,
-        F.small,
-        UI.sub,
-      ),
-      rule(`${id}-rule`, 36, y + ROW - 1, 604),
-    );
-    if (m.tag) {
-      const tagColor = m.tag === 'Urgent' ? UI.alert : UI.warm;
-      const tag = ui.chip(`${id}-tag`, m.tag.toLowerCase(), 0, 0, {
-        fill: m.tag === 'Urgent' ? UI.alertSoft : UI.warmSoft,
-        color: tagColor,
-        font: F.tiny,
-        height: 22,
-      });
-      rows.push(
-        groupNode(`${id}-tagpos`, [tag.node], { transform: { x: 616 - tag.w, y: y + 35 } }),
-      );
-    }
-  });
-  kids.push(
-    groupNode('c-list', rows, {
-      clip: rect(WIN.w / 2, (LIST.top + LIST.bottom) / 2, WIN.w, LIST.bottom - LIST.top, 0),
-    }),
-  );
-
-  // The answer sheet rises over the inbox once the question is sent.
-  const sheet = progress(t, T.c1.send + 0.06, 0.55, easing.enter);
-  if (sheet > 0) kids.push(...sheetC(ui, t, lerp(LIST.bottom, LIST.top, sheet)));
-  // C3: the source email slides over the answer.
-  const mail = Math.max(
-    progress(t, T.c3.open, 0.5, easing.enter),
-    progress(t, T.c1b.open, 0.45, easing.enter) * (1 - progress(t, T.c1b.close, 0.3, easing.exit)),
-  );
-  if (mail > 0) kids.push(emailC(ui, t, lerp(WIN.w, 0, mail)));
-
-  // The ask bar
-  const focus = progress(t, T.c1.click, 0.2);
-  const sent = progress(t, T.c1.send, 0.25, easing.exit);
-  kids.push(
-    rule('c-dock-rule', 0, LIST.bottom, WIN.w),
-    box('c-dock-ring', DOCK.x - 3, DOCK.y - 3, DOCK.w + 6, DOCK.h + 6, 27, {
-      stroke: { color: withAlpha(C.stroke.focus, focus * (1 - sent)), width: 3 },
-    }),
-    box('c-dock', DOCK.x, DOCK.y, DOCK.w, DOCK.h, 24, {
-      fill: UI.surface,
-      stroke: { color: focus * (1 - sent) > 0.5 ? UI.accentLine : UI.line, width: 1 },
-      shadow: elevationShadows(lighting, 'low', { strength: 0.35 }),
-    }),
-  );
-  const text = typed(TYPE.c, t);
-  if (sent < 1) {
-    if (text.length === 0)
-      kids.push(
-        label('c-dock-ph', 'Ask Cowork about anything at work', 88, DOCK.y + 31, F.body, UI.faint),
-      );
+  // The empty chat's greeting, giving way to the conversation.
+  if (move < 1)
     kids.push(
-      groupNode(
-        'c-dock-typed',
-        typedText(ui, 'c-q', TYPE.c, t, 88, DOCK.y + 29, F.body, 460, focus),
+      label(
+        'c-greet',
+        'What can I help you find?',
+        MAIN.x + MAIN.w / 2,
+        COMPOSER.greet,
+        PF.greeting,
+        G.ink,
         {
-          opacity: 1 - sent,
-          transform: { y: -14 * sent },
+          align: 'center',
+          opacity: 1 - clamp(move * 2),
         },
       ),
     );
-  } else {
-    kids.push(
-      label('c-dock-ph', 'Ask a follow-up', 88, DOCK.y + 31, F.body, UI.faint, {
-        opacity: clamp((t - T.c1.send - 0.3) / 0.3),
-      }),
+  if (move > 0) {
+    // The question rises from the composer; the answer is searched for, then streams in.
+    const msgTop = lerp(COMPOSER.empty, CHAT_TOP, move);
+    const ready = progress(t, T.c2.ready, 0.3);
+    const wait = clamp((t - T.c1.send - 0.35) / 0.25) * (1 - ready);
+    const shown = lerp(
+      0,
+      wordCount(C_CHAT.answer) + 1,
+      progress(t, T.c1b.stream, T.c1b.streamEnd - T.c1b.stream),
     );
+    const pop = Math.max(
+      progress(t, T.c1b.open, 0.25, easing.enter) *
+        (1 - progress(t, T.c1b.close, 0.25, easing.exit)),
+      progress(t, T.c3.open, 0.25, easing.enter),
+    );
+    const hover = (click: number) => clamp((t - (click - 0.25)) / 0.1) * (t < click + 0.1 ? 1 : 0);
+    const hotP = Math.max(pop, hover(T.c1b.click), hover(T.c3.click));
+    kids.push(
+      groupNode(
+        'c-chat',
+        chatNodes(ui, 'c', C_CHAT, {
+          shown: ready > 0 ? shown : 0,
+          extras: progress(t, T.c1b.streamEnd, 0.35, easing.enter),
+          pills: true,
+          hot: '1',
+          hotP,
+        }),
+        { transform: { y: msgTop - CHAT_TOP }, opacity: clamp(move * 2) },
+      ),
+    );
+    if (wait > 0)
+      kids.push(
+        groupNode('c-wait', [searching('c-search', COL.x, L.y0, COL.w, t)], { opacity: wait }),
+      );
+    // The source behind citation 1: a popover, and its link to Outlook.
+    if (pop > 0)
+      kids.push(popover(ui, 'c-pop', L.pop, pop, C_SOURCE, progress(t, T.c3.highlight, 0.15)));
   }
-  const ready = text.length > 0 && sent < 1 ? 1 : 0;
-  const send = pressAt(t, T.c1.send);
-  kids.push(
-    groupNode(
-      'c-send',
-      [
-        box('c-send-bg', -19, -19, 38, 38, 19, { fill: ready ? UI.accent : UI.line }),
-        icon('c-send-icon', 'send', 0, 0, 20, UI.surface),
-      ],
-      { transform: { x: 582, y: DOCK.y + DOCK.h / 2, scale: 1 - 0.1 * send } },
-    ),
+  // The composer: focused and typed into, then back to its placeholder at the foot.
+  const text = sent ? '' : typed(TYPE.c, t);
+  const comp = composer(
+    ui,
+    'c-comp',
+    COMPOSER.x,
+    sent ? composerY(move) : COMPOSER.empty,
+    COMPOSER.w,
+    {
+      text,
+      t,
+      focus: sent ? 0 : progress(t, T.c1.click, 0.15),
+      level: 1,
+      press: pressAt(t, T.c1.send),
+      idle: text.length === 0 ? -10 : text.length < TYPE.c.text.length ? Infinity : TYPE.c.end,
+    },
   );
+  kids.push(...comp.nodes);
 
-  // C1 and C3 pointers.
+  kids.push(...topBar(ui, 'c-top', WIN.w));
+  // Pointers: into the composer; to citation 1 (twice); onto the Outlook link.
+  const cite = { x: L.cite.x + L.cite.w / 2, y: L.cite.y + 7 };
   const p1 = pointer(
     t,
     [
-      { at: T.c1.cursor, x: 520, y: 560 },
-      { at: T.c1.click - 0.04, x: 300, y: DOCK.y + 48 },
+      { at: T.c1.cursor, x: 500, y: 620 },
+      { at: T.c1.click - 0.04, x: COMPOSER.x + 150, y: COMPOSER.empty + 30 },
     ],
     T.c1.type + 0.25,
   );
   if (p1) kids.push(cursor('c-cursor1', p1.x, p1.y, pressAt(t, T.c1.click), p1.opacity));
-  kids.push(clickRing('c-ring1', 300, DOCK.y + 48, t, T.c1.click));
-  const chip = sheetLayout(ui).chip;
+  kids.push(clickRing('c-ring1', COMPOSER.x + 150, COMPOSER.empty + 30, t, T.c1.click));
   const p2 = pointer(
     t,
     [
-      { at: T.c1b.cursor, x: 470, y: 640 },
-      { at: T.c1b.click - 0.05, x: chip.x + 64, y: chip.y + 18 },
+      { at: T.c1b.cursor, x: 520, y: 600 },
+      { at: T.c1b.click - 0.05, x: cite.x, y: cite.y },
     ],
     T.c1b.click + 0.5,
   );
@@ -802,1101 +775,1611 @@ export function stationC(ui: Ui, t: number): SceneNode[] {
   const p3 = pointer(
     t,
     [
-      { at: T.c3.cursor, x: 470, y: 650 },
-      { at: T.c3.click - 0.05, x: chip.x + 64, y: chip.y + 18 },
+      { at: T.c3.cursor, x: 520, y: 640 },
+      { at: T.c3.click - 0.05, x: cite.x, y: cite.y },
+      { at: T.c3.highlight, x: L.foot.x + 70, y: L.foot.y + 18 },
     ],
-    T.c3.click + 0.7,
+    stretch(22.1),
   );
   if (p3) kids.push(cursor('c-cursor3', p3.x, p3.y, pressAt(t, T.c3.click), p3.opacity));
+  kids.push(clickRing('c-ring3', cite.x, cite.y, t, T.c3.click));
 
   return [
     groupNode('c-tag-o', [personTag(ui, 'c-tag', 'Sales rep', 'SR', DESK.c, WIN.top - 30)], {
       opacity: clamp((open - 0.5) / 0.5),
     }),
-    windowNode('c-win', { x: left, y: WIN.top, w: WIN.w, h: WIN.h }, kids, {
+    gridWindow('c-win', { x: left, y: WIN.top, w: WIN.w, h: WIN.h }, kids, {
       shape,
       content: clamp((open - 0.45) / 0.45),
     }),
   ];
 }
 
-const plain = (text: string) => text.replace(/\*/g, '');
-
-/** Where things sit in the rep's answer sheet once it is up (window-local). */
-function sheetLayout(ui: Ui) {
-  const q = layoutText(Q.c, F.body, { measurer: ui.measurer, maxWidth: 440 });
-  const y0 = LIST.top + 22 + q.height + 20 + 26;
-  const para = layoutText(plain(ANSWER_C), F.body, { measurer: ui.measurer, maxWidth: 576 });
-  return { y0, chip: { x: 32, y: y0 + 34 + para.height + 16 } };
-}
-
-/** Where the HR head's answer starts (window-local). */
-function paneLayout(ui: Ui) {
-  const q = layoutText(Q.d, F.body, { measurer: ui.measurer, maxWidth: WIN.w - 120 });
-  return { answerY: 84 + q.height + 20 + 22 };
-}
-
-function sheetC(ui: Ui, t: number, top: number): SceneNode[] {
-  const nodes: (SceneNode | null)[] = [];
-  nodes.push(
-    box('c-sheet', 0, top, WIN.w, LIST.bottom - top + 2, 0, {
-      fill: UI.surface,
-      shadow: { x: 0, y: -6, blur: 22, color: withAlpha(UI.shade, 0.1) },
-    }),
-  );
-  const q = bubble(ui, 'c-qb', Q.c, 616, top + 22, 440);
-  nodes.push(q.node);
-  const y0 = top + 22 + q.h + 26;
-  const ready = progress(t, T.c2.ready, 0.3);
-  nodes.push(
-    answerer(
-      'c-who',
-      32,
-      y0,
-      ready > 0 ? '· answered in 6 s' : '· searching email, chats and files',
-    ),
-  );
-  if (ready < 1) {
-    nodes.push(
-      groupNode(
-        'c-wait',
-        [
-          spinner('c-spin', 40, y0 + 46, 8, t, UI.accent),
-          skeleton('c-sk1', 60, y0 + 40, 380, 12, t),
-          skeleton('c-sk2', 32, y0 + 66, 540, 12, t + 0.1),
-          skeleton('c-sk3', 32, y0 + 92, 300, 12, t + 0.2),
-        ],
-        { opacity: 1 - ready },
-      ),
-    );
-  }
-  if (ready > 0) {
-    const words = ANSWER_C.split(/\s+/).length;
-    const shown = lerp(0, words + 1, progress(t, T.c1b.stream, T.c1b.streamEnd - T.c1b.stream));
-    const para = paragraph(ui, 'c-ans', ANSWER_C, 32, y0 + 34, F.body, 576, { shown });
-    const extras = progress(t, T.c1b.streamEnd, 0.35, easing.enter);
-    const chipsY = y0 + 34 + para.height + 16;
-    const hoverAt = (click: number) => clamp((t - (click - 0.3)) / 0.1) * (t < click + 0.5 ? 1 : 0);
-    const hover = Math.max(hoverAt(T.c3.click), hoverAt(T.c1b.click));
-    const c1 = citation(ui, 'c-cite1', 1, 'mail', 'Re: Renewal terms', 32, chipsY, hover);
-    const c2 = citation(ui, 'c-cite2', 2, 'chat', 'Teams · #deal-desk', 32 + c1.w + 8, chipsY);
-    nodes.push(
-      groupNode(
-        'c-answer',
-        [
-          para.node,
-          groupNode(
-            'c-extras',
-            [
-              c1.node,
-              c2.node,
-              confidence(ui, 'c-conf', 32, chipsY + 46),
-              label('c-sugg', 'suggested', 32, chipsY + 104, F.meta, UI.faint),
-              ...['Show me the order form', 'Who else approved a rate this year?'].map((s, k) =>
-                groupNode(`c-sugg${k}`, [
-                  box(`c-sugg${k}-bg`, 32, chipsY + 128 + k * 48, 576, 40, 20, {
-                    fill: UI.surface,
-                    stroke: { color: UI.line, width: 1 },
-                  }),
-                  icon(`c-sugg${k}-ic`, 'search', 52, chipsY + 148 + k * 48, 16, UI.sub),
-                  label(`c-sugg${k}-t`, s, 70, chipsY + 137 + k * 48, F.body, UI.sub),
-                ]),
-              ),
-            ],
-            { opacity: extras, transform: { y: 8 * (1 - extras) } },
-          ),
-          sweepBand(
-            'c-sweep',
-            20,
-            y0 + 24,
-            600,
-            para.height + 110,
-            progress(t, T.c2.sweep, 0.9, easing.camera),
-          ),
-        ].filter((n): n is SceneNode => n !== null),
-        { opacity: ready },
-      ),
-    );
-  }
-  return nodes.filter((n): n is SceneNode => n !== null);
-}
-
-function emailC(ui: Ui, t: number, x: number): SceneNode {
-  const kids: SceneNode[] = [];
-  const top = LIST.top;
-  kids.push(
-    box('c-mail-bg', 0, top, WIN.w, LIST.bottom - top, 0, {
-      fill: UI.surface,
-      shadow: { x: -8, y: 0, blur: 24, color: withAlpha(UI.shade, 0.12) },
-    }),
-    icon('c-mail-back', 'chevron', 36, top + 30, 20, UI.sub),
-  );
-  const src = ui.chip('c-mail-src', 'Source [1] · Email', 0, 0, {
-    fill: UI.accentSoft,
-    color: UI.accent,
-    icon: 'mail',
-  });
-  kids.push(groupNode('c-mail-srcpos', [src.node], { transform: { x: 56, y: top + 16 } }));
-  kids.push(
-    label('c-mail-subj', 'Re: Renewal terms: Arden Logistics', 32, top + 66, F.title),
-    face('c-mail-av', 'DD', 50, top + 128, 18),
-    label('c-mail-from', 'Deal desk', 78, top + 108, F.bodyStrong),
-    label('c-mail-to', 'to Sales · 12 May, 16:42', 78, top + 130, F.small, UI.sub),
-    icon('c-mail-clip', 'paperclip', 604, top + 120, 18, UI.sub),
-    rule('c-mail-rule', 32, top + 168, 576),
-    label('c-mail-hi', 'Hi team,', 32, top + 190, F.body),
-  );
-  // The approval line, highlighted as if by hand.
-  const approval =
-    'Approved: 8.5% on the three-year renewal for Arden Logistics, effective 1 June.';
-  const layout = layoutText(approval, F.body, { measurer: ui.measurer, maxWidth: 560 });
-  const hl = progress(t, T.c3.highlight, 0.5, easing.wipe);
-  const total = layout.lines.reduce((s, l) => s + l.width, 0);
-  let used = 0;
-  layout.lines.forEach((line, k) => {
-    const share = clamp((hl * total - used) / line.width);
-    used += line.width;
-    if (share > 0)
-      kids.push(
-        box(
-          `c-mail-hl${k}`,
-          28 + line.x,
-          top + 226 + line.y + 1,
-          (line.width + 8) * share,
-          layout.lineHeight - 2,
-          4,
-          {
-            fill: withAlpha(UI.goodSoft, 0.95),
-          },
-        ),
-      );
-  });
-  kids.push(
-    textNode('c-mail-approval', {
-      text: approval,
-      font: F.bodyStrong,
-      fill: UI.text,
-      maxWidth: 560,
-      transform: { x: 32, y: top + 226 },
-    }),
-    paragraph(
-      ui,
-      'c-mail-p2',
-      'Please send the updated order form to the customer today, and copy finance.',
-      32,
-      top + 226 + layout.height + 18,
-      F.body,
-      560,
-    ).node,
-    label('c-mail-sign', 'Deal desk', 32, top + 226 + layout.height + 96, F.body, UI.sub),
-  );
-  return groupNode('c-mail', kids, { transform: { x } });
-}
-
 // ---------------------------------------------------------------------------
-// A: the COO (ask → plan → work → report → library)
+// A: the COO (a Level 3 run: plan → work → report → Reports), and the CFO
 // ---------------------------------------------------------------------------
 
-const TABS = ['Ask', 'Work', 'Reports'] as const;
+const REPORT_TITLE = 'Supplier delays and promises';
 
-/** Monogram avatars, every one in the people family (rose). */
-const PEOPLE = {
-  SR: C.avatar.rep,
-  CO: C.avatar.coo,
-  HR: C.avatar.hr,
-  IN: C.avatar.intern,
-  CF: C.avatar.cfo,
-  FT: C.avatar.team,
-  DD: C.avatar.cfo,
-  LG: C.avatar.hr,
-  SP: C.avatar.intern,
-} as const;
-type Person = keyof typeof PEOPLE;
-const face = (id: string, who: Person, x: number, y: number, r: number, opacity = 1) =>
-  avatar(id, who, x, y, r, PEOPLE[who], opacity);
-
-/** A pill button's width (matches `ui.button`). */
-const buttonWidth = (ui: Ui, text: string, withIcon = false) =>
-  Math.round(ui.measure(text, F.button) + 44 + (withIcon ? 24 : 0));
-
+/** The deep run's plan, in the product's sections. */
 const PLAN = {
+  asked:
+    'Which suppliers slowed deliveries this quarter, and what we promised customers because of it.',
+  scope:
+    'Mail, Teams and files from 1 Apr to 30 Jun. Only items you can already open are searched.',
   who: 'Every supplier that delivered late this quarter, and the customers whose orders they touched.',
-  measures: ['Days late', 'On-time rate', 'Promises to customers'],
-  steps: [
-    'Pull delivery logs and supplier emails',
-    'Match late orders to customers',
-    'Find what we promised, and to whom',
-    'Check every figure against its source',
+  measures: [
+    ['Days late', 'the average delay per late order'],
+    ['Promises', 'new dates or credits offered to customers'],
   ],
+  steps: [
+    ['Lead', 'Split the question and brief the researchers'],
+    ['Researcher', 'Read delivery logs, supplier emails and Teams chats'],
+    ['Researcher', 'Match late orders to customers and what we promised'],
+    ['Checker', 'Check each answer against its source'],
+  ],
+  limits: 'Delivery logs from before April are not in files you can open.',
 } as const;
 
-const RESEARCHERS = [
-  { name: 'Researcher 1', focus: 'Delivery logs · ERP', searches: [4, 46], items: [60, 1318] },
-  { name: 'Researcher 2', focus: 'Supplier emails', searches: [3, 38], items: [41, 864] },
-  { name: 'Researcher 3', focus: 'Customer contracts', searches: [2, 29], items: [18, 412] },
-  { name: 'Researcher 4', focus: 'Teams threads · tickets', searches: [5, 52], items: [77, 1096] },
-] as const;
-
-const CHECKS = [
-  'Collected delivery logs for 46 suppliers',
-  'Matched 1,318 late order lines to customers',
-  'Found 22 promises in emails and chats',
-  'Checked every figure against its source',
-  'Writing the report',
-] as const;
-
-const BARS = [
-  { name: 'Kestrel Alloys', days: 9.4 },
-  { name: 'Arbor Freight', days: 6.1 },
-  { name: 'Halden Plastics', days: 4.8 },
-  { name: 'All others', days: 1.2 },
-] as const;
-
-const BOTTOM_LINE =
-  'Three suppliers caused *71%* of late deliveries this quarter. We promised 14 customers new dates or credits; 3 are still open.';
-
-const LIBRARY = [
+/** The Work tab's agents: the Lead, then the researchers (mail, Teams and files only). */
+const AGENTS = [
   {
-    title: 'Renewals at risk, Q2',
-    meta: 'Sales ops · Level 3 · 24 Jun',
-    v: 3,
-    people: ['SR', 'HR', 'CO'] as const,
+    agent: 'Lead',
+    task: 'Briefing and merging',
+    steps: [1, 9],
+    srch: [0, 0],
+    read: [0, 0],
+    progs: [0, 0],
+    tokens: [6, 41],
   },
   {
-    title: 'Vendor contract terms',
-    meta: 'Legal · Level 3 · 19 Jun',
-    v: 2,
-    people: ['LG', 'CO'] as const,
-  },
-  { title: 'Hiring plan review', meta: 'HR · Level 1 · 12 Jun', v: 1, people: ['HR'] as const },
-  {
-    title: 'Escalations this month',
-    meta: 'Support · Level 3 · 9 Jun',
-    v: 4,
-    people: ['SP', 'CO'] as const,
+    agent: 'Researcher 1',
+    task: 'Delivery logs (files)',
+    steps: [1, 14],
+    srch: [2, 18],
+    read: [4, 64],
+    progs: [0, 3],
+    tokens: [9, 212],
   },
   {
-    title: 'Pricing changes since 2025',
-    meta: 'Finance · Level 3 · 2 Jun',
-    v: 2,
-    people: ['CF'] as const,
+    agent: 'Researcher 2',
+    task: 'Supplier emails',
+    steps: [1, 12],
+    srch: [3, 22],
+    read: [7, 131],
+    progs: [0, 0],
+    tokens: [11, 168],
   },
   {
-    title: 'Onboarding time by region',
-    meta: 'Ops · Level 3 · 28 May',
-    v: 1,
-    people: ['SR'] as const,
+    agent: 'Researcher 3',
+    task: 'Customer contracts (files)',
+    steps: [1, 8],
+    srch: [1, 9],
+    read: [2, 27],
+    progs: [0, 1],
+    tokens: [5, 74],
+  },
+  {
+    agent: 'Researcher 4',
+    task: 'Teams chats',
+    steps: [1, 10],
+    srch: [2, 15],
+    read: [5, 88],
+    progs: [0, 0],
+    tokens: [7, 120],
   },
 ] as const;
+const CHECKER = { agent: 'Checker', task: 'Checking every answer' } as const;
 
-/** The elapsed clock (seconds) on the deep run. */
+/** The elapsed clock (seconds) on the deep run: 19 minutes in all. */
 function elapsed(t: number): number {
   const go = T.a2.go;
   if (t < go) return 0;
   if (t < T.a3.race) return lerp(0, 252, (t - go) / (T.a3.race - go));
   if (t < T.a3.raceEnd)
     return lerp(252, 1112, progress(t, T.a3.race, T.a3.raceEnd - T.a3.race, easing.camera));
-  return lerp(1112, 1120, clamp((t - T.a3.raceEnd) / (T.a5.done - T.a3.raceEnd)));
+  return lerp(1112, 1140, clamp((t - T.a3.raceEnd) / (T.a5.done - T.a3.raceEnd)));
 }
 /** How far the researchers have got (0–1). */
-const researched = (t: number) => clamp(elapsed(t) / 1120);
+const researched = (t: number) => clamp(elapsed(t) / 1112);
+/** m:ss, as the product writes it. */
+const mss = (s: number) => {
+  const n = Math.max(0, Math.floor(s));
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`;
+};
+
+/** The report, as each version reads. */
+interface ReportVersion {
+  readonly v: 1 | 2;
+  readonly meta: string;
+  readonly bottom: string;
+  readonly findings: readonly string[];
+  readonly trust: string;
+  readonly chart: string;
+  readonly bars: readonly { name: string; value: number }[];
+}
+const REPORT: Record<1 | 2, ReportVersion> = {
+  1: {
+    v: 1,
+    meta: 'Mail, Files and Teams to 30 Jun · run 30 Jun · v1',
+    bottom: 'Three suppliers caused 71% of late deliveries this quarter.',
+    findings: [
+      'Kestrel Alloys ran 9.4 days late on average after a furnace repair.[1]',
+      'We promised 14 customers new dates or credits.[2]',
+      'Three of those promises are still open.[3]',
+    ],
+    trust: 'Read 21 emails, 8 Teams messages, 9 files · 1 Apr–30 Jun · 4 of 4 sections checked',
+    chart: 'Three suppliers ran 5–9 days late',
+    bars: [
+      { name: 'Kestrel', value: 9.4 },
+      { name: 'Arbor', value: 6.1 },
+      { name: 'Halden', value: 5.2 },
+      { name: 'Others', value: 1.2 },
+    ],
+  },
+  2: {
+    v: 2,
+    meta: 'Mail, Files and Teams to 30 Sep · run 30 Sep · v2',
+    bottom: 'Late deliveries fell by a third; Kestrel Alloys is still the slowest.',
+    findings: [
+      'Kestrel Alloys still ran 6.2 days late on average.[1]',
+      'Halden Plastics is back on time since July.[2]',
+      'All 14 promises to customers are now closed.[3]',
+    ],
+    trust: 'Read 26 emails, 11 Teams messages, 12 files · 1 Jul–30 Sep · 4 of 4 sections checked',
+    chart: 'Kestrel Alloys still ran 6 days late',
+    bars: [
+      { name: 'Kestrel', value: 6.2 },
+      { name: 'Arbor', value: 3.4 },
+      { name: 'Halden', value: 1.1 },
+      { name: 'Others', value: 1.0 },
+    ],
+  },
+};
+/** The report's citation card (the exact line it used). */
+const CITATION = {
+  kind: 'Email · [1]',
+  title: 'Re: May shipments – revised dates',
+  from: 'Kestrel Alloys · 14 May',
+  passage:
+    "We can't ship the May order before 23 May; the furnace repair has moved every batch back about nine days.",
+  cited: 'Cited in §1',
+  open: 'Open in Outlook',
+} as const;
+
+/** The CFO's conversation, citing the COO's report. */
+const CFO_CHAT: ChatSpec = {
+  key: 'cfo',
+  question: 'Which customers did we promise credits for late deliveries?',
+  answer:
+    'We promised credits to 6 customers and new dates to 8. Three promises are still open, all on Kestrel Alloys orders.[1]',
+  meta: { confidence: 'High', reason: 'Taken from a checked report.', sources: 1 },
+};
+
+/** Reports in the library (all from Level 3 plans): the newest is the COO's. */
+const LIBRARY = [
+  {
+    title: 'Renewals at risk, Q2',
+    bottom: 'Nine renewals carry a price or service risk; four need a call this month.',
+    sources: ['mail', 'doc'],
+    period: '1 Apr–30 Jun',
+    shared: 'Shared by Maya Chen',
+    date: '24 Jun',
+    trend: [3, 5, 4, 7, 6, 9],
+  },
+  {
+    title: 'Vendor contract terms',
+    bottom: 'Two vendors can raise prices mid-term; one contract has no exit clause.',
+    sources: ['doc'],
+    period: '2024–2026',
+    shared: 'Shared with 2',
+    date: '19 Jun',
+    trend: [6, 6, 5, 7, 8, 8],
+  },
+  {
+    title: 'Escalations this month',
+    bottom: 'Most escalations trace back to onboarding delays in two regions.',
+    sources: ['mail', 'chat'],
+    period: '1–30 Jun',
+    shared: 'Shared by Omar Haddad',
+    date: '9 Jun',
+    trend: [8, 6, 7, 5, 4, 4],
+  },
+  {
+    title: 'Pricing changes since 2025',
+    bottom: 'List prices rose twice; discounts above 15% need the deal desk.',
+    sources: ['mail', 'doc', 'chat'],
+    period: 'Jan 2025–Jun 2026',
+    shared: 'Only you',
+    date: '2 Jun',
+    trend: [2, 3, 3, 5, 6, 6],
+  },
+] as const;
+const NEW_REPORT = {
+  title: REPORT_TITLE,
+  bottom: REPORT[1].bottom,
+  sources: ['mail', 'chat', 'doc'],
+  period: '1 Apr–30 Jun',
+  date: '30 Jun',
+  trend: [2, 4, 9, 7, 5, 3],
+} as const;
+/** People the COO can share with (initials only appear here, as in the product). */
+const SUGGESTIONS = [
+  {
+    initials: 'PR',
+    name: 'Priya Raman',
+    email: 'priya.raman@company.com',
+    job: 'Chief Financial Officer',
+  },
+  {
+    initials: 'PK',
+    name: 'Prisha Kapoor',
+    email: 'prisha.kapoor@company.com',
+    job: 'Procurement lead',
+  },
+] as const;
+const SHARE_TYPED = typing('share', 'pri', 0, 9);
+
+/** The plan chip in the chat and the progress/report card under it. */
+function aChatLayout(ui: Ui) {
+  return memo(ui, 'a-chat', () => {
+    const msg = userMessage(ui, 'm', Q.a, COL.x + COL.w, CHAT_TOP, MSG_W);
+    const chipY = CHAT_TOP + msg.h + 20;
+    const chip = { x: COL.x, y: chipY, w: COL.w, h: 96 };
+    const card = { x: COL.x, y: chip.y + chip.h + 14, w: COL.w };
+    const review = {
+      x: COL.x + 14,
+      y: chip.y + 48,
+      w: ui.measure('Review ›', PF.label) + 24,
+      h: 34,
+    };
+    const openBtn = { x: card.x + 16, y: 0, w: ui.measure('Open report', PF.label) + 24, h: 34 };
+    return { msgH: msg.h, chip, card, review, openBtn };
+  });
+}
+
+/** The Research workspace panel (full window under the top bar) and its parts. */
+const PANEL = { head: 50, tabs: 40 } as const;
+const PANEL_TOP = TOP;
+const PANEL_BODY = TOP + PANEL.head + PANEL.tabs;
+const FOOT_H = 124;
+
+interface PlanSection {
+  readonly title: string;
+  readonly y: number;
+  readonly bodyY: number;
+  readonly h: number;
+}
+function planLayout(ui: Ui) {
+  return memo(ui, 'plan', () => {
+    const w = WIN.w - 48;
+    const lines = (text: string) =>
+      layoutText(text, PF.small, { measurer: ui.measurer, maxWidth: w }).height;
+    let y = PANEL_BODY + 16;
+    const kicker = y;
+    y += 22;
+    const title = y;
+    y += 32;
+    const vrow = y;
+    y += 34;
+    const sections: PlanSection[] = [];
+    const add = (title: string, h: number) => {
+      sections.push({ title, y, bodyY: y + 21, h });
+      y += 21 + h + 10;
+    };
+    add('What you asked for', lines(PLAN.asked));
+    add('Scope — what will be read', lines(PLAN.scope));
+    add('Who is included', lines(PLAN.who));
+    add('Measures', PLAN.measures.length * 21);
+    add('Steps — who does what', PLAN.steps.length * 28);
+    add('Limits I can already see', lines(PLAN.limits));
+    const footY = WIN.h - FOOT_H;
+    const goW = Math.round(ui.measure('Go ahead', PF.label) + 24);
+    const go = { x: WIN.w - 24 - goW, y: footY + 74, w: goW, h: 34 };
+    const steps = sections[4] ?? { y: 0, bodyY: 0, h: 0, title: '' };
+    return {
+      kicker,
+      title,
+      vrow,
+      sections,
+      footY,
+      save: { x: 24, y: footY + 16, w: 290, h: 44 },
+      notify: { x: 330, y: footY + 16, w: 290, h: 24 },
+      go,
+      steps: { x: 16, y: steps.y - 6, w: WIN.w - 32, h: steps.h + 30 },
+    };
+  });
+}
+
+/** The Work tab's table: columns (right edges for numbers) and rows. */
+const WORK = {
+  strip: PANEL_BODY + 12,
+  group: PANEL_BODY + 72,
+  head: PANEL_BODY + 98,
+  row0: PANEL_BODY + 124,
+  row: 44,
+  cols: {
+    agent: 24,
+    task: 120,
+    time: 360,
+    steps: 404,
+    srch: 448,
+    read: 498,
+    progs: 552,
+    tokens: 616,
+  },
+} as const;
+const checkerTop = WORK.row0 + AGENTS.length * WORK.row + 22;
+
+function reportLayout(ui: Ui, v: 1 | 2) {
+  return memo(ui, `report${v}`, () => {
+    const r = REPORT[v];
+    const x = COL.x;
+    const w = COL.w;
+    let y = TOP + 16;
+    const back = y;
+    y += 34;
+    const title = y;
+    y += 34;
+    const chips = y;
+    y += 30;
+    const meta = y;
+    y += 26;
+    const buttons = y;
+    y += 46;
+    const banner = v === 2 ? y : -1;
+    if (v === 2) y += 78;
+    const rule = y;
+    y += 14;
+    const bottomHead = y;
+    y += 28;
+    const bottom = y;
+    const bottomH = layoutText(r.bottom, PF.bodyStrong, {
+      measurer: ui.measurer,
+      maxWidth: w,
+    }).height;
+    y += bottomH + 10;
+    const findings = r.findings.map((f, k) => {
+      const a = answerText(ui, 'm', f, x + 22, y, w - 22);
+      const at = { y, h: a.h, cites: a.cites, k };
+      y += a.h + 8;
+      return at;
+    });
+    const trust = y + 4;
+    const trustH = layoutText(r.trust, PF.monoSmall, { measurer: ui.measurer, maxWidth: w }).height;
+    y = trust + trustH + 20;
+    const overview = y;
+    y += 30;
+    const chartTitle = y;
+    y += 26;
+    const chart = { x, y, w, h: 200 };
+    const cite = findings[0]?.cites['1'] ?? { x, y: bottom, w: 10, h: 14 };
+    const card = { x, y: cite.y + cite.h + 10, w, h: 0 };
+    const passageH = layoutText(CITATION.passage, PF.body, {
+      measurer: ui.measurer,
+      maxWidth: w - 46,
+    }).height;
+    const cardH = 14 + 20 + 26 + 22 + 14 + passageH + 18 + 40;
+    // Buttons: Only you, Sources · 38, ↻ Refresh, Share, ⋯
+    let bx = x;
+    const btn = (text: string, withIcon = false) => {
+      const bw = Math.round(ui.measure(text, PF.label) + 24 + (withIcon ? 22 : 0));
+      const b = { x: bx, y: buttons, w: bw, h: 32 };
+      bx += bw + 8;
+      return b;
+    };
+    const onlyYou = btn('Only you');
+    const sources = btn('Sources · 38');
+    const refresh = btn('Refresh', true);
+    const share = btn('Share');
+    const more = { x: bx, y: buttons, w: 34, h: 32 };
+    const readyW = ui.measure('Ready', PF.monoSmall) + 14;
+    const version = {
+      x: x + readyW + 8,
+      y: chips,
+      w: ui.measure(`v${v} ⌄`, PF.monoSmall) + 14,
+      h: 22,
+    };
+    return {
+      back,
+      title,
+      chips,
+      meta,
+      buttons: { onlyYou, sources, refresh, share, more },
+      version,
+      banner,
+      rule,
+      bottomHead,
+      bottom,
+      bottomH,
+      findings,
+      trust,
+      overview,
+      chartTitle,
+      chart,
+      cite,
+      card: { ...card, h: cardH },
+      answerBox: { x: x - 8, y: bottomHead - 8, w: w + 16, h: trust - bottomHead + 4 },
+    };
+  });
+}
+
+/** The Reports page: header, tabs, filters and rows (window-local). */
+const LIB = {
+  title: TOP + 18,
+  search: TOP + 58,
+  tabs: TOP + 106,
+  filters: TOP + 146,
+  rows: TOP + 192,
+  row: 98,
+} as const;
+function libraryLayout(ui: Ui) {
+  return memo(ui, 'lib', () => {
+    const moreX = COL.x + COL.w - 12;
+    const row0 = LIB.rows;
+    const menu = { x: COL.x + COL.w - 170, y: row0 + 40, w: 170, h: 3 * 34 + 12 };
+    const share = { x: menu.x, y: menu.y + 6 + 34, w: menu.w, h: 34 };
+    const dialog = { x: 40, y: 150, w: WIN.w - 80, h: 470 };
+    const input = { x: dialog.x + 24, y: dialog.y + 118, w: dialog.w - 48, h: 40 };
+    const suggestion = (k: number) => ({ x: input.x, y: input.y + 50 + k * 54, w: input.w, h: 50 });
+    const confirmW = Math.round(ui.measure('Share (can view)', PF.label) + 24);
+    const confirm = {
+      x: dialog.x + dialog.w - 24 - confirmW,
+      y: dialog.y + dialog.h - 58,
+      w: confirmW,
+      h: 34,
+    };
+    const sharedText = 'Shared with 1';
+    const metaPrefix = ` · ${NEW_REPORT.period} · Ready · `;
+    const iconsW = NEW_REPORT.sources.length * 18 + 4;
+    const sharedX = COL.x + iconsW + ui.measure(metaPrefix, PF.monoSmall);
+    return {
+      moreX,
+      more: { x: moreX - 14, y: row0 + 10, w: 28, h: 28 },
+      menu,
+      share,
+      dialog,
+      input,
+      suggestion,
+      confirm,
+      shared: { x: sharedX - 4, y: row0 + 64, w: ui.measure(sharedText, PF.monoSmall) + 8, h: 22 },
+      row0: { x: COL.x - 14, y: row0, w: COL.w + 22, h: LIB.row },
+    };
+  });
+}
+
+/** A crossfade between pages of one window: which page shows at `t`, and the one before it while it fades. */
+function pagesAt<K extends string>(
+  t: number,
+  pages: readonly { key: K; from: number }[],
+  fade = 0.2,
+) {
+  let k = 0;
+  while (k + 1 < pages.length && t >= (pages[k + 1]?.from ?? Infinity)) k++;
+  const cur = pages[k];
+  const prev = pages[k - 1];
+  const p = cur ? clamp((t - cur.from) / fade) : 1;
+  const out: { key: K; opacity: number }[] = [];
+  if (prev && p < 1) out.push({ key: prev.key, opacity: 1 });
+  if (cur) out.push({ key: cur.key, opacity: p });
+  return out;
+}
 
 export function stationA(ui: Ui, t: number): SceneNode[] {
   const left = DESK.a - WIN.w / 2;
+  const cfo = progress(t, T.b2.cfo, 0.45, easing.camera);
+  const pages = pagesAt(t, [
+    { key: 'chat', from: -Infinity },
+    { key: 'report1', from: T.a5.open },
+    { key: 'library', from: T.b1.land },
+    { key: 'report2', from: T.b2.page },
+    { key: 'cfo', from: T.b2.cfo },
+  ] as const);
   const kids: (SceneNode | null)[] = [];
-  // Which tab is showing: Ask, then Work once it goes ahead, then Reports as the report lands.
-  const toWork = progress(t, T.a2.work, 0.35, easing.camera);
-  const toReports = progress(t, T.b1.land, 0.45, easing.camera);
-  const tabX: number[] = [];
-  let x = 600 - 46;
-  for (let k = TABS.length - 1; k >= 0; k--) {
-    const w = ui.measure(TABS[k] ?? '', F.smallStrong);
-    x -= w;
-    tabX[k] = x;
-    x -= 26;
+  for (const page of pages) {
+    const nodes =
+      page.key === 'chat'
+        ? chatViewA(ui, t)
+        : page.key === 'report1'
+          ? reportPage(ui, 'a-r1', t, 1)
+          : page.key === 'library'
+            ? libraryView(ui, t)
+            : page.key === 'report2'
+              ? reportPage(ui, 'a-r2', t, t >= T.b2.v2 ? 2 : 1)
+              : cfoView(ui, t);
+    kids.push(groupNode(`a-page-${page.key}`, nodes, { opacity: page.opacity }));
   }
-  const at = (k: number) => tabX[k] ?? 0;
-  const wOf = (k: number) => ui.measure(TABS[k] ?? '', F.smallStrong);
-  const ux = lerp(lerp(at(0), at(1), toWork), at(2), toReports);
-  const uw = lerp(lerp(wOf(0), wOf(1), toWork), wOf(2), toReports);
-  const active = toReports > 0.5 ? 2 : toWork > 0.5 ? 1 : 0;
-  kids.push(
-    mark('a-h-mark', 38, 32, 22),
-    label('a-h-name', 'Cowork', 58, 21, F.heading),
-    ...TABS.map((name, k) =>
-      label(`a-tab${k}`, name, at(k), 23, F.smallStrong, k === active ? UI.text : UI.sub),
-    ),
-    box('a-tab-line', ux, 60, uw, 3, 1.5, { fill: UI.accent }),
-    face('a-h-av', 'CO', 606, 32, 15),
-    rule('a-h-rule', 0, 63, WIN.w),
-  );
-
-  const asked = progress(t, T.a1.ask + 0.05, 0.3, easing.exit);
-  if (asked < 1)
+  // The Research workspace panel slides over the chat while the plan is reviewed and run.
+  const panelIn = progress(t, T.a2.review + 0.03, 0.45, easing.enter);
+  const panelOut = progress(t, T.a3.close, 0.45, easing.exit);
+  if (panelIn > 0 && panelOut < 1)
     kids.push(
-      groupNode('a-ask', askViewA(ui, t), { opacity: 1 - asked, transform: { y: -20 * asked } }),
-    );
-  const plan = progress(t, T.a1.ask + 0.3, 0.35, easing.enter);
-  if (plan > 0 && toWork < 1)
-    kids.push(
-      groupNode('a-plan', planViewA(ui, t), {
-        opacity: plan * (1 - clamp(toWork * 2)),
-        transform: { y: 16 * (1 - plan) },
+      groupNode('a-panel', panelA(ui, t), {
+        transform: { x: WIN.w * (1 - panelIn) + WIN.w * panelOut },
       }),
     );
-  if (toWork > 0 && toReports < 1)
-    kids.push(
-      groupNode('a-work', workViewA(ui, t), {
-        opacity: clamp(toWork * 2 - 1) * (1 - clamp(toReports * 2)),
-        transform: { y: 16 * (1 - toWork) },
-      }),
-    );
-  if (toReports > 0)
-    kids.push(groupNode('a-lib', libraryViewA(ui, t), { opacity: clamp(toReports * 2 - 1) }));
-  // The report sheet, then the sheet shrinking into its row in the library.
-  const sheet = progress(t, T.a5.open, 0.55, easing.enter);
-  if (sheet > 0) kids.push(reportA(ui, t, lerp(WIN.h, 150, sheet)));
-
-  // Pointers
-  const ASK_BTN = askButton(ui);
-  const { save: SAVE, go: GO } = planLayout(ui);
-  const pa = pointer(
-    t,
-    [
-      { at: T.a1.type + 1.2, x: 520, y: 760 },
-      { at: T.a1.level - 0.05, x: LEVEL.x + 2.5 * LEVEL.seg, y: LEVEL.y + 20 },
-      { at: T.a1.ask - 0.04, x: ASK_BTN.x + 30, y: ASK_BTN.y + 22 },
-    ],
-    T.a1.ask + 0.4,
-  );
-  if (pa)
-    kids.push(
-      cursor(
-        'a-cursor1',
-        pa.x,
-        pa.y,
-        Math.max(pressAt(t, T.a1.level), pressAt(t, T.a1.ask)),
-        pa.opacity,
-      ),
-    );
-  kids.push(clickRing('a-ring1', LEVEL.x + 2.5 * LEVEL.seg, LEVEL.y + 20, t, T.a1.level));
-  const pb = pointer(
-    t,
-    [
-      { at: T.a2.cursor, x: 560, y: 820 },
-      { at: T.a2.save - 0.05, x: SAVE.x + 11, y: SAVE.y + 12 },
-      { at: T.a2.go - 0.05, x: GO.x + 40, y: GO.y + 22 },
-    ],
-    T.a2.go + 0.35,
-  );
-  if (pb)
-    kids.push(
-      cursor(
-        'a-cursor2',
-        pb.x,
-        pb.y,
-        Math.max(pressAt(t, T.a2.save), pressAt(t, T.a2.go)),
-        pb.opacity,
-      ),
-    );
-  const pc = pointer(
-    t,
-    [
-      { at: T.b1.cursor, x: 420, y: 520 },
-      { at: T.b1.share - 0.05, x: SHARE.x, y: SHARE.y },
-      { at: T.b1.cfo - 0.05, x: 420, y: SHARE.y + 104 },
-    ],
-    T.b1.cfo + 0.5,
-  );
-  if (pc)
-    kids.push(
-      cursor(
-        'a-cursor3',
-        pc.x,
-        pc.y,
-        Math.max(pressAt(t, T.b1.share), pressAt(t, T.b1.cfo)),
-        pc.opacity,
-      ),
-    );
-  const pd = pointer(
-    t,
-    [
-      { at: T.b2.cursor, x: 380, y: 560 },
-      { at: T.b2.refresh - 0.05, x: REFRESH.x, y: REFRESH.y },
-    ],
-    T.b2.refresh + 0.5,
-  );
-  if (pd) kids.push(cursor('a-cursor4', pd.x, pd.y, pressAt(t, T.b2.refresh), pd.opacity));
-
+  kids.push(...topBar(ui, 'a-top', WIN.w));
+  kids.push(...pointersA(ui, t));
   return [
-    personTag(ui, 'a-tag', 'COO', 'CO', DESK.a, WIN.top - 30),
-    windowNode('a-win', { x: left, y: WIN.top, w: WIN.w, h: WIN.h }, kids),
+    groupNode('a-tag-coo', [personTag(ui, 'a-tag', 'COO', 'CO', DESK.a, WIN.top - 30)], {
+      opacity: 1 - cfo,
+    }),
+    ...(cfo > 0
+      ? [
+          groupNode('a-tag-cfo', [personTag(ui, 'a-tag2', 'CFO', 'CF', DESK.a, WIN.top - 30)], {
+            opacity: cfo,
+          }),
+        ]
+      : []),
+    gridWindow('a-win', { x: left, y: WIN.top, w: WIN.w, h: WIN.h }, kids),
   ];
 }
 
-const COMPOSER = { x: 24, y: 136, w: 592, h: 262 } as const;
-const LEVEL = { x: 44, y: COMPOSER.y + COMPOSER.h - 58, seg: 82 } as const;
-const askButton = (ui: Ui) => {
-  const w = buttonWidth(ui, 'Ask', true);
-  return { x: COMPOSER.x + COMPOSER.w - 20 - w, y: COMPOSER.y + COMPOSER.h - 60, w };
-};
-
-function askViewA(ui: Ui, t: number): SceneNode[] {
+/** The COO's chat: the question and the level, the plan chip, the progress card, then the report card. */
+function chatViewA(ui: Ui, t: number): SceneNode[] {
+  const L = aChatLayout(ui);
   const kids: (SceneNode | null)[] = [];
-  kids.push(label('a-greet', 'What do you need to know?', 32, 90, F.title));
-  kids.push(
-    box('a-comp-ring', COMPOSER.x - 3, COMPOSER.y - 3, COMPOSER.w + 6, COMPOSER.h + 6, R.card + 3, {
-      stroke: { color: C.stroke.focus, width: 3 },
-    }),
-    box('a-comp', COMPOSER.x, COMPOSER.y, COMPOSER.w, COMPOSER.h, R.card, {
-      fill: UI.surface,
-      stroke: { color: UI.accentLine, width: 1 },
-    }),
-    ...typedText(ui, 'a-q', TYPE.a, t, 48, COMPOSER.y + 22, F.ask, 544, 1),
-  );
-  // Depth: Level 1 → Level 3.
-  const sel = lerp(0, 2, progress(t, T.a1.level, 0.35, easing.snap));
-  kids.push(box('a-lvl-bg', LEVEL.x, LEVEL.y, LEVEL.seg * 3, 40, 20, { fill: UI.wash }));
-  kids.push(
-    box('a-lvl-sel', LEVEL.x + 3 + sel * LEVEL.seg, LEVEL.y + 3, LEVEL.seg - 6, 34, 17, {
-      fill: UI.surface,
-      shadow: elevationShadows(lighting, 'low', { strength: 0.35 }),
-    }),
-  );
-  const chosen = t >= T.a1.level ? 2 : 0;
-  ['Level 1', 'Level 2', 'Level 3'].forEach((name, k) =>
+  const sent = t >= T.a1.ask;
+  const move = progress(t, T.a1.ask + 0.05, 0.5, easing.camera);
+  const level: 1 | 3 = t >= T.a1.level ? 3 : 1;
+  if (move < 1)
     kids.push(
       label(
-        `a-lvl${k}`,
-        name,
-        LEVEL.x + (k + 0.5) * LEVEL.seg,
-        LEVEL.y + 11,
-        F.smallStrong,
-        k === chosen ? UI.text : UI.sub,
-        { align: 'center' },
-      ),
-    ),
-  );
-  const ask = ui.button('a-askbtn', 'Ask', 0, 0, {
-    primary: true,
-    icon: 'send',
-    press: pressAt(t, T.a1.ask) * 2,
-  });
-  const at = askButton(ui);
-  kids.push(groupNode('a-askpos', [ask.node], { transform: { x: at.x, y: at.y } }));
-  // What the level means: swaps as Level 3 is picked.
-  const swap = progress(t, T.a1.level + 0.05, 0.3, easing.enter);
-  kids.push(icon('a-hint-icon', 'clock', 42, COMPOSER.y + COMPOSER.h + 32, 17, UI.sub));
-  kids.push(
-    label(
-      'a-hint1',
-      'Level 1 · Quick answer · 1–5 min',
-      60,
-      COMPOSER.y + COMPOSER.h + 22,
-      F.small,
-      UI.sub,
-      { opacity: 1 - clamp(swap * 3) },
-    ),
-    groupNode(
-      'a-hint3',
-      [
-        label(
-          'a-hint3-a',
-          'Level 3 · Deep analysis',
-          60,
-          COMPOSER.y + COMPOSER.h + 22,
-          F.smallStrong,
-          UI.violet,
-        ),
-        label(
-          'a-hint3-b',
-          '· 15–100 min · weeks of work in minutes',
-          60 + ui.measure('Level 3 · Deep analysis ', F.smallStrong),
-          COMPOSER.y + COMPOSER.h + 22,
-          F.small,
-          UI.sub,
-        ),
-      ],
-      { opacity: clamp(swap * 1.6 - 0.4), transform: { y: 8 * (1 - swap) } },
-    ),
-  );
-  // Recent questions, quiet below.
-  const ry = COMPOSER.y + COMPOSER.h + 84;
-  kids.push(label('a-recent', 'recent', 32, ry, F.meta, UI.faint));
-  [
-    ['Which accounts renew next quarter?', 'Level 1'],
-    ['Summarise last week’s escalations', 'Level 1'],
-    ['Why did churn rise in the north region?', 'Level 3'],
-    ['What changed in our vendor terms this year?', 'Level 3'],
-  ].forEach(([q = '', lvl = ''], k) => {
-    const y = ry + 30 + k * 56;
-    kids.push(
-      icon(`a-rec${k}-ic`, 'search', 44, y + 18, 17, UI.faint),
-      label(`a-rec${k}`, q, 66, y + 7, F.body, UI.sub),
-      label(`a-rec${k}-l`, lvl, 608, y + 9, F.small, UI.faint, { align: 'right' }),
-      rule(`a-rec${k}-r`, 32, y + 46, 576),
-    );
-  });
-  return kids.filter((n): n is SceneNode => n !== null);
-}
-const PLAN_CARD = { x: 24, w: 592, h: 472 } as const;
-
-/** Where the plan card and its controls sit (window-local). */
-function planLayout(ui: Ui) {
-  const q = layoutText(Q.a, F.body, { measurer: ui.measurer, maxWidth: 450 });
-  const y0 = 86 + q.height + 20 + 22;
-  const cardY = y0 + 36;
-  const fy = cardY + PLAN_CARD.h - 66;
-  const goW = buttonWidth(ui, 'Go ahead');
-  return {
-    y0,
-    cardY,
-    fy,
-    save: { x: PLAN_CARD.x + 24, y: fy + 22 },
-    go: { x: PLAN_CARD.x + PLAN_CARD.w - 24 - goW, y: fy + 12 },
-  };
-}
-
-function planViewA(ui: Ui, t: number): SceneNode[] {
-  const kids: (SceneNode | null)[] = [];
-  const q = bubble(ui, 'a-qb', Q.a, 616, 86, 450);
-  kids.push(q.node);
-  const { y0, cardY, fy, save: SAVE, go: GO } = planLayout(ui);
-  const lvl = ui.chip('a-lvlchip', 'Level 3 · Deep analysis', 0, 0, {
-    fill: UI.violetSoft,
-    color: UI.violet,
-    font: F.tiny,
-    height: 22,
-  });
-  kids.push(
-    answerer('a-who', 32, y0),
-    groupNode('a-lvlpos', [lvl.node], {
-      transform: { x: 32 + 26 + ui.measure('Cowork', F.smallStrong) + 10, y: y0 - 1 },
-    }),
-  );
-  const unfold = progress(t, T.a2.unfold, 0.7, easing.enter);
-  if (unfold <= 0) {
-    kids.push(
-      spinner('a-plan-spin', 41, cardY + 18, 8, t, UI.violet),
-      label('a-plan-wait', 'Drafting a plan…', 58, cardY + 8, F.small, UI.sub),
-    );
-    return kids.filter((n): n is SceneNode => n !== null);
-  }
-  const h = lerp(56, PLAN_CARD.h, unfold);
-  const inside: SceneNode[] = [];
-  const item = (k: number) => {
-    const p = progress(t, T.a2.unfold + 0.12 + k * 0.07, 0.45, easing.enter);
-    return { opacity: p, transform: { y: 10 * (1 - p) } };
-  };
-  const cx = PLAN_CARD.x + 24;
-  inside.push(
-    groupNode('a-plan-head', [
-      label('a-plan-title', 'Plan', cx, cardY + 18, F.heading),
-      label('a-plan-sub', 'Review it before it runs', cx + 48, cardY + 21, F.small, UI.sub),
-    ]),
-    groupNode(
-      'a-plan-who',
-      [
-        label('a-plan-who-l', 'who is included', cx, cardY + 62, F.meta, UI.faint),
-        paragraph(ui, 'a-plan-who-t', PLAN.who, cx, cardY + 82, F.body, 540).node,
-      ],
-      item(0),
-    ),
-  );
-  let mx = cx;
-  const measures: SceneNode[] = [
-    label('a-plan-m-l', 'measures', cx, cardY + 150, F.meta, UI.faint),
-  ];
-  PLAN.measures.forEach((m, k) => {
-    const c = ui.chip(`a-plan-m${k}`, m, mx, cardY + 172, {
-      fill: UI.wash,
-      color: UI.text,
-      font: F.small,
-      stroke: UI.line,
-    });
-    measures.push(c.node);
-    mx += c.w + 8;
-  });
-  inside.push(groupNode('a-plan-measures', measures, item(1)));
-  const steps: SceneNode[] = [label('a-plan-s-l', 'steps', cx, cardY + 222, F.meta, UI.faint)];
-  PLAN.steps.forEach((s, k) => {
-    const y = cardY + 246 + k * 32;
-    steps.push(
-      box(`a-plan-n${k}`, cx, y + 1, 22, 22, 11, { fill: UI.violetSoft }),
-      label(`a-plan-nt${k}`, String(k + 1), cx + 11, y + 3, F.tiny, UI.violet, { align: 'center' }),
-      label(`a-plan-st${k}`, s, cx + 34, y, F.body),
-    );
-  });
-  inside.push(groupNode('a-plan-steps', steps, item(2)));
-  // Footer: save as a report, go ahead.
-  const saved = progress(t, T.a2.save, 0.3, easing.snap);
-  const go = ui.button('a-go', 'Go ahead', 0, 0, {
-    primary: true,
-    press: pressAt(t, T.a2.go) * 2,
-    hover: clamp((t - (T.a2.go - 0.3)) / 0.15),
-  });
-  const edit = ui.button('a-edit', 'Edit plan', 0, 0, {});
-  inside.push(
-    groupNode(
-      'a-plan-foot',
-      [
-        rule('a-plan-frule', PLAN_CARD.x, fy, PLAN_CARD.w),
-        box('a-save-box', SAVE.x, SAVE.y, 22, 22, 6, {
-          fill: saved > 0 ? UI.accent : UI.surface,
-          stroke: { color: saved > 0 ? UI.accent : UI.line, width: 1.5 },
-        }),
-        ...(saved > 0
-          ? [
-              icon('a-save-tick', 'check', SAVE.x + 11, SAVE.y + 11, 18 * saved, UI.surface, {
-                width: 2.6,
-              }),
-            ]
-          : []),
-        label('a-save-l', 'Save as a report', SAVE.x + 32, SAVE.y + 1, F.body),
-        groupNode('a-editpos', [edit.node], { transform: { x: GO.x - 10 - edit.w, y: GO.y } }),
-        groupNode('a-gopos', [go.node], { transform: { x: GO.x, y: GO.y } }),
-      ],
-      item(3),
-    ),
-  );
-  kids.push(
-    box('a-plan-card', PLAN_CARD.x, cardY, PLAN_CARD.w, h, 20, {
-      fill: UI.surface,
-      stroke: { color: UI.line, width: 1 },
-      shadow: elevationShadows(lighting, 'mid', { strength: 0.3 }),
-    }),
-    groupNode('a-plan-inside', inside, {
-      clip: rect(PLAN_CARD.x + PLAN_CARD.w / 2, cardY + h / 2, PLAN_CARD.w, h, 20),
-    }),
-  );
-  kids.push(clickRing('a-ring-save', SAVE.x + 11, SAVE.y + 11, t, T.a2.save));
-  return kids.filter((n): n is SceneNode => n !== null);
-}
-
-function workViewA(ui: Ui, t: number): SceneNode[] {
-  const kids: (SceneNode | null)[] = [];
-  const done = t >= T.a5.done;
-  kids.push(
-    label('a-w-title', 'Supplier delays and promises', 32, 84, F.heading, UI.text, {
-      maxWidth: 400,
-    }),
-  );
-  const lvl = ui.chip('a-w-lvl', 'Level 3 · Deep analysis', 0, 0, {
-    fill: UI.violetSoft,
-    color: UI.violet,
-    font: F.tiny,
-    height: 22,
-  });
-  kids.push(groupNode('a-w-lvlpos', [lvl.node], { transform: { x: 32, y: 114 } }));
-  if (done) {
-    kids.push(
-      checkDisc('a-w-done', 32 + lvl.w + 20, 125, 8, progress(t, T.a5.done, 0.4, easing.enter)),
-    );
-    kids.push(
-      label('a-w-status', 'Done · report ready', 32 + lvl.w + 34, 116, F.smallStrong, UI.good),
-    );
-  } else {
-    kids.push(spinner('a-w-spin', 32 + lvl.w + 20, 125, 7, t, UI.violet));
-    kids.push(
-      label('a-w-status', 'Running · 4 researchers', 32 + lvl.w + 34, 116, F.small, UI.sub),
-    );
-  }
-  kids.push(
-    label('a-w-el', 'elapsed', 608, 82, F.meta, UI.faint, { align: 'right' }),
-    label('a-w-clock', clockText(elapsed(t)), 608, 100, F.clock, done ? UI.good : UI.text, {
-      align: 'right',
-    }),
-    rule('a-w-rule', 0, 150, WIN.w),
-    label('a-w-res', 'Researchers', 32, 170, F.smallStrong),
-    label(
-      'a-w-res2',
-      'in parallel',
-      32 + ui.measure('Researchers ', F.smallStrong),
-      170,
-      F.small,
-      UI.sub,
-    ),
-  );
-  const r = researched(t);
-  RESEARCHERS.forEach((res, k) => {
-    const y = 200 + k * 78;
-    const pace = clamp(r * (1 + 0.08 * (k - 1.5)));
-    const id = `a-r${k}`;
-    kids.push(
-      box(`${id}-disc`, 32, y + 6, 38, 38, 12, { fill: UI.violetSoft }),
-      icon(`${id}-ic`, 'search', 51, y + 25, 18, UI.violet),
-      label(`${id}-name`, res.name, 84, y + 4, F.bodyStrong),
-      label(`${id}-focus`, res.focus, 84, y + 28, F.small, UI.sub),
-      label(`${id}-sl`, 'searches', 470, y + 4, F.meta, UI.faint, { align: 'right' }),
-      label(
-        `${id}-s`,
-        grouped(lerp(res.searches[0], res.searches[1], pace)),
-        470,
-        y + 22,
-        F.mono,
-        UI.text,
-        { align: 'right' },
-      ),
-      label(`${id}-il`, 'items read', 608, y + 4, F.meta, UI.faint, { align: 'right' }),
-      label(
-        `${id}-i`,
-        grouped(lerp(res.items[0], res.items[1], pace)),
-        608,
-        y + 22,
-        F.mono,
-        UI.text,
-        { align: 'right' },
-      ),
-      box(`${id}-track`, 84, y + 56, 524, 4, 2, { fill: UI.wash }),
-      box(`${id}-bar`, 84, y + 56, 524 * lerp(0.08, 1, pace), 4, 2, {
-        fill: done ? UI.good : UI.violet,
-      }),
-    );
-  });
-  kids.push(
-    rule('a-w-rule2', 32, 516, 576),
-    label('a-w-steps', 'Checklist', 32, 534, F.smallStrong),
-  );
-  CHECKS.forEach((c, k) => {
-    const y = 566 + k * 40;
-    const at = T.a3.steps[k] ?? T.a5.done;
-    const p = progress(t, at, 0.45, easing.enter);
-    const running = p <= 0 && (k === 0 || t >= (T.a3.steps[k - 1] ?? Infinity));
-    kids.push(
-      running
-        ? spinner(`a-c${k}-spin`, 44, y + 11, 8, t, UI.violet)
-        : checkDisc(`a-c${k}`, 44, y + 11, 10, p),
-      label(`a-c${k}-t`, c, 66, y, F.body, p > 0 ? UI.text : running ? UI.text : UI.faint),
-    );
-  });
-  return kids.filter((n): n is SceneNode => n !== null);
-}
-
-function reportA(ui: Ui, t: number, top: number): SceneNode {
-  // As the report lands in the library, the sheet shrinks into the top row.
-  const land = progress(t, T.b1.land, 0.6, easing.camera);
-  const from = { x: 0, y: top, w: WIN.w, h: WIN.h - top + 30, r: R.card };
-  const to = { x: LIB.x, y: LIB.top, w: LIB.w, h: LIB.row - 8, r: R.input };
-  const f = {
-    x: lerp(from.x, to.x, land),
-    y: lerp(from.y, to.y, land),
-    w: lerp(from.w, to.w, land),
-    h: lerp(from.h, to.h, land),
-    r: lerp(from.r, to.r, land),
-  };
-  if (land >= 1) return groupNode('a-report', []);
-  const content = 1 - clamp(land * 3);
-  const kids: SceneNode[] = [
-    box('a-rep-bg', f.x, f.y, f.w, f.h, f.r, {
-      fill: UI.surface,
-      stroke: { color: withAlpha(UI.line, land), width: 1.2 },
-      shadow: [{ x: 0, y: lerp(-8, 6, land), blur: 26, color: withAlpha(UI.shade, 0.12) }],
-    }),
-  ];
-  if (content > 0) {
-    const y = f.y;
-    const inner: SceneNode[] = [
-      label('a-rep-kicker', 'report · v1', 32, y + 24, F.meta, UI.faint),
-      label('a-rep-title', 'Supplier delays and promises', 32, y + 44, F.title),
-      label(
-        'a-rep-meta',
-        'level 3 · 38 sources · 18 min 40 s · saved to reports',
-        32,
-        y + 78,
-        F.meta,
-        UI.faint,
-      ),
-      box('a-rep-bl', 24, y + 110, 592, 112, 18, { fill: UI.accentSoft }),
-      label('a-rep-bll', 'bottom line', 44, y + 124, F.meta, UI.accent),
-      paragraph(ui, 'a-rep-blt', BOTTOM_LINE, 44, y + 146, F.body, 552).node,
-      label('a-rep-ch', 'Average days late, by supplier', 32, y + 246, F.smallStrong),
-    ];
-    BARS.forEach((b, k) => {
-      const by = y + 278 + k * 38;
-      const p = progress(t, T.a5.bars + k * 0.09, 0.7, easing.enter);
-      const w = (b.days / 10) * 330 * p;
-      inner.push(
-        label(`a-rep-b${k}-n`, b.name, 32, by + 1, F.small, UI.sub),
-        box(`a-rep-b${k}`, 176, by + 2, Math.max(w, 0.01), 20, 10, {
-          fill: k < 3 ? UI.accent : UI.line,
-        }),
-        label(`a-rep-b${k}-v`, `${b.days.toFixed(1)} d`, 184 + w, by + 2, F.mono, UI.text, {
-          opacity: clamp(p * 2 - 0.6),
-        }),
-      );
-    });
-    inner.push(label('a-rep-src', 'Sources · 38', 32, y + 440, F.smallStrong));
-    let sx = 32;
-    (
-      [
-        ['mail', 'Delivery emails · 21'],
-        ['doc', 'Logistics logs · 9'],
-        ['chat', 'Teams threads · 8'],
-      ] as const
-    ).forEach(([ic, text], k) => {
-      const c = ui.chip(`a-rep-s${k}`, text, sx, y + 468, {
-        fill: UI.wash,
-        color: UI.text,
-        font: F.small,
-        icon: ic,
-        stroke: UI.line,
-      });
-      inner.push(c.node);
-      sx += c.w + 8;
-    });
-    kids.push(
-      groupNode('a-rep-inner', inner, {
-        opacity: content,
-        clip: rect(f.x + f.w / 2, f.y + f.h / 2, f.w, f.h, f.r),
-      }),
-    );
-  }
-  return groupNode('a-report', kids);
-}
-
-const LIB = { x: 16, top: 172, w: 608, row: 84 } as const;
-const SHARE = { x: 590, y: LIB.top + 38 } as const;
-const REFRESH = { x: 552, y: LIB.top + 38 } as const;
-
-function libraryViewA(ui: Ui, t: number): SceneNode[] {
-  const kids: (SceneNode | null)[] = [];
-  const flip = progress(t, T.b2.flip, 0.4, easing.camera);
-  const q = flip < 0.5 ? 'Q2 2026' : 'Q3 2026';
-  const qChip = ui.chip('a-l-q', q, 0, 0, {
-    fill: UI.wash,
-    color: UI.text,
-    icon: 'clock',
-    stroke: UI.line,
-  });
-  kids.push(
-    label('a-l-title', 'Reports', 32, 86, F.title),
-    label('a-l-sub', "Your company's reports, kept and shared", 32, 116, F.small, UI.sub),
-    groupNode('a-l-qpos', [qChip.node], {
-      transform: {
-        x: 608 - qChip.w / 2,
-        y: 98,
-        scaleY: Math.max(0.02, Math.abs(Math.cos(Math.PI * flip))),
-        originX: qChip.w / 2,
-        originY: 14,
-      },
-    }),
-    rule('a-l-rule', 0, 156, WIN.w),
-  );
-  // Rows below make room: first for the new report, then for the question that builds on it.
-  const landed = progress(t, T.b1.land, 0.6, easing.camera);
-  const asked = progress(t, T.b2.ask, 0.5, easing.enter);
-  const shift = landed * LIB.row + asked * 104;
-  LIBRARY.forEach((row, k) => {
-    const y = LIB.top + k * LIB.row + shift;
-    if (y > WIN.h) return;
-    kids.push(libRow(ui, `a-l-r${k}`, row.title, row.meta, `v${row.v}`, row.people, y, 1));
-  });
-  if (landed >= 1) {
-    // The new report: highlighted as new, shared with the CFO, refreshed to v2.
-    const fresh = 1 - progress(t, T.b1.land + 0.7, 1.4);
-    const refreshed = t >= T.b2.v2;
-    const cfo = progress(t, T.b1.cfo, 0.45, easing.snap);
-    // The COO's avatar is there from the start; the CFO's pops in as it is shared.
-    const people: Person[] = ['CO', 'CF'];
-    const meta = refreshed
-      ? 'COO · Level 3 · Updated 30 Sep'
-      : t >= T.b2.refresh + 0.05
-        ? 'COO · Level 3 · Refreshing…'
-        : 'COO · Level 3 · Updated 30 Jun';
-    const glow = Math.max(fresh, 1 - progress(t, T.b2.v2 + 0.3, 1.2));
-    kids.push(
-      box('a-l-new-bg', LIB.x, LIB.top, LIB.w, LIB.row - 8, R.input, {
-        fill: UI.surface,
-        stroke: { color: UI.line, width: 1.2 },
-      }),
-      box('a-l-new-glow', LIB.x, LIB.top, LIB.w, LIB.row - 8, R.input, {
-        fill: UI.accentSoft,
-        opacity: clamp(glow),
-      }),
-      libRow(
-        ui,
-        'a-l-new',
-        'Supplier delays and promises',
-        meta,
-        refreshed ? 'v2' : 'v1',
-        people,
-        LIB.top,
-        cfo,
+        'a-greet',
+        'What can I help you find?',
+        MAIN.x + MAIN.w / 2,
+        COMPOSER.greet,
+        PF.greeting,
+        G.ink,
         {
-          refresh: t >= T.b2.refresh + 0.05 && !refreshed ? t : null,
-          v2: progress(t, T.b2.v2, 0.4, easing.snap),
+          align: 'center',
+          opacity: 1 - clamp(move * 2),
         },
       ),
     );
+  if (move > 0) {
+    const top = lerp(COMPOSER.empty, CHAT_TOP, move);
+    const msg = userMessage(ui, 'a-msg', Q.a, COL.x + COL.w, top, MSG_W);
+    kids.push(groupNode('a-msg-o', [msg.node], { opacity: clamp(move * 2) }));
+    // The plan chip: awaiting the go-ahead, then approved.
+    const chipP = progress(t, T.a1.chip, 0.4, easing.enter);
+    if (chipP > 0) {
+      const c = L.chip;
+      const approved = t >= T.a2.go;
+      const review = gridButton(ui, 'a-chip-review', 'Review ›', L.review.x, L.review.y, {
+        press: pressAt(t, T.a2.review),
+        hover: clamp((t - (T.a2.review - 0.25)) / 0.1) * (t < T.a2.review + 0.3 ? 1 : 0),
+      });
+      kids.push(
+        groupNode(
+          'a-chip',
+          [
+            box('a-chip-bg', c.x, c.y, c.w, c.h, GR, {
+              fill: G.panel,
+              stroke: { color: G.border, width: 1 },
+            }),
+            icon('a-chip-ic', 'doc', c.x + 24, c.y + 25, 16, G.ink),
+            label(
+              'a-chip-t',
+              ui.fit(
+                approved ? 'Plan · v1 · 4 steps' : 'Plan · v1 · 4 steps — awaiting your go-ahead',
+                PF.smallStrong,
+                c.w - 56,
+              ),
+              c.x + 40,
+              c.y + 15,
+              PF.smallStrong,
+              G.ink,
+            ),
+            review.node,
+            ...(approved
+              ? []
+              : [
+                  gridButton(
+                    ui,
+                    'a-chip-change',
+                    'Change the plan',
+                    L.review.x + L.review.w + 8,
+                    L.review.y,
+                    {
+                      kind: 'ghost',
+                    },
+                  ).node,
+                ]),
+          ],
+          { opacity: chipP, transform: { y: 8 * (1 - chipP) } },
+        ),
+      );
+    }
+    // The progress card, then the report card.
+    const progressP = progress(t, T.a2.go + 0.1, 0.4, easing.enter);
+    const done = progress(t, T.a5.done, 0.25, easing.enter);
+    if (progressP > 0 && done < 1)
+      kids.push(groupNode('a-prog-o', [progressCard(ui, t)], { opacity: progressP * (1 - done) }));
+    if (done > 0) kids.push(groupNode('a-card-o', [reportCard(ui, t)], { opacity: done }));
   }
-  if (asked > 0) kids.push(buildsOn(ui, t, asked));
-  // Share popover and the toast.
-  const pop =
-    progress(t, T.b1.share + 0.04, 0.25, easing.enter) *
-    (1 - progress(t, T.b1.cfo + 0.08, 0.2, easing.exit));
-  if (pop > 0) kids.push(sharePopover(ui, t, pop));
-  const toast =
-    progress(t, T.b1.toast, 0.4, easing.enter) *
-    (1 - progress(t, T.b1.toastEnd, 0.35, easing.exit));
-  if (toast > 0) kids.push(toastNode(ui, 'a-toast', 'Shared with CFO', toast));
-  kids.push(clickRing('a-ring-share', SHARE.x, SHARE.y, t, T.b1.share));
-  kids.push(clickRing('a-ring-ref', REFRESH.x, REFRESH.y, t, T.b2.refresh));
+  // The composer: centred on the empty chat, at the foot once asked.
+  const text = sent ? '' : typed(TYPE.a, t);
+  const fit = composerFit(ui, text, COMPOSER.w, level);
+  const y = sent ? lerp(COMPOSER.empty, WIN.h - 18 - COMPOSER.h, move) : COMPOSER.empty;
+  const comp = composer(ui, 'a-comp', COMPOSER.x, y, COMPOSER.w, {
+    text,
+    t,
+    focus: sent ? 0 : progress(t, TYPE.a.times[0] ?? 0, 0.15),
+    level,
+    press: pressAt(t, T.a1.ask),
+    idle: text.length < TYPE.a.text.length ? Infinity : TYPE.a.end,
+  });
+  kids.push(...comp.nodes);
+  // The level dropdown: opened, Level 3 picked.
+  const menu =
+    progress(t, T.a1.menu + 0.02, 0.2, easing.enter) *
+    (1 - progress(t, T.a1.level + 0.04, 0.18, easing.exit));
+  if (menu > 0) {
+    const chip = composerLayout(ui, COMPOSER.x, COMPOSER.empty, COMPOSER.w, fit.h, 1).chip;
+    const hover = t >= T.a1.level - 0.25 ? 3 : t >= T.a1.menu + 0.05 ? 1 : undefined;
+    kids.push(levelMenu(ui, 'a-menu', chip, menu, level, hover).node);
+  }
   return kids.filter((n): n is SceneNode => n !== null);
 }
 
-function libRow(
-  ui: Ui,
-  id: string,
-  title: string,
-  meta: string,
-  version: string,
-  people: readonly Person[],
-  y: number,
-  newest: number,
-  extra: { refresh?: number | null; v2?: number } = {},
-): SceneNode {
-  const kids: SceneNode[] = [
-    box(`${id}-ic-bg`, LIB.x + 14, y + 16, 44, 44, 14, { fill: UI.sourceSoft }),
-    icon(`${id}-ic`, 'doc', LIB.x + 36, y + 38, 22, UI.sourceText),
-    label(`${id}-title`, ui.fit(title, F.bodyStrong, 300), LIB.x + 72, y + 15, F.bodyStrong),
-    label(`${id}-meta`, meta.toLowerCase(), LIB.x + 72, y + 43, F.meta, UI.faint),
-  ];
-  const v = ui.chip(`${id}-v`, version, 0, 0, {
-    fill: UI.wash,
-    color: UI.sub,
-    font: F.tiny,
-    height: 22,
-    stroke: UI.line,
+/** The composer's box on the COO's empty chat once the question is typed (for the pointer and the hints). */
+function aComposer(ui: Ui) {
+  return memo(ui, 'a-comp', () => {
+    const fit = composerFit(ui, Q.a, COMPOSER.w, 1);
+    const L = composerLayout(ui, COMPOSER.x, COMPOSER.empty, COMPOSER.w, fit.h, 1);
+    const L3 = composerLayout(ui, COMPOSER.x, COMPOSER.empty, COMPOSER.w, fit.h, 3);
+    return { h: fit.h, chip: L.chip, chip3: L3.chip, send: L3.send, menu: levelMenuBox(L.chip) };
   });
-  const vs = 1 + 0.25 * Math.sin(Math.PI * clamp(extra.v2 ?? 0));
-  kids.push(
-    groupNode(`${id}-vpos`, [v.node], {
-      transform: { x: 410 + v.w / 2, y: y + 27 + 11, scale: vs, originX: v.w / 2, originY: 11 },
-    }),
-  );
-  people.forEach((c, k) => {
-    const s = k === people.length - 1 ? newest : 1;
-    if (s <= 0) return;
-    kids.push(
-      groupNode(
-        `${id}-p${k}`,
-        [
-          box(`${id}-p${k}-ring`, -14, -14, 28, 28, 14, { fill: UI.surface }),
-          face(`${id}-p${k}-av`, c, 0, 0, 12),
-        ],
-        { transform: { x: 466 + k * 23, y: y + 38, scale: s } },
-      ),
-    );
-  });
-  if (extra.refresh !== undefined) {
-    kids.push(
-      extra.refresh !== null
-        ? spinner(`${id}-spin`, REFRESH.x, y + 38, 8, extra.refresh, UI.accent)
-        : icon(`${id}-ref`, 'refresh', REFRESH.x, y + 38, 19, UI.sub),
-      icon(`${id}-share`, 'share', SHARE.x, y + 38, 19, UI.sub),
-    );
-  } else {
-    kids.push(icon(`${id}-share`, 'share', SHARE.x, y + 38, 19, UI.faint));
-  }
-  kids.push(rule(`${id}-rule`, LIB.x + 14, y + LIB.row - 4, LIB.w - 28));
-  return groupNode(id, kids);
 }
 
-function sharePopover(ui: Ui, t: number, p: number): SceneNode {
-  const x = 330;
-  const y = SHARE.y + 22;
-  const hover = clamp((t - (T.b1.cfo - 0.3)) / 0.12);
+/** The chat's report progress card ("Researching · m:ss so far"). */
+function progressCard(ui: Ui, t: number): SceneNode {
+  const L = aChatLayout(ui);
+  const { x, y, w } = L.card;
+  const h = 236;
+  const checking = t >= T.a3.steps[3];
+  const writing = t >= T.a3.writing;
+  const stepsDone = T.a3.steps.filter((s) => t >= s).length;
+  const states: [string, 'done' | 'now' | 'next'][] = [
+    ['Plan approved', 'done'],
+    [`Researching · ${Math.min(stepsDone, 4)} of 4 steps done`, checking ? 'done' : 'now'],
+    ['Checking', writing ? 'done' : checking ? 'now' : 'next'],
+    ['Writing the report', writing ? 'now' : 'next'],
+  ];
+  const sections = writing ? 3 : checking ? 1 : 0;
+  const kids: SceneNode[] = [
+    box('a-prog-bg', x, y, w, h, GR, { fill: G.panel, stroke: { color: G.border, width: 1 } }),
+    label(
+      'a-prog-h',
+      ui.fit(`Researching · ${mss(elapsed(t))} so far · usually 15–30 min`, PF.smallStrong, w - 32),
+      x + 16,
+      y + 14,
+      PF.smallStrong,
+      G.ink,
+    ),
+  ];
+  states.forEach(([text, state], k) => {
+    const sy = y + 46 + k * 26;
+    kids.push(
+      state === 'done'
+        ? icon(`a-prog-s${k}`, 'check', x + 24, sy + 10, 15, G.good, { width: 2 })
+        : box(`a-prog-s${k}`, x + 19, sy + 5, 10, 10, 5, {
+            fill: state === 'now' ? G.ink : G.panel,
+            stroke: { color: state === 'now' ? G.ink : G.faint, width: 1.2 },
+            opacity: state === 'now' ? 0.55 + 0.45 * Math.sin(t * Math.PI * 2.4) : 1,
+          }),
+      label(`a-prog-t${k}`, text, x + 40, sy, PF.small, state === 'next' ? G.faint : G.ink),
+    );
+  });
+  kids.push(
+    label(
+      'a-prog-f',
+      `Report forming · ${sections} of 4 sections written`,
+      x + 16,
+      y + 158,
+      PF.monoSmall,
+      G.muted,
+    ),
+    gridButton(ui, 'a-prog-open', 'Open report', x + 16, y + 186).node,
+    gridButton(ui, 'a-prog-stop', 'Stop', x + 16 + L.openBtn.w + 8, y + 186, {
+      kind: 'ghost',
+      icon: 'stop',
+    }).node,
+  );
+  return groupNode('a-prog', kids);
+}
+
+/** The chat's report card once the run is done. */
+function reportCardBox(ui: Ui): Box {
+  const L = aChatLayout(ui);
+  return { x: L.card.x, y: L.card.y, w: L.card.w, h: 148 };
+}
+function reportCardOpen(ui: Ui): Box {
+  const b = reportCardBox(ui);
+  return { x: b.x + 16, y: b.y + 100, w: ui.measure('Open report', PF.label) + 24, h: 34 };
+}
+function reportCard(ui: Ui, t: number): SceneNode {
+  const b = reportCardBox(ui);
+  const open = reportCardOpen(ui);
+  const meta = ['4 sections · 1 chart · 38 sources in the report', '19 min · checked'] as const;
+  return groupNode('a-card', [
+    box('a-card-bg', b.x, b.y, b.w, b.h, GR, {
+      fill: G.panel,
+      stroke: { color: G.border, width: 1 },
+    }),
+    icon('a-card-ic', 'doc', b.x + 24, b.y + 26, 16, G.ink),
+    label('a-card-t', REPORT_TITLE, b.x + 40, b.y + 14, PF.bodyStrong, G.ink),
+    label('a-card-m1', meta[0], b.x + 16, b.y + 48, PF.monoSmall, G.muted),
+    label('a-card-m2', meta[1], b.x + 16, b.y + 66, PF.monoSmall, G.muted),
+    gridButton(ui, 'a-card-open', 'Open report', open.x, open.y, {
+      kind: 'primary',
+      press: pressAt(t, T.a5.open),
+    }).node,
+    gridButton(ui, 'a-card-copy', 'Copy link', open.x + open.w + 8, open.y, { icon: 'link' }).node,
+  ]);
+}
+
+/** The Research workspace panel: Plan, Work and Sources tabs. */
+function panelA(ui: Ui, t: number): SceneNode[] {
+  const toWork = progress(t, T.a2.work, 0.3, easing.camera);
+  const tabNames = ['Plan', 'Work', 'Sources'];
+  const tb = tabs(ui, 'a-p-tabs', tabNames, 24, PANEL_TOP + PANEL.head + 2, toWork > 0.5 ? 1 : 0);
+  const kids: SceneNode[] = [
+    box('a-p-bg', 0, PANEL_TOP, WIN.w, WIN.h - PANEL_TOP, 0, { fill: G.panel }),
+    box('a-p-edge', 0, PANEL_TOP, 1, WIN.h - PANEL_TOP, 0, { fill: G.border }),
+    label('a-p-title', 'Research workspace', 24, PANEL_TOP + 14, PF.heading, G.ink),
+    icon('a-p-close', 'close', WIN.w - 30, PANEL_TOP + 25, 18, G.muted),
+    tb.node,
+    hairline('a-p-rule', 0, PANEL_BODY - 1, WIN.w),
+  ];
+  if (toWork < 1)
+    kids.push(groupNode('a-plan', planView(ui, t), { opacity: 1 - clamp(toWork * 2) }));
+  if (toWork > 0)
+    kids.push(groupNode('a-work', workView(ui, t), { opacity: clamp(toWork * 2 - 1) }));
+  return kids;
+}
+
+/** The Plan tab: the proposed plan in the product's sections, with Save as a report and Go ahead. */
+function planView(ui: Ui, t: number): SceneNode[] {
+  const P = planLayout(ui);
+  const w = WIN.w - 48;
+  const unfold = (k: number) => {
+    const p = progress(t, T.a2.review + 0.12 + k * 0.03, 0.3, easing.enter);
+    return { opacity: p, transform: { y: 8 * (1 - p) } };
+  };
+  const v1 = monoChip(ui, 'a-plan-v', 'v1', 24, P.vrow);
+  const kids: SceneNode[] = [
+    groupNode(
+      'a-plan-head',
+      [
+        label('a-plan-k', 'Proposed plan', 24, P.kicker, PF.monoSmall, G.faint),
+        label('a-plan-title', REPORT_TITLE, 24, P.title, PF.title, G.ink),
+        v1.node,
+        label(
+          'a-plan-go',
+          'Nothing runs until you say go',
+          24 + v1.w + 10,
+          P.vrow + 1,
+          PF.small,
+          G.muted,
+        ),
+      ],
+      unfold(0),
+    ),
+  ];
+  P.sections.forEach((s, k) => {
+    const body: SceneNode[] = [label(`a-plan-s${k}`, s.title, 24, s.y, PF.smallStrong, G.ink)];
+    const para = (text: string) =>
+      textNode(`a-plan-b${k}`, {
+        text,
+        font: PF.small,
+        fill: G.muted,
+        maxWidth: w,
+        transform: { x: 24, y: s.bodyY },
+      });
+    if (k === 0) body.push(para(PLAN.asked));
+    if (k === 1) body.push(para(PLAN.scope));
+    if (k === 2) body.push(para(PLAN.who));
+    if (k === 3)
+      PLAN.measures.forEach(([name, meaning], j) =>
+        body.push(
+          label(`a-plan-m${j}`, `${name} — ${meaning}`, 24, s.bodyY + j * 21, PF.small, G.muted),
+        ),
+      );
+    if (k === 4)
+      PLAN.steps.forEach(([who, what], j) => {
+        const y = s.bodyY + j * 28;
+        const pill = monoChip(ui, `a-plan-p${j}`, who, 24, y);
+        body.push(pill.node, label(`a-plan-st${j}`, what, 124, y + 1, PF.small, G.ink));
+      });
+    if (k === 5) body.push(para(PLAN.limits));
+    kids.push(groupNode(`a-plan-sec${k}`, body, unfold(k + 1)));
+  });
+  // The footer stays put over the plan: save it as a report, then go ahead.
+  const saved = progress(t, T.a2.save, 0.12, easing.snap);
+  kids.push(
+    groupNode(
+      'a-plan-foot',
+      [
+        box('a-plan-fbg', 0, P.footY, WIN.w, WIN.h - P.footY, 0, { fill: G.panel }),
+        hairline('a-plan-frule', 0, P.footY, WIN.w),
+        checkbox(
+          'a-save',
+          P.save.x,
+          P.save.y,
+          saved,
+          'Save as a report',
+          'A page you can share and come back to.',
+        ),
+        checkbox('a-notify', P.notify.x, P.notify.y, 1, 'Notify me when it pauses or is ready'),
+        label('a-reply', 'Reply in chat to change the plan', 24, P.go.y + 7, PF.small, G.muted),
+        label(
+          'a-plan-count',
+          '4 steps · 3 sources',
+          P.go.x - 12,
+          P.go.y + 8,
+          PF.monoSmall,
+          G.muted,
+          { align: 'right' },
+        ),
+        gridButton(ui, 'a-go', 'Go ahead', P.go.x, P.go.y, {
+          kind: 'primary',
+          press: pressAt(t, T.a2.go),
+        }).node,
+        ...[clickRing('a-ring-save', P.save.x + 9, P.save.y + 11, t, T.a2.save)].filter(
+          (n): n is SceneNode => n !== null,
+        ),
+      ],
+      unfold(7),
+    ),
+  );
+  return kids;
+}
+
+/** The Work tab: the run strip (elapsed, Stop) and the agents at work, as columns. */
+function workView(ui: Ui, t: number): SceneNode[] {
+  const c = WORK.cols;
+  const r = researched(t);
+  const checking = t >= T.a3.steps[3];
+  const kids: SceneNode[] = [
+    box('a-w-strip', 16, WORK.strip, WIN.w - 32, 44, GR, {
+      fill: G.page,
+      stroke: { color: G.border, width: 1 },
+    }),
+    label('a-w-el', 'Elapsed', 30, WORK.strip + 12, PF.small, G.muted),
+    label(
+      'a-w-clock',
+      mss(elapsed(t)),
+      30 + ui.measure('Elapsed ', PF.small),
+      WORK.strip + 12,
+      PF.mono,
+      G.ink,
+    ),
+    label(
+      'a-w-run',
+      'running',
+      30 + ui.measure('Elapsed ', PF.small) + ui.measure(mss(elapsed(t)), PF.mono) + 8,
+      WORK.strip + 12,
+      PF.small,
+      G.muted,
+    ),
+    gridButton(ui, 'a-w-stop', 'Stop', WIN.w - 30 - 82, WORK.strip + 6, { icon: 'stop', h: 32 })
+      .node,
+    label('a-w-g', checking ? 'Done · 4' : 'Working · 4', 24, WORK.group, PF.smallStrong, G.ink),
+  ];
+  const head = (y: number, id: string) => {
+    const cols: [string, number, 'left' | 'right'][] = [
+      ['agent', c.agent, 'left'],
+      ['task', c.task, 'left'],
+      ['time', c.time, 'right'],
+      ['steps', c.steps, 'right'],
+      ['srch', c.srch, 'right'],
+      ['read', c.read, 'right'],
+      ['progs', c.progs, 'right'],
+      ['tokens', c.tokens, 'right'],
+    ];
+    return [
+      ...cols.map(([name, x, align]) =>
+        label(`${id}-${name}`, name, x, y, PF.monoSmall, G.faint, { align }),
+      ),
+      hairline(`${id}-rule`, 16, y + 22, WIN.w - 32),
+    ];
+  };
+  kids.push(...head(WORK.head, 'a-w-h'));
+  const row = (
+    id: string,
+    y: number,
+    a: { agent: string; task: string },
+    v: (string | number)[],
+  ) => {
+    const [time, steps, srch, read, progs, tokens] = v;
+    return [
+      label(`${id}-a`, a.agent, c.agent, y + 12, PF.monoSmall, G.ink),
+      label(
+        `${id}-t`,
+        ui.fit(a.task, PF.small, c.time - c.task - 44),
+        c.task,
+        y + 11,
+        PF.small,
+        G.ink,
+      ),
+      label(`${id}-time`, String(time), c.time, y + 12, PF.monoSmall, G.ink, { align: 'right' }),
+      label(`${id}-steps`, String(steps), c.steps, y + 12, PF.monoSmall, G.ink, { align: 'right' }),
+      label(`${id}-srch`, String(srch), c.srch, y + 12, PF.monoSmall, G.ink, { align: 'right' }),
+      label(`${id}-read`, String(read), c.read, y + 12, PF.monoSmall, G.ink, { align: 'right' }),
+      label(`${id}-progs`, String(progs), c.progs, y + 12, PF.monoSmall, G.ink, { align: 'right' }),
+      label(`${id}-tok`, String(tokens), c.tokens, y + 12, PF.monoSmall, G.ink, { align: 'right' }),
+      hairline(`${id}-rule`, 16, y + WORK.row - 1, WIN.w - 32),
+    ];
+  };
+  const runTime = (k: number) => elapsed(Math.min(t, T.a3.steps[3])) - 6 * k;
+  AGENTS.forEach((a, k) => {
+    const pace = clamp(r * (1 + 0.06 * (k - 2)));
+    const at = (pair: readonly [number, number]) => Math.round(lerp(pair[0], pair[1], pace));
+    kids.push(
+      ...row(`a-w-r${k}`, WORK.row0 + k * WORK.row, a, [
+        mss(k === 0 ? elapsed(t) : runTime(k)),
+        at(a.steps),
+        at(a.srch),
+        grouped(at(a.read)),
+        at(a.progs),
+        `${at(a.tokens)}k`,
+      ]),
+    );
+  });
+  // The Checker joins once the researchers are done.
+  const check = progress(t, T.a3.steps[3], 0.4, easing.enter);
+  if (check > 0) {
+    const cp = clamp((t - T.a3.steps[3]) / (T.a5.done - T.a3.steps[3]));
+    kids.push(
+      groupNode(
+        'a-w-check',
+        [
+          label('a-w-g2', 'Working · 1', 24, checkerTop, PF.smallStrong, G.ink),
+          ...row('a-w-c', checkerTop + 24, CHECKER, [
+            mss(elapsed(t) - elapsed(T.a3.steps[3])),
+            Math.round(lerp(1, 8, cp)),
+            0,
+            Math.round(lerp(4, 38, cp)),
+            0,
+            `${Math.round(lerp(3, 52, cp))}k`,
+          ]),
+        ],
+        { opacity: check, transform: { y: 8 * (1 - check) } },
+      ),
+    );
+  }
+  return kids;
+}
+
+/** A report page: back link, title, Ready, the meta line, buttons, the bottom line, findings, trust line, chart. */
+function reportPage(ui: Ui, id: string, t: number, v: 1 | 2): SceneNode[] {
+  const L = reportLayout(ui, v);
+  const r = REPORT[v];
+  const x = COL.x;
+  const w = COL.w;
+  const B = L.buttons;
+  const kids: SceneNode[] = [
+    icon(`${id}-back-i`, 'back', x + 8, L.back + 10, 15, G.muted),
+    label(`${id}-back`, 'Back to the conversation', x + 22, L.back, PF.label, G.muted),
+    label(`${id}-title`, REPORT_TITLE, x, L.title, PF.title, G.ink),
+    monoChip(ui, `${id}-ready`, 'Ready', x, L.chips, 'good').node,
+    monoChip(ui, `${id}-v`, `v${v} ⌄`, L.version.x, L.version.y).node,
+    label(`${id}-meta`, ui.fit(r.meta, PF.monoSmall, w), x, L.meta, PF.monoSmall, G.muted),
+    gridButton(ui, `${id}-only`, 'Only you', B.onlyYou.x, B.onlyYou.y, { h: 32 }).node,
+    gridButton(ui, `${id}-src`, 'Sources · 38', B.sources.x, B.sources.y, { h: 32 }).node,
+    gridButton(ui, `${id}-ref`, 'Refresh', B.refresh.x, B.refresh.y, {
+      icon: 'refresh',
+      h: 32,
+      press: pressAt(t, T.b2.refresh),
+      hover:
+        id === 'a-r2'
+          ? clamp((t - (T.b2.refresh - 0.25)) / 0.1) * (t < T.b2.refresh + 0.3 ? 1 : 0)
+          : 0,
+    }).node,
+    gridButton(ui, `${id}-share`, 'Share', B.share.x, B.share.y, { h: 32 }).node,
+    box(`${id}-more`, B.more.x, B.more.y, B.more.w, B.more.h, GR, {
+      fill: G.panel,
+      stroke: { color: G.border, width: 1 },
+    }),
+    icon(`${id}-more-i`, 'more', B.more.x + 17, B.more.y + 16, 18, G.ink, { width: 2.6 }),
+  ];
+  if (v === 2) {
+    kids.push(
+      box(`${id}-banner`, x, L.banner, w, 64, GR, {
+        fill: G.page,
+        stroke: { color: G.border, width: 1 },
+      }),
+      label(
+        `${id}-banner-t`,
+        'What changed since the previous version',
+        x + 14,
+        L.banner + 10,
+        PF.smallStrong,
+        G.ink,
+      ),
+      label(
+        `${id}-banner-s`,
+        'Updated for 1 Jul–30 Sep · 3 findings changed',
+        x + 14,
+        L.banner + 34,
+        PF.small,
+        G.muted,
+      ),
+    );
+  }
+  kids.push(
+    hairline(`${id}-rule`, x, L.rule, w),
+    label(`${id}-bl`, 'Bottom line', x, L.bottomHead, PF.heading, G.ink),
+    textNode(`${id}-blt`, {
+      text: r.bottom,
+      font: PF.bodyStrong,
+      fill: G.ink,
+      maxWidth: w,
+      transform: { x, y: L.bottom },
+    }),
+  );
+  const hot = id === 'a-r1' ? progress(t, T.a5.cite - 0.2, 0.1) : 0;
+  L.findings.forEach((f, k) => {
+    const c = f.cites[String(k + 1)];
+    if (k === 0 && c && hot > 0)
+      kids.push(
+        box(`${id}-hot`, c.x - 1, c.y - 1, c.w + 2, c.h + 2, 2, { fill: G.selected, opacity: hot }),
+      );
+    kids.push(
+      label(`${id}-fn${k}`, `${k + 1}.`, x, f.y, PF.body, G.muted),
+      answerText(ui, `${id}-f${k}`, r.findings[k] ?? '', x + 22, f.y, w - 22).node,
+    );
+  });
+  kids.push(
+    textNode(`${id}-trust`, {
+      text: r.trust,
+      font: PF.monoSmall,
+      fill: G.muted,
+      maxWidth: w,
+      transform: { x, y: L.trust },
+    }),
+    label(`${id}-ov`, 'Overview', x, L.overview, PF.heading, G.ink),
+    label(`${id}-ct`, r.chart, x, L.chartTitle, PF.smallStrong, G.ink),
+    barChart(
+      ui,
+      `${id}-chart`,
+      L.chart,
+      r.bars,
+      10,
+      v === 1 ? progress(t, T.a5.bars, 0.8, easing.enter) : 1,
+    ),
+  );
+  // The citation card: the email behind finding 1, its exact passage.
+  const card = id === 'a-r1' ? progress(t, T.a5.cite + 0.03, 0.3, easing.enter) : 0;
+  if (card > 0) kids.push(citationCard(ui, `${id}-cite`, L.card, card));
+  return kids;
+}
+
+/** The report's citation card: where the line came from, and the line itself. */
+function citationCard(ui: Ui, id: string, b: Box, p: number): SceneNode {
+  const passageH = layoutText(CITATION.passage, PF.body, {
+    measurer: ui.measurer,
+    maxWidth: b.w - 46,
+  }).height;
+  const py = b.y + 84;
   return groupNode(
-    'a-pop',
+    id,
     [
-      box('a-pop-bg', x, y, 280, 160, 20, {
-        fill: UI.surface,
-        stroke: { color: UI.line, width: 1 },
-        shadow: elevationShadows(lighting, 'mid', { strength: 0.4 }),
+      box(`${id}-bg`, b.x, b.y, b.w, b.h, GR + 2, {
+        fill: G.panel,
+        stroke: { color: G.border, width: 1 },
+        shadow: elevationShadows(lighting, 'mid', { strength: 0.7 }),
       }),
-      label('a-pop-title', 'Share with', x + 18, y + 16, F.smallStrong),
-      box('a-pop-input', x + 14, y + 42, 252, 34, 17, {
-        fill: UI.wash,
-        stroke: { color: UI.line, width: 1 },
+      label(`${id}-k`, CITATION.kind, b.x + 16, b.y + 14, PF.monoSmall, G.faint),
+      label(`${id}-t`, CITATION.title, b.x + 16, b.y + 34, PF.smallStrong, G.ink),
+      label(`${id}-f`, CITATION.from, b.x + 16, b.y + 56, PF.small, G.muted),
+      box(`${id}-bar`, b.x + 16, py, 3, passageH, 1.5, { fill: G.ink }),
+      textNode(`${id}-p`, {
+        text: CITATION.passage,
+        font: PF.body,
+        fill: G.ink,
+        maxWidth: b.w - 46,
+        transform: { x: b.x + 30, y: py },
       }),
-      label('a-pop-ph', 'Add people or teams', x + 26, y + 50, F.small, UI.faint),
-      box('a-pop-hover', x + 8, y + 86, 264, 56, 14, { fill: UI.accentSoft, opacity: hover }),
-      face('a-pop-av', 'CF', x + 36, y + 114, 15),
-      label('a-pop-name', 'CFO', x + 60, y + 96, F.bodyStrong),
-      label('a-pop-team', 'Finance', x + 60, y + 118, F.small, UI.sub),
-      icon('a-pop-plus', 'plus', x + 248, y + 114, 18, UI.accent),
+      hairline(`${id}-rule`, b.x, b.y + b.h - 40, b.w),
+      label(`${id}-c`, CITATION.cited, b.x + 16, b.y + b.h - 29, PF.monoSmall, G.faint),
+      label(`${id}-o`, CITATION.open, b.x + b.w - 38, b.y + b.h - 30, PF.mono, G.ink, {
+        align: 'right',
+      }),
+      icon(`${id}-o-i`, 'external', b.x + b.w - 24, b.y + b.h - 21, 14, G.ink),
     ],
     {
-      opacity: p,
-      transform: { x: x + 140, y, scale: lerp(0.96, 1, p), originX: x + 140, originY: y },
+      opacity: clamp(p * 1.6),
+      transform: {
+        x: b.x,
+        y: b.y + 6 * (1 - p),
+        scale: lerp(0.98, 1, p),
+        originX: b.x,
+        originY: b.y,
+      },
     },
   );
 }
 
-function toastNode(ui: Ui, id: string, text: string, p: number): SceneNode {
-  const w = ui.measure(text, F.bodyStrong) + 64;
-  const x = (WIN.w - w) / 2;
-  const y = WIN.h - 92 + 20 * (1 - p);
-  return groupNode(
-    id,
-    [
-      box(`${id}-bg`, x, y, w, 48, 24, {
-        fill: UI.ink,
-        shadow: elevationShadows(lighting, 'mid', { strength: 0.5 }),
-      }),
-      checkDisc(`${id}-ck`, x + 26, y + 24, 10, clamp(p * 1.4)),
-      label(`${id}-t`, text, x + 44, y + 13, F.bodyStrong, UI.surface),
-    ],
-    { opacity: clamp(p * 1.5) },
-  );
+/** The Reports page: search, tabs, filters, rows; the ⋯ menu, the Share dialog and its toast. */
+function libraryView(ui: Ui, t: number): SceneNode[] {
+  const LL = libraryLayout(ui);
+  const x = COL.x;
+  const w = COL.w;
+  const kids: SceneNode[] = [
+    label('a-l-title', 'Reports', x, LIB.title, PF.title, G.ink),
+    box('a-l-search', x, LIB.search, w, 38, GR, {
+      fill: G.panel,
+      stroke: { color: G.border, width: 1 },
+    }),
+    icon('a-l-search-i', 'search', x + 18, LIB.search + 19, 15, G.faint),
+    label(
+      'a-l-search-t',
+      'Search titles, headings, bottom lines…',
+      x + 34,
+      LIB.search + 9,
+      PF.small,
+      G.faint,
+    ),
+    tabs(ui, 'a-l-tabs', ['All', 'Mine', 'Shared with me'], x, LIB.tabs, 0).node,
+  ];
+  let fx = x;
+  ['Status', 'Date', 'Shared by', 'Sort'].forEach((f, k) => {
+    const b = gridButton(ui, `a-l-f${k}`, `${f} ⌄`, fx, LIB.filters, { h: 30 });
+    kids.push(b.node);
+    fx += b.w + 8;
+  });
+  kids.push(hairline('a-l-rule', MAIN.x, LIB.rows - 6, MAIN.w));
+  const shared = t >= T.b1.toast;
+  const rows = [
+    { ...NEW_REPORT, shared: shared ? 'Shared with 1' : 'Only you', fresh: true },
+    ...LIBRARY.map((r) => ({ ...r, fresh: false })),
+  ];
+  rows.forEach((row, k) => {
+    const y = LIB.rows + k * LIB.row;
+    if (y > WIN.h) return;
+    const id = `a-l-r${k}`;
+    kids.push(
+      ...(row.fresh ? [box(`${id}-dot`, x - 14, y + 20, 7, 7, 3.5, { fill: G.link })] : []),
+      label(`${id}-t`, ui.fit(row.title, PF.bodyStrong, w - 110), x, y + 12, PF.bodyStrong, G.ink),
+      miniChart(`${id}-chart`, x + w - 96, y + 14, row.trend),
+      icon(`${id}-more`, 'more', LL.moreX, y + 24, 18, G.muted, { width: 2.6 }),
+      label(`${id}-b`, ui.fit(row.bottom, PF.small, w), x, y + 40, PF.small, G.muted),
+    );
+    let mx = x;
+    row.sources.forEach((s, j) => {
+      kids.push(
+        icon(
+          `${id}-s${j}`,
+          s === 'mail' ? 'mail' : s === 'chat' ? 'chat' : 'doc',
+          mx + 7,
+          y + 75,
+          14,
+          G.muted,
+        ),
+      );
+      mx += 18;
+    });
+    kids.push(
+      label(
+        `${id}-m`,
+        ui.fit(
+          ` · ${row.period} · Ready · ${row.shared} · ${row.date}`,
+          PF.monoSmall,
+          w - (mx - x),
+        ),
+        mx + 4,
+        y + 66,
+        PF.monoSmall,
+        G.muted,
+      ),
+      hairline(`${id}-rule`, MAIN.x, y + LIB.row - 6, MAIN.w),
+    );
+  });
+  // The row's ⋯ menu, with Share.
+  const menu =
+    progress(t, T.b1.more + 0.02, 0.18, easing.enter) *
+    (1 - progress(t, T.b1.share + 0.04, 0.15, easing.exit));
+  if (menu > 0) {
+    const m = LL.menu;
+    kids.push(
+      groupNode(
+        'a-l-menu',
+        [
+          box('a-l-menu-bg', m.x, m.y, m.w, m.h, GR + 2, {
+            fill: G.panel,
+            stroke: { color: G.border, width: 1 },
+            shadow: elevationShadows(lighting, 'mid', { strength: 0.6 }),
+          }),
+          ...(t >= T.b1.share - 0.25
+            ? [box('a-l-menu-on', m.x + 6, LL.share.y, m.w - 12, 34, GR, { fill: G.hover })]
+            : []),
+          ...['Open', 'Share', 'Copy link'].map((item, k) =>
+            label(`a-l-menu-${k}`, item, m.x + 18, m.y + 12 + k * 34, PF.label, G.ink),
+          ),
+        ],
+        { opacity: clamp(menu * 1.6) },
+      ),
+    );
+  }
+  // The Share dialog: people in your company, by name or email.
+  const dlg =
+    progress(t, T.b1.share + 0.04, 0.25, easing.enter) *
+    (1 - progress(t, T.b1.confirm + 0.03, 0.2, easing.exit));
+  if (dlg > 0) kids.push(shareDialog(ui, t, dlg));
+  const tp =
+    progress(t, T.b1.toast, 0.35, easing.enter) *
+    (1 - progress(t, T.b1.toastEnd, 0.3, easing.exit));
+  if (tp > 0)
+    kids.push(
+      toast(
+        ui,
+        'a-toast',
+        ['Shared with Priya Raman.', "They'll find it under Shared with me."],
+        ['Copy link', 'Tell them in Teams'],
+        WIN,
+        tp,
+      ).node,
+    );
+  return kids;
 }
 
-function buildsOn(ui: Ui, t: number, p: number): SceneNode {
-  const y = LIB.top + LIB.row + 4;
-  const x = LIB.x + 44;
-  const kids: SceneNode[] = [];
-  // A thread from the report down to the question built on it.
-  const draw = progress(t, T.b2.ask + 0.15, 0.4, easing.enter);
-  kids.push(
-    shapeNode('a-b-thread', {
-      geometry: pathGeometry(
-        `M${LIB.x + 36} ${LIB.top + 62}L${LIB.x + 36} ${lerp(LIB.top + 62, y + 44, draw)}${draw >= 1 ? `Q${LIB.x + 36} ${y + 52} ${x} ${y + 52}` : ''}`,
-      ),
-      stroke: { color: UI.accentLine, width: 2, cap: 'round' },
-    }),
+function shareDialog(ui: Ui, t: number, p: number): SceneNode {
+  const LL = libraryLayout(ui);
+  const d = LL.dialog;
+  const typedShare = SHARE_TYPED.text.slice(
+    0,
+    SHARE_TYPED.times.filter((at) => t >= T.b1.type + at).length,
   );
-  const card: SceneNode[] = [
-    box('a-b-bg', x, y + 8, LIB.w - 44, 88, R.input, {
-      fill: UI.surface,
-      stroke: { color: UI.accentLine, width: 1.2 },
-      shadow: elevationShadows(lighting, 'low', { strength: 0.3 }),
+  const picked = t >= T.b1.cfo;
+  const kids: SceneNode[] = [
+    label('a-sh-title', 'Share', d.x + 24, d.y + 22, PF.title, G.ink),
+    label('a-sh-sub', REPORT_TITLE, d.x + 24, d.y + 56, PF.small, G.muted),
+    label('a-sh-people', 'People in your company', d.x + 24, d.y + 92, PF.smallStrong, G.ink),
+    box('a-sh-input', LL.input.x, LL.input.y, LL.input.w, LL.input.h, GR, {
+      fill: G.panel,
+      stroke: { color: G.ink, width: 1.5 },
     }),
-    face('a-b-av', 'FT', x + 26, y + 36, 12),
-    label('a-b-who', 'Finance team asked', x + 46, y + 26, F.small, UI.sub),
-    label('a-b-q', 'How will supplier delays affect Q3 margins?', x + 18, y + 54, F.bodyStrong),
   ];
-  const chip = ui.chip('a-b-chip', 'Builds on v2', 0, 0, {
-    fill: UI.accentSoft,
-    color: UI.accent,
-    font: F.tiny,
-    height: 22,
-    icon: 'link',
-  });
-  card.push(
-    groupNode('a-b-chippos', [chip.node], {
-      transform: { x: x + LIB.w - 44 - 16 - chip.w, y: y + 22 },
+  let ix = LL.input.x + 12;
+  if (picked) {
+    const chip = monoChip(ui, 'a-sh-chip', 'Priya Raman ×', ix, LL.input.y + 9);
+    kids.push(chip.node);
+    ix += chip.w + 8;
+  } else if (typedShare.length > 0) {
+    kids.push(label('a-sh-typed', typedShare, ix, LL.input.y + 9, PF.body, G.ink));
+    ix += ui.measure(typedShare, PF.body) + 1;
+  } else {
+    kids.push(label('a-sh-ph', 'Name or email', ix, LL.input.y + 9, PF.body, G.faint));
+  }
+  if (!picked) {
+    const caretNode = caret(
+      'a-sh-caret',
+      ix,
+      LL.input.y + 10,
+      20,
+      t,
+      typedShare.length < 3 ? Infinity : T.b1.type + 0.3,
+      G.ink,
+    );
+    if (caretNode) kids.push(caretNode);
+  }
+  // Suggestions as the name is typed (initials appear only here).
+  if (!picked && typedShare.length >= 2) {
+    SUGGESTIONS.forEach((s, k) => {
+      const b = LL.suggestion(k);
+      const hover = k === 0 ? clamp((t - (T.b1.cfo - 0.25)) / 0.1) : 0;
+      kids.push(
+        ...(hover > 0
+          ? [box(`a-sh-s${k}-on`, b.x, b.y, b.w, b.h, GR, { fill: G.hover, opacity: hover })]
+          : []),
+        box(`a-sh-s${k}-av`, b.x + 8, b.y + 9, 32, 32, 16, {
+          fill: G.selected,
+          stroke: { color: G.border, width: 1 },
+        }),
+        label(`a-sh-s${k}-i`, s.initials, b.x + 24, b.y + 16, PF.monoSmall, G.ink, {
+          align: 'center',
+        }),
+        label(`a-sh-s${k}-n`, s.name, b.x + 52, b.y + 5, PF.label, G.ink),
+        label(
+          `a-sh-s${k}-e`,
+          ui.fit(`${s.email} · ${s.job}`, PF.small, b.w - 60),
+          b.x + 52,
+          b.y + 26,
+          PF.small,
+          G.muted,
+        ),
+      );
+    });
+  }
+  const whoY = LL.suggestion(2).y + 10;
+  kids.push(
+    label('a-sh-who', 'Who has access', d.x + 24, whoY, PF.smallStrong, G.ink),
+    plainAvatar('a-sh-owner-av', d.x + 40, whoY + 44, 14),
+    label('a-sh-owner', 'Dana Ortiz (you)', d.x + 64, whoY + 33, PF.label, G.ink),
+    label('a-sh-owner-r', 'Owner', d.x + d.w - 24, whoY + 34, PF.small, G.muted, {
+      align: 'right',
     }),
+    hairline('a-sh-rule', d.x, d.y + d.h - 74, d.w),
+    gridButton(ui, 'a-sh-copy', 'Copy link', d.x + 16, LL.confirm.y, {
+      kind: 'ghost',
+      icon: 'link',
+    }).node,
+    gridButton(
+      ui,
+      'a-sh-done',
+      'Done',
+      LL.confirm.x - 8 - Math.round(ui.measure('Done', PF.label) + 24),
+      LL.confirm.y,
+    ).node,
+    gridButton(ui, 'a-sh-go', 'Share (can view)', LL.confirm.x, LL.confirm.y, {
+      kind: 'primary',
+      press: pressAt(t, T.b1.confirm),
+    }).node,
   );
-  kids.push(groupNode('a-b-card', card, { opacity: p, transform: { y: 14 * (1 - p) } }));
-  return groupNode('a-builds', kids);
+  return dialog('a-share', WIN, d, p, kids);
+}
+
+/** The CFO's chat: an answer that cites the COO's report. */
+function cfoView(ui: Ui, t: number): SceneNode[] {
+  const pop = progress(t, T.b2.cite + 0.03, 0.25, easing.enter);
+  const kids: SceneNode[] = [
+    ...chatNodes(ui, 'a-cfo', CFO_CHAT, {
+      shown: Infinity,
+      extras: 1,
+      pills: true,
+      hot: '1',
+      hotP: Math.max(pop, clamp((t - (T.b2.cite - 0.25)) / 0.1)),
+    }),
+    ...composer(ui, 'a-cfo-comp', COMPOSER.x, WIN.h - 18 - COMPOSER.h, COMPOSER.w, {
+      text: '',
+      t,
+      focus: 0,
+      level: 1,
+    }).nodes,
+  ];
+  if (pop > 0) kids.push(popover(ui, 'a-cfo-pop', cfoPopover(ui), pop, CFO_SOURCE));
+  return kids;
+}
+const CFO_SOURCE = { title: REPORT_TITLE, body: '', foot: 'Report · Open' } as const;
+const cfoPopover = (ui: Ui) => citePopoverBox(ui, CFO_CHAT, '1', '');
+
+/** The refresh confirmation over the report page. */
+const CONFIRM = { x: 40, y: 250, w: WIN.w - 80, h: 236 } as const;
+function refreshConfirm(ui: Ui, t: number, p: number): SceneNode {
+  const d = CONFIRM;
+  const yesW = Math.round(ui.measure('Refresh', PF.label) + 24);
+  const yes = { x: d.x + d.w - 24 - yesW, y: d.y + d.h - 58 };
+  return dialog('a-confirm', WIN, d, p, [
+    label('a-cf-t', 'Refresh this report?', d.x + 24, d.y + 22, PF.heading, G.ink),
+    textNode('a-cf-b', {
+      text: 'The saved plan runs again on today’s data (usually 15–30 min) and fills a new version on the same link. This version stays readable.',
+      font: PF.body,
+      fill: G.muted,
+      maxWidth: d.w - 48,
+      transform: { x: d.x + 24, y: d.y + 58 },
+    }),
+    gridButton(
+      ui,
+      'a-cf-no',
+      'Cancel',
+      yes.x - 8 - Math.round(ui.measure('Cancel', PF.label) + 24),
+      yes.y,
+    ).node,
+    gridButton(ui, 'a-cf-yes', 'Refresh', yes.x, yes.y, {
+      kind: 'primary',
+      press: pressAt(t, T.b2.yes),
+    }).node,
+  ]);
+}
+const confirmYes = (ui: Ui) => {
+  const yesW = Math.round(ui.measure('Refresh', PF.label) + 24);
+  return { x: CONFIRM.x + CONFIRM.w - 24 - yesW, y: CONFIRM.y + CONFIRM.h - 58, w: yesW, h: 34 };
+};
+
+/** The versions menu under the version chip (v2 · 30 Sep, v1 · 30 Jun). */
+function versionsMenu(ui: Ui, p: number): SceneNode {
+  const L = reportLayout(ui, 2);
+  const b = { x: L.version.x, y: L.version.y + 28, w: 200, h: 84 };
+  return groupNode(
+    'a-versions',
+    [
+      box('a-ver-bg', b.x, b.y, b.w, b.h, GR + 2, {
+        fill: G.panel,
+        stroke: { color: G.border, width: 1 },
+        shadow: elevationShadows(lighting, 'mid', { strength: 0.6 }),
+      }),
+      box('a-ver-on', b.x + 6, b.y + 6, b.w - 12, 34, GR, { fill: G.hover }),
+      label('a-ver-2', 'v2 · 30 Sep', b.x + 16, b.y + 14, PF.mono, G.ink),
+      icon('a-ver-ck', 'check', b.x + b.w - 24, b.y + 23, 15, G.ink),
+      label('a-ver-1', 'v1 · 30 Jun', b.x + 16, b.y + 50, PF.mono, G.muted),
+    ],
+    {
+      opacity: clamp(p * 1.6),
+      transform: { x: b.x, y: b.y - 6 * (1 - p), originX: b.x, originY: b.y },
+    },
+  );
+}
+const versionsBox = (ui: Ui): Box => {
+  const L = reportLayout(ui, 2);
+  return { x: L.version.x, y: L.version.y, w: 200, h: 112 };
+};
+
+/** Every pointer on the COO's (and then the CFO's) screen. */
+function pointersA(ui: Ui, t: number): SceneNode[] {
+  const out: (SceneNode | null)[] = [];
+  const AC = aComposer(ui);
+  const chipC = { x: AC.chip.x + AC.chip.w / 2, y: AC.chip.y + 13 };
+  const level3 = { x: AC.menu.x + 120, y: AC.menu.y + 8 + 58 + 27 };
+  const send = { x: AC.send.x + 16, y: AC.send.y + 16 };
+  const pa = pointer(
+    t,
+    [
+      { at: T.a1.cursor, x: 540, y: 640 },
+      { at: T.a1.menu - 0.04, ...chipC },
+      { at: T.a1.level - 0.04, ...level3 },
+      { at: T.a1.ask - 0.04, ...send },
+    ],
+    T.a1.ask + 0.4,
+  );
+  if (pa)
+    out.push(
+      cursor(
+        'a-cursor1',
+        pa.x,
+        pa.y,
+        Math.max(pressAt(t, T.a1.menu), pressAt(t, T.a1.level), pressAt(t, T.a1.ask)),
+        pa.opacity,
+      ),
+    );
+  out.push(
+    clickRing('a-ring-menu', chipC.x, chipC.y, t, T.a1.menu),
+    clickRing('a-ring-lvl', level3.x, level3.y, t, T.a1.level),
+  );
+  // The plan: Review, then Save as a report, then Go ahead.
+  const L = aChatLayout(ui);
+  const P = planLayout(ui);
+  const pb = pointer(
+    t,
+    [
+      { at: T.a2.cursor, x: 560, y: 700 },
+      { at: T.a2.review - 0.04, x: L.review.x + 40, y: L.review.y + 18 },
+      { at: T.a2.save - 0.05, x: P.save.x + 9, y: P.save.y + 11 },
+      { at: T.a2.go - 0.05, x: P.go.x + P.go.w / 2, y: P.go.y + 18 },
+    ],
+    T.a2.go + 0.35,
+  );
+  if (pb)
+    out.push(
+      cursor(
+        'a-cursor2',
+        pb.x,
+        pb.y,
+        Math.max(pressAt(t, T.a2.review), pressAt(t, T.a2.save), pressAt(t, T.a2.go)),
+        pb.opacity,
+      ),
+    );
+  // The report: open it from its card, then a citation.
+  const open = reportCardOpen(ui);
+  const R1 = reportLayout(ui, 1);
+  const cite = { x: R1.cite.x + R1.cite.w / 2, y: R1.cite.y + 7 };
+  const pd = pointer(
+    t,
+    [
+      { at: T.a5.cursor, x: 520, y: 640 },
+      { at: T.a5.open - 0.04, x: open.x + open.w / 2, y: open.y + 18 },
+      { at: T.a5.citeCursor, x: 480, y: R1.cite.y + 90 },
+      { at: T.a5.cite - 0.04, ...cite },
+    ],
+    T.a5.cite + 0.5,
+  );
+  if (pd)
+    out.push(
+      cursor(
+        'a-cursor3',
+        pd.x,
+        pd.y,
+        Math.max(pressAt(t, T.a5.open), pressAt(t, T.a5.cite)),
+        pd.opacity,
+      ),
+    );
+  out.push(clickRing('a-ring-cite', cite.x, cite.y, t, T.a5.cite));
+  // Reports: the row's ⋯, Share, the CFO, Share (can view).
+  const LL = libraryLayout(ui);
+  const sug = LL.suggestion(0);
+  const pc = pointer(
+    t,
+    [
+      { at: T.b1.cursor, x: 300, y: 500 },
+      { at: T.b1.more - 0.04, x: LL.moreX, y: LL.more.y + 14 },
+      { at: T.b1.share - 0.04, x: LL.share.x + 60, y: LL.share.y + 17 },
+      { at: T.b1.cfo - 0.04, x: sug.x + 160, y: sug.y + 25 },
+      { at: T.b1.confirm - 0.04, x: LL.confirm.x + LL.confirm.w / 2, y: LL.confirm.y + 18 },
+    ],
+    T.b1.confirm + 0.4,
+  );
+  if (pc)
+    out.push(
+      cursor(
+        'a-cursor4',
+        pc.x,
+        pc.y,
+        Math.max(
+          pressAt(t, T.b1.more),
+          pressAt(t, T.b1.share),
+          pressAt(t, T.b1.cfo),
+          pressAt(t, T.b1.confirm),
+        ),
+        pc.opacity,
+      ),
+    );
+  // Next quarter: Refresh, confirm it, the versions menu; then the CFO opens the citation.
+  const R2 = reportLayout(ui, 2);
+  const refresh = R1.buttons.refresh;
+  const yes = confirmYes(ui);
+  const cfoCite = chatLayout(ui, CFO_CHAT).cites['1'] ?? { x: COL.x, y: 200, w: 10, h: 14 };
+  const pe = pointer(
+    t,
+    [
+      { at: T.b2.cursor, x: 520, y: 600 },
+      { at: T.b2.refresh - 0.04, x: refresh.x + refresh.w / 2, y: refresh.y + 16 },
+      { at: T.b2.yes - 0.04, x: yes.x + yes.w / 2, y: yes.y + 18 },
+      { at: T.b2.menu - 0.04, x: R2.version.x + R2.version.w / 2, y: R2.version.y + 11 },
+      { at: T.b2.cite - 0.04, x: cfoCite.x + cfoCite.w / 2, y: cfoCite.y + 7 },
+    ],
+    T.b2.cite + 0.6,
+  );
+  if (pe)
+    out.push(
+      cursor(
+        'a-cursor5',
+        pe.x,
+        pe.y,
+        Math.max(
+          pressAt(t, T.b2.refresh),
+          pressAt(t, T.b2.yes),
+          pressAt(t, T.b2.menu),
+          pressAt(t, T.b2.cite),
+        ),
+        pe.opacity,
+      ),
+    );
+  // The refresh confirmation and the versions menu sit over the report page.
+  const confirmP =
+    progress(t, T.b2.confirm, 0.25, easing.enter) *
+    (1 - progress(t, T.b2.yes + 0.02, 0.15, easing.exit));
+  if (confirmP > 0) out.unshift(refreshConfirm(ui, t, confirmP));
+  const ver =
+    progress(t, T.b2.menu + 0.02, 0.2, easing.enter) *
+    (1 - progress(t, T.b2.menuEnd, 0.15, easing.exit));
+  if (ver > 0) out.unshift(versionsMenu(ui, ver));
+  return out.filter((n): n is SceneNode => n !== null);
 }
 
 // ---------------------------------------------------------------------------
 // D: the HR head and the intern, one above the other
 // ---------------------------------------------------------------------------
 
-const ANSWER_D =
-  "This year's revision averaged *7.2%*, effective 1 April. Bands 3 to 5 rose 8 to 10%, and 412 people were included.";
+const D_CHAT: Record<'hr' | 'intern', ChatSpec> = {
+  hr: {
+    key: 'hr',
+    question: Q.d,
+    answer:
+      "This year's revision averaged *7.2%*, effective 1 April.[1] Bands 3 to 5 rose 8 to 10%, and 412 people were included.[2]",
+    meta: { confidence: 'High', reason: 'Pay policy and committee notes agree.', sources: 2 },
+    top: TOP + 14,
+  },
+  intern: {
+    key: 'intern',
+    question: Q.d,
+    answer:
+      "I didn't find this year's salary revisions in the items your access covers. Other items may exist that you can open in SharePoint.",
+    meta: { confidence: 'Low', reason: 'No items in your access answer this.', sources: 0 },
+    top: TOP + 14,
+  },
+};
 
 export function stationD(ui: Ui, t: number): SceneNode[] {
   const nodes: SceneNode[] = [];
@@ -1910,7 +2393,7 @@ export function stationD(ui: Ui, t: number): SceneNode[] {
     nodes.push(
       groupNode(
         'd-hr',
-        [windowNode('d-hr-win', { x, y: WIN.top, w: WIN.w, h: PANE.h }, paneD(ui, t, 'hr'))],
+        [gridWindow('d-hr-win', { x, y: WIN.top, w: WIN.w, h: PANE.h }, paneD(ui, t, 'hr'))],
         {
           opacity: 1 - away,
           transform: { x: cx, y: cy - 60 * away, scale: 1 - 0.06 * away, originX: cx, originY: cy },
@@ -1921,231 +2404,187 @@ export function stationD(ui: Ui, t: number): SceneNode[] {
   const y = WIN.top + lerp(LOW, 0, swap);
   const h = lerp(PANE.h, WIN.h, swap);
   nodes.push(
-    windowNode('d-in-win', { x, y, w: WIN.w, h }, [
+    gridWindow('d-in-win', { x, y, w: WIN.w, h }, [
       ...(swap < 0.4
         ? [groupNode('d-in-old', paneD(ui, t, 'intern'), { opacity: 1 - clamp(swap * 3) })]
         : []),
-      ...(swap > 0 ? linkPaneD(ui, t, WIN.w, swap) : []),
+      ...(swap > 0 ? linkPaneD(ui, t, swap) : []),
     ]),
   );
   return nodes;
 }
 
-/** A window header: the Cowork mark and name, and who is signed in (right). */
-function paneHeader(ui: Ui, id: string, role: string, who: Person, w: number): SceneNode[] {
-  const rw = ui.measure(role, F.role);
-  return [
-    mark(`${id}-mark`, 38, 32, 22),
-    label(`${id}-name`, 'Cowork', 58, 21, F.heading),
-    face(`${id}-user-av`, who, w - 32 - rw - 22, 32, 13),
-    label(`${id}-user`, role, w - 32, 22, F.role, UI.sub, { align: 'right' }),
-    rule(`${id}-rule`, 0, 63, w),
-  ];
-}
+/** The composer's top in a pane once a question is sent. */
+const paneFoot = PANE.h - 14 - COMPOSER.h;
 
 function paneD(ui: Ui, t: number, who: 'hr' | 'intern'): SceneNode[] {
   const k = who === 'hr' ? TYPE.hr : TYPE.intern;
   const sendAt = who === 'hr' ? T.d1.sendHr : T.d1.sendIntern;
+  const spec = D_CHAT[who];
   const id = `d-${who}`;
-  const w = WIN.w;
-  const kids: (SceneNode | null)[] = [
-    ...paneHeader(ui, id, who === 'hr' ? 'HR head' : 'Intern', who === 'hr' ? 'HR' : 'IN', w),
-  ];
-  // Composer: one line, at the bottom of the pane.
-  const sent = progress(t, sendAt, 0.25, easing.exit);
-  const ch = 64;
-  const cy = PANE.h - ch - 14;
-  const typing = sent < 1 && t > (k.times[0] ?? 0) - 0.3;
-  kids.push(
-    box(`${id}-comp-ring`, 13, cy - 3, w - 26, ch + 6, ch / 2 + 3, {
-      stroke: { color: withAlpha(C.stroke.focus, typing ? 1 : 0), width: 3 },
-    }),
-    box(`${id}-comp`, 16, cy, w - 32, ch, ch / 2, {
-      fill: UI.surface,
-      stroke: { color: typing ? UI.accentLine : UI.line, width: 1 },
-      shadow: elevationShadows(lighting, 'low', { strength: 0.3 }),
-    }),
-  );
-  const ty = cy + (ch - F.body.size * (F.body.lineHeight ?? 1.2)) / 2;
-  if (sent < 1) {
-    if (t < (k.times[0] ?? 0))
-      kids.push(label(`${id}-ph`, 'Ask Cowork…', 40, ty, F.body, UI.faint));
-    kids.push(
-      groupNode(`${id}-typed`, typedText(ui, `${id}-q`, k, t, 40, ty, F.body, w - 140, 1), {
-        opacity: 1 - sent,
-      }),
-    );
-  } else {
-    kids.push(
-      label(`${id}-ph`, 'Ask a follow-up', 40, ty, F.body, UI.faint, {
-        opacity: clamp((t - sendAt - 0.3) / 0.3),
-      }),
-    );
-  }
-  const typedAll = typed(k, t).length > 0 && sent < 1;
-  const press = pressAt(t, sendAt);
-  kids.push(
-    groupNode(
-      `${id}-send`,
-      [
-        box(`${id}-send-bg`, -18, -18, 36, 36, 18, { fill: typedAll ? UI.accent : UI.line }),
-        icon(`${id}-send-ic`, 'send', 0, 0, 18, UI.surface, { width: 1.8 }),
-      ],
-      { transform: { x: w - 52, y: cy + ch / 2, scale: 1 - 0.1 * press } },
-    ),
-  );
-  // The question rises into the conversation.
-  const rise = progress(t, sendAt + 0.04, 0.5, easing.enter);
+  const sent = t >= sendAt;
+  const kids: (SceneNode | null)[] = [];
+  const text = sent ? '' : typed(k, t);
+  const fit = composerFit(ui, text, COMPOSER.w, 1);
+  const comp = composer(ui, `${id}-comp`, COMPOSER.x, PANE.h - 14 - fit.h, COMPOSER.w, {
+    text,
+    t,
+    focus: sent ? 0 : clamp((t - ((k.times[0] ?? 0) - 0.3)) / 0.15),
+    level: 1,
+    press: pressAt(t, sendAt),
+    idle: text.length < k.text.length ? Infinity : k.end,
+  });
+  // The question rises into the conversation; the answer streams in under it.
+  const rise = progress(t, sendAt + 0.04, 0.45, easing.enter);
   if (rise > 0) {
-    const q = bubble(ui, `${id}-qb`, Q.d, w - 24, lerp(cy, 84, rise), w - 120);
-    kids.push(groupNode(`${id}-qbg`, [q.node], { opacity: clamp(rise * 2) }));
-    const y0 = 84 + q.h + 22;
-    const thinking = clamp((t - sendAt - 0.4) / 0.3);
-    const wait = (opacity: number) =>
+    const L = chatLayout(ui, spec);
+    const [from, to] = who === 'hr' ? [T.d2.stream, T.d2.streamEnd] : [T.d2.empty, T.d2.emptyEnd];
+    const shown = lerp(0, wordCount(spec.answer) + 1, progress(t, from, to - from));
+    const wait = clamp((t - sendAt - 0.4) / 0.3) * (1 - clamp((t - from) / 0.2));
+    kids.push(
       groupNode(
-        `${id}-wait`,
-        [
-          skeleton(`${id}-sk1`, 32, y0 + 38, w - 140, 12, t),
-          skeleton(`${id}-sk2`, 32, y0 + 62, w - 260, 12, t + 0.1),
-        ],
-        { opacity },
-      );
-    if (who === 'hr') {
-      const streamed = lerp(0, 22, progress(t, T.d2.stream, T.d2.streamEnd - T.d2.stream));
+        `${id}-chat`,
+        chatNodes(ui, id, spec, { shown, extras: progress(t, to, 0.35, easing.enter) }),
+        {
+          opacity: clamp(rise * 2),
+          transform: { y: (1 - rise) * (paneFoot - (spec.top ?? CHAT_TOP)) },
+        },
+      ),
+    );
+    if (wait > 0)
       kids.push(
-        groupNode(
-          `${id}-whoo`,
-          [answerer(`${id}-who`, 32, y0, streamed > 0 ? '· 3 sources' : undefined)],
-          { opacity: thinking },
-        ),
+        groupNode(`${id}-wait`, [searching(`${id}-search`, COL.x, L.y0, COL.w, t)], {
+          opacity: wait,
+        }),
       );
-      if (streamed <= 0) {
-        kids.push(wait(thinking));
-      } else {
-        const para = paragraph(ui, `${id}-ans`, ANSWER_D, 32, y0 + 32, F.body, w - 64, {
-          shown: streamed,
-        });
-        kids.push(para.node);
-        const cites = progress(t, T.d2.streamEnd, 0.35, easing.enter);
-        if (cites > 0) {
-          const cy2 = y0 + 46 + para.height;
-          const c1 = citation(ui, `${id}-c1`, 1, 'doc', 'Revision policy 2026', 32, cy2);
-          const c2 = citation(ui, `${id}-c2`, 2, 'doc', 'Pay committee notes', 40 + c1.w, cy2);
-          kids.push(
-            groupNode(`${id}-cites`, [c1.node, c2.node], {
-              opacity: cites,
-              transform: { y: 6 * (1 - cites) },
-            }),
-          );
-        }
-      }
-    } else {
-      const empty = progress(t, T.d2.empty, 0.5, easing.enter);
-      kids.push(groupNode(`${id}-whoo`, [answerer(`${id}-who`, 32, y0)], { opacity: thinking }));
-      if (empty < 1) kids.push(wait(thinking * (1 - empty)));
-      if (empty > 0) {
-        // Nothing to show: a quiet lock, in the friction tint.
-        kids.push(
-          groupNode(
-            `${id}-empty`,
-            [
-              box(`${id}-e-disc`, 32, y0 + 36, 44, 44, 22, { fill: UI.alertSoft }),
-              icon(`${id}-e-lock`, 'lock', 54, y0 + 58, 22, C.friction.fg),
-              label(
-                `${id}-e-t`,
-                "Nothing you're allowed to see answers this.",
-                90,
-                y0 + 46,
-                F.body,
-                UI.sub,
-              ),
-            ],
-            { opacity: empty, transform: { y: 6 * (1 - empty) } },
-          ),
-        );
-      }
-    }
   }
+  kids.push(...comp.nodes, ...topBar(ui, `${id}-top`, WIN.w));
   return kids.filter((n): n is SceneNode => n !== null);
 }
 
-/** D3: the intern, given the report's link, and the page that won't open. */
-function linkPaneD(ui: Ui, t: number, w: number, swap: number): SceneNode[] {
-  const kids: SceneNode[] = [...paneHeader(ui, 'd-l', 'Intern', 'IN', w)];
-  const page = progress(t, T.d3.page, 0.4, easing.enter);
+/** The pane's answer block (for the hints). */
+function paneAnswer(ui: Ui, who: 'hr' | 'intern'): Box {
+  const L = chatLayout(ui, D_CHAT[who]);
+  return { x: COL.x - 8, y: L.y0 - 6, w: COL.w + 16, h: L.metaY + L.meta.h - L.y0 + 4 };
+}
+
+/** D3: a chat message with the report's link, then the page that won't open. */
+const LINK = 'cowork/r/4f8k2q';
+const LINK_POS = { x: 92, y: TOP + 114 } as const;
+function linkPaneD(ui: Ui, t: number, swap: number): SceneNode[] {
+  const w = WIN.w;
+  const page = progress(t, T.d3.page, 0.35, easing.enter);
   const msg = progress(t, T.d3.message, 0.45, easing.enter);
+  const kids: SceneNode[] = [];
   if (page < 1) {
-    const chat: SceneNode[] = [
-      label('d-l-day', 'today', w / 2, 86, F.meta, UI.faint, { align: 'center' }),
-      face('d-l-av', 'CO', 34, 136, 16),
-      label('d-l-from', 'COO', 60, 116, F.bodyStrong),
-      label('d-l-time', '11:02', 60 + ui.measure('COO ', F.bodyStrong) + 4, 118, F.small, UI.sub),
-      label('d-l-text', 'Sharing the supplier report for Monday:', 60, 140, F.body),
-    ];
+    // A plain team chat (not Cowork): a message with a link and nothing else about the report.
     const hover = clamp((t - (T.d3.click - 0.3)) / 0.12);
-    const link = ui.chip('d-l-link', 'Open report', 0, 0, {
-      fill: hover > 0.5 ? UI.accentSoft : UI.wash,
-      color: UI.accent,
-      icon: 'link',
-      stroke: UI.accentLine,
-      height: 34,
-    });
-    chat.push(groupNode('d-l-linkpos', [link.node], { transform: { x: 60, y: 172 } }));
-    kids.push(
-      groupNode('d-l-chat', chat, {
-        opacity: clamp(swap * 2 - 1) * msg * (1 - page),
-        transform: { y: 10 * (1 - msg) },
+    const lw = ui.measure(LINK, PF.body);
+    const chat: SceneNode[] = [
+      box('d-l-bg', 0, 0, w, WIN.h, 0, { fill: G.panel }),
+      box('d-l-hbar', 0, 0, w, TOP, 0, { fill: G.page }),
+      hairline('d-l-hrule', 0, TOP - 1, w),
+      plainAvatar('d-l-hav', 34, TOP / 2, 13),
+      label('d-l-hname', 'Dana Ortiz', 56, 15, PF.bodyStrong, G.ink),
+      label(
+        'd-l-hk',
+        'chat',
+        56 + ui.measure('Dana Ortiz ', PF.bodyStrong) + 6,
+        18,
+        PF.mono,
+        G.faint,
+      ),
+      label('d-l-day', 'Today', w / 2, TOP + 22, PF.monoSmall, G.faint, { align: 'center' }),
+      groupNode(
+        'd-l-msg',
+        [
+          plainAvatar('d-l-av', 50, TOP + 78, 16),
+          label('d-l-from', 'Dana Ortiz', LINK_POS.x, TOP + 60, PF.smallStrong, G.ink),
+          label(
+            'd-l-time',
+            '11:02',
+            LINK_POS.x + ui.measure('Dana Ortiz ', PF.smallStrong) + 6,
+            TOP + 61,
+            PF.monoSmall,
+            G.faint,
+          ),
+          label('d-l-text', "For Monday's review:", LINK_POS.x, TOP + 82, PF.body, G.ink),
+          label('d-l-link', LINK, LINK_POS.x, LINK_POS.y, PF.body, G.link),
+          box('d-l-ul', LINK_POS.x, LINK_POS.y + 22, lw, hover > 0.5 ? 1.5 : 1, 0, {
+            fill: G.link,
+          }),
+        ],
+        { opacity: msg, transform: { y: 10 * (1 - msg) } },
+      ),
+      box('d-l-compose', 16, WIN.h - 68, w - 32, 48, GR, {
+        fill: G.panel,
+        stroke: { color: G.border, width: 1 },
       }),
-    );
+      label('d-l-compose-t', 'Type a message', 32, WIN.h - 56, PF.body, G.faint),
+    ];
+    kids.push(groupNode('d-l-chat', chat, { opacity: clamp(swap * 2 - 1) * (1 - page) }));
     const pt = pointer(
       t,
       [
-        { at: T.d3.cursor, x: w - 120, y: 520 },
-        { at: T.d3.click - 0.05, x: 120, y: 190 },
+        { at: T.d3.cursor, x: w - 140, y: 560 },
+        { at: T.d3.click - 0.05, x: LINK_POS.x + lw / 2, y: LINK_POS.y + 12 },
       ],
       T.d3.click + 0.4,
     );
     if (pt) kids.push(cursor('d-l-cursor', pt.x, pt.y, pressAt(t, T.d3.click), pt.opacity));
-    kids.push(
-      ...[clickRing('d-l-ring', 120, 190, t, T.d3.click)].filter((n): n is SceneNode => n !== null),
-    );
+    const ring = clickRing('d-l-ring', LINK_POS.x + lw / 2, LINK_POS.y + 12, t, T.d3.click);
+    if (ring) kids.push(ring);
   }
-  // Loading bar, then the page that shows nothing of the report, not even its title.
-  const load = progress(t, T.d3.click + 0.04, T.d3.page - T.d3.click + 0.05);
-  if (load > 0 && page < 1)
-    kids.push(box('d-l-load', 0, 63, w * load, 3, 1.5, { fill: UI.accent, opacity: 1 - page }));
   if (page > 0) {
-    const cy = 340;
+    // Cowork, signed in as the intern: the page shows nothing of the report, not even its title.
+    const cy = 300;
+    const mx = MAIN.x + MAIN.w / 2;
+    const cw = MAIN.w - 64;
     kids.push(
       groupNode(
         'd-l-page',
         [
-          box('d-l-disc', w / 2 - 40, cy - 40, 80, 80, 40, { fill: UI.wash }),
-          icon('d-l-lock', 'lock', w / 2, cy, 36, UI.sub, { width: 2.2 }),
-          label('d-l-head', "You can't open this", w / 2, cy + 66, F.title, UI.text, {
+          box('d-l-pbg', 0, 0, w, WIN.h, 0, { fill: G.page }),
+          box('d-l-main', MAIN.x, TOP, MAIN.w, WIN.h - TOP, 0, { fill: G.panel }),
+          label('d-l-head', "You can't open this report", mx, cy, PF.title, G.ink, {
             align: 'center',
           }),
-          paragraph(
-            ui,
-            'd-l-body',
-            "You don't have access to this report. Ask the person who shared it.",
-            w / 2,
-            cy + 102,
-            F.body,
-            420,
-            { color: UI.sub, align: 'center' },
-          ).node,
-          groupNode('d-l-btnpos', [ui.button('d-l-btn', 'Request access', 0, 0, {}).node], {
-            transform: {
-              x: w / 2 - buttonWidth(ui, 'Request access') / 2,
-              y: cy + 170,
-            },
+          textNode('d-l-body', {
+            text: "It may not have been shared with you, or it may have been removed. You're signed in as sam.lee@company.com.",
+            font: PF.body,
+            fill: G.muted,
+            maxWidth: cw,
+            align: 'center',
+            transform: { x: mx, y: cy + 46 },
           }),
+          textNode('d-l-ask', {
+            text: 'Ask the person who sent the link to share it with you.',
+            font: PF.body,
+            fill: G.muted,
+            maxWidth: cw,
+            align: 'center',
+            transform: { x: mx, y: cy + 150 },
+          }),
+          gridButton(
+            ui,
+            'd-l-all',
+            'All reports',
+            mx - Math.round(ui.measure('All reports', PF.label) + 46) / 2,
+            cy + 214,
+            {
+              icon: 'back',
+            },
+          ).node,
+          ...topBar(ui, 'd-l-top', w),
         ],
-        { opacity: page, transform: { y: 12 * (1 - page) } },
+        { opacity: page },
       ),
     );
   }
+  // Loading: a thin bar under the top bar as the link opens.
+  const load = progress(t, T.d3.click + 0.04, T.d3.page - T.d3.click + 0.05);
+  if (load > 0 && page < 1)
+    kids.push(box('d-l-load', 0, TOP - 2, w * load, 2, 1, { fill: G.ink, opacity: 1 - page }));
   return kids;
 }
 
@@ -2175,7 +2614,29 @@ interface Hint {
   readonly meaning: Meaning;
   /** Dim the rest of the window (off when hints share a screen). */
   readonly dim?: boolean;
+  /** Seconds after `from` it waits to appear (for what is still arriving). */
+  readonly lag?: number;
+  /**
+   * Keyed by colour instead of a leader line (for hints shown together, whose
+   * leaders would cross the content between them): the ring and a dot on it
+   * take the hint's meaning colour, matching the callout's dot.
+   */
+  readonly keyed?: boolean;
 }
+
+/** A box grown by `d` on every side. */
+const inflate = (b: Box, d: number): Box => ({
+  x: b.x - d,
+  y: b.y - d,
+  w: b.w + 2 * d,
+  h: b.h + 2 * d,
+});
+/** The smallest box round two boxes. */
+const union = (a: Box, b: Box): Box => {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+};
 
 const HINTS: readonly Hint[] = [
   // The ask: the rep, the COO, the HR head and the intern.
@@ -2183,51 +2644,56 @@ const HINTS: readonly Hint[] = [
     from: 1.75,
     until: 2.6,
     desk: 0,
-    target: () => ({ x: DOCK.x, y: DOCK.y, w: DOCK.w, h: DOCK.h }),
-    side: 'above',
+    target: () => ({
+      x: COMPOSER.x,
+      y: COMPOSER.empty,
+      w: COMPOSER.w,
+      h: COMPOSER.h,
+    }),
+    side: 'below',
     align: 'left',
-    text: 'Ask from your inbox',
-    sub: 'no new app to open',
+    text: 'Ask across your workspace',
+    sub: 'read-only, scoped to what you can see',
     meaning: 'brand',
   },
   {
     from: 3.15,
     until: 3.25,
     desk: 0,
-    target: (ui) => ({ x: 20, y: sheetLayout(ui).y0 - 6, w: 600, h: 120 }),
+    target: (ui) => ({ x: COL.x - 8, y: cLayout(ui).y0 - 8, w: COL.w + 16, h: 100 }),
     side: 'below',
     align: 'left',
     text: 'Searches everything you can access',
-    sub: 'email · chats · files',
+    sub: 'mail · Teams · files',
     meaning: 'knowledge',
   },
   {
-    from: 5.5,
+    from: 5.79,
     until: 5.8,
     desk: 1,
-    target: () => ({ x: LEVEL.x - 4, y: LEVEL.y - 4, w: LEVEL.seg * 3 + 8, h: 48 }),
+    target: (ui) => inflate(union(aComposer(ui).chip, aComposer(ui).menu), 2),
     side: 'below',
-    align: 'left',
+    align: 'right',
     text: 'Pick the depth',
-    sub: 'level 1 quick · level 3 deep',
+    sub: 'level 1 · seconds · level 3 · 15–30 min',
     meaning: 'brand',
   },
   {
     from: 5.95,
     until: 6.12,
     desk: 1,
-    target: () => ({ x: LEVEL.x - 4, y: LEVEL.y - 4, w: LEVEL.seg * 3 + 8, h: 48 }),
+    target: (ui) => inflate(aComposer(ui).chip3, 3),
     side: 'below',
-    align: 'left',
+    align: 'right',
     text: 'Level 3 · deep analysis',
-    sub: '15–100 min · weeks of work',
+    sub: 'plans first, then 15–30 minutes',
     meaning: 'brand',
   },
   {
     from: 6.9,
     until: 8.5,
     desk: 2,
-    target: () => ({ x: 0, y: 0, w: WIN.w, h: 64 }),
+    target: () => ({ x: 0, y: 0, w: WIN.w, h: TOP }),
     side: 'below',
     align: 'left',
     text: 'HR head · pay data access',
@@ -2238,7 +2704,7 @@ const HINTS: readonly Hint[] = [
     from: 7.0,
     until: 8.5,
     desk: 2,
-    target: () => ({ x: 0, y: LOW, w: WIN.w, h: 64 }),
+    target: () => ({ x: 0, y: LOW, w: WIN.w, h: TOP }),
     side: 'below',
     align: 'left',
     text: 'Intern · no pay data',
@@ -2250,70 +2716,71 @@ const HINTS: readonly Hint[] = [
     from: 9.3,
     until: 9.7,
     desk: 1,
-    target: (ui) => ({ x: PLAN_CARD.x, y: planLayout(ui).cardY, w: PLAN_CARD.w, h: PLAN_CARD.h }),
+    target: (ui) => inflate(aChatLayout(ui).chip, 2),
     side: 'below',
     align: 'left',
     text: 'It plans first',
-    sub: 'who · what it measures · steps',
+    sub: 'plan · v1 · 4 steps',
     meaning: 'brand',
   },
   {
-    from: 9.7,
+    from: 9.86,
     until: 9.9,
+    lag: 0.55,
     desk: 1,
-    target: (ui) => ({ x: PLAN_CARD.x + 12, y: planLayout(ui).cardY + 214, w: 568, h: 150 }),
-    side: 'below',
+    target: (ui) => planLayout(ui).steps,
+    side: 'above',
     align: 'left',
-    text: 'The steps it will take',
+    text: 'Who does what',
+    sub: 'lead · researchers · checker',
     meaning: 'brand',
   },
   {
     from: 10.06,
     until: 10.3,
     desk: 1,
-    target: (ui) => {
-      const { save } = planLayout(ui);
-      return { x: save.x - 6, y: save.y - 6, w: 210, h: 34 };
-    },
+    target: (ui) => inflate(planLayout(ui).save, 4),
     side: 'above',
     align: 'left',
-    text: 'Kept for next time',
+    text: 'A page you can share and come back to',
     meaning: 'outcome',
   },
   {
     from: 10.3,
     until: 10.42,
     desk: 1,
-    target: (ui) => {
-      const { go } = planLayout(ui);
-      return { x: go.x - 4, y: go.y - 4, w: buttonWidth(ui, 'Go ahead') + 8, h: 52 };
-    },
+    target: (ui) => inflate(planLayout(ui).go, 3),
     side: 'above',
     align: 'right',
-    text: 'Nothing runs until you say',
+    text: 'Nothing runs until you say go',
     meaning: 'brand',
   },
   {
     from: 11.5,
     until: 13.0,
     desk: 0,
-    target: (ui) => ({ x: 24, y: sheetLayout(ui).y0 - 4, w: 320, h: 28 }),
+    target: (ui) => {
+      const L = cLayout(ui);
+      return { x: COL.x - 6, y: L.y0 - 6, w: COL.w + 12, h: L.answerH + 10 };
+    },
     side: 'below',
     align: 'left',
-    place: () => ({ x: 24, y: 560 }),
+    place: () => ({ x: 24, y: 520 }),
     dim: false,
-    text: 'Answered in 6 s',
+    keyed: true,
+    text: 'Answered in seconds',
     meaning: 'time',
   },
   {
     from: 11.5,
     until: 13.0,
     desk: 0,
-    target: (ui) => ({ x: 28, y: sheetLayout(ui).chip.y - 4, w: 370, h: 40 }),
+    target: (ui) => inflate(cLayout(ui).meta.sources, -1),
     side: 'below',
     align: 'left',
-    place: () => ({ x: 24, y: 630 }),
+    place: () => ({ x: 24, y: 600 }),
     dim: false,
+    keyed: true,
     text: 'Every claim cited',
     meaning: 'knowledge',
   },
@@ -2321,11 +2788,12 @@ const HINTS: readonly Hint[] = [
     from: 11.5,
     until: 13.0,
     desk: 0,
-    target: (ui) => ({ x: 28, y: sheetLayout(ui).chip.y + 42, w: 176, h: 36 }),
+    target: (ui) => inflate(cLayout(ui).meta.confidence, -1),
     side: 'below',
     align: 'left',
-    place: () => ({ x: 24, y: 700 }),
+    place: () => ({ x: 24, y: 680 }),
     dim: false,
+    keyed: true,
     text: 'Two sources agree',
     meaning: 'outcome',
   },
@@ -2333,65 +2801,65 @@ const HINTS: readonly Hint[] = [
     from: 13.75,
     until: 14.25,
     desk: 1,
-    target: () => ({ x: 16, y: 190, w: 608, h: 320 }),
+    target: () => ({ x: 16, y: WORK.row0 + WORK.row - 2, w: WIN.w - 32, h: 4 * WORK.row + 4 }),
     side: 'below',
     align: 'left',
     text: '4 researchers at once',
-    sub: 'logs · emails · contracts · chats',
+    sub: 'mail · Teams · files',
     meaning: 'knowledge',
   },
   {
     from: 14.25,
     until: 15.1,
     desk: 1,
-    target: () => ({ x: 470, y: 72, w: 150, h: 66 }),
+    target: () => ({ x: 16, y: WORK.strip, w: 300, h: 44 }),
     side: 'below',
-    align: 'right',
+    align: 'left',
     text: '18 minutes of research',
     sub: 'while you do other work',
     meaning: 'time',
   },
   {
-    from: 15.1,
+    from: 15.15,
     until: 16.25,
     desk: 1,
-    target: () => ({ x: 24, y: 526, w: 592, h: 216 }),
+    target: () => ({ x: 16, y: checkerTop - 4, w: WIN.w - 32, h: 24 + WORK.row + 8 }),
     side: 'below',
     align: 'left',
-    text: 'Every step checked',
+    text: 'Every answer checked',
     meaning: 'outcome',
   },
   // The answers: allowed, sourced, the report.
   {
-    from: 17.3,
+    from: 18.02,
     until: 18.4,
     desk: 2,
-    target: (ui) => ({ x: 16, y: paneLayout(ui).answerY - 8, w: 608, h: 150 }),
+    target: (ui) => paneAnswer(ui, 'hr'),
     side: 'below',
     align: 'left',
     text: 'Answered from pay policy',
-    sub: 'the HR head may see it',
+    sub: 'answered from the items your account can access',
     meaning: 'people',
   },
   {
     from: 18.4,
     until: 19.0,
     desk: 2,
-    target: (ui) => ({ x: 16, y: LOW + paneLayout(ui).answerY - 8, w: 608, h: 100 }),
+    target: (ui) => {
+      const b = paneAnswer(ui, 'intern');
+      return { ...b, y: LOW + b.y };
+    },
     side: 'below',
     align: 'left',
     text: "Nothing they can't see",
-    sub: "Cowork follows your company's access",
+    sub: "cowork follows your company's access",
     meaning: 'friction',
   },
   {
     from: 20.0,
     until: 20.45,
     desk: 0,
-    target: (ui) => {
-      const { chip } = sheetLayout(ui);
-      return { x: chip.x - 4, y: chip.y - 4, w: 190, h: 40 };
-    },
+    target: (ui) => inflate(cLayout(ui).cite, 6),
     side: 'below',
     align: 'left',
     text: 'Open any source',
@@ -2401,62 +2869,64 @@ const HINTS: readonly Hint[] = [
     from: 21.1,
     until: 22.1,
     desk: 0,
-    target: () => ({ x: 24, y: LIST.top + 222, w: 584, h: 64 }),
+    target: (ui) => cLayout(ui).foot,
     side: 'below',
     align: 'left',
-    text: 'The exact line it used',
-    sub: 'deal desk · 12 May',
+    text: 'Opens where it lives',
+    sub: 'Outlook · the original email',
     meaning: 'outcome',
   },
   {
-    from: 23.0,
+    from: 23.05,
     until: 23.3,
     desk: 1,
-    target: () => ({ x: 20, y: 256, w: 600, h: 120 }),
+    target: (ui) => inflate(reportCardBox(ui), 2),
+    side: 'below',
+    align: 'left',
+    text: 'Done in 19 min',
+    sub: '38 sources, checked',
+    meaning: 'outcome',
+  },
+  {
+    from: 23.45,
+    until: 23.9,
+    desk: 1,
+    target: (ui) => reportLayout(ui, 1).answerBox,
     side: 'below',
     align: 'left',
     text: 'The answer first',
     meaning: 'brand',
   },
   {
-    from: 23.3,
-    until: 23.9,
-    desk: 1,
-    target: () => ({ x: 20, y: 392, w: 600, h: 270 }),
-    side: 'below',
-    align: 'left',
-    text: 'Built from 38 sources',
-    meaning: 'knowledge',
-  },
-  {
-    from: 23.9,
+    from: 24.08,
     until: 24.5,
     desk: 1,
-    target: () => ({ x: 470, y: 72, w: 150, h: 66 }),
+    target: (ui) => inflate(reportLayout(ui, 1).card, 3),
     side: 'below',
-    align: 'right',
-    text: 'Done in 18:40',
+    align: 'left',
+    text: 'The exact line it used',
+    sub: 'kestrel alloys · 14 may',
     meaning: 'outcome',
   },
   // The library: kept, shared, protected, building.
   {
-    from: 25.6,
+    from: 25.45,
     until: 25.8,
     desk: 1,
-    target: () => ({ x: LIB.x, y: LIB.top, w: LIB.w, h: LIB.row - 8 }),
+    target: (ui) => libraryLayout(ui).row0,
     side: 'below',
     align: 'left',
     text: 'Saved to Reports',
-    sub: 'the whole company can build on it',
+    sub: 'find it again, share it',
     meaning: 'outcome',
   },
   {
-    from: 26.7,
+    from: 27.12,
     until: 27.9,
     desk: 1,
-    target: () => ({ x: 448, y: LIB.top + 16, w: 84, h: 44 }),
+    target: (ui) => libraryLayout(ui).shared,
     side: 'below',
-    align: 'right',
+    align: 'left',
     text: 'Shared with the CFO',
     sub: 'access stays as set',
     meaning: 'people',
@@ -2465,7 +2935,12 @@ const HINTS: readonly Hint[] = [
     from: 28.6,
     until: 29.05,
     desk: 2,
-    target: () => ({ x: 56, y: 168, w: 170, h: 44 }),
+    target: (ui) => ({
+      x: LINK_POS.x - 8,
+      y: LINK_POS.y - 6,
+      w: ui.measure(LINK, PF.body) + 16,
+      h: 36,
+    }),
     side: 'below',
     align: 'left',
     text: 'A shared link…',
@@ -2475,7 +2950,7 @@ const HINTS: readonly Hint[] = [
     from: 29.3,
     until: 30.6,
     desk: 2,
-    target: () => ({ x: WIN.w / 2 - 230, y: 290, w: 460, h: 270 }),
+    target: () => ({ x: MAIN.x + 16, y: 284, w: MAIN.w - 32, h: 284 }),
     side: 'below',
     align: 'center',
     text: '…opens nothing extra',
@@ -2486,37 +2961,40 @@ const HINTS: readonly Hint[] = [
     from: 31.9,
     until: 32.4,
     desk: 1,
-    target: () => ({ x: REFRESH.x - 20, y: LIB.top + 18, w: 40, h: 40 }),
+    target: () => CONFIRM,
     side: 'below',
-    align: 'right',
-    text: 'One click: updated for Q3',
+    align: 'left',
+    text: "Refresh: the same plan, this quarter's data",
     meaning: 'time',
   },
   {
     from: 32.5,
     until: 33.0,
     desk: 1,
-    target: () => ({ x: 402, y: LIB.top + 22, w: 54, h: 32 }),
-    side: 'above',
-    align: 'right',
+    target: (ui) => {
+      const L = reportLayout(ui, 2);
+      return inflate(union(versionsBox(ui), { x: COL.x, y: L.banner, w: COL.w, h: 64 }), 3);
+    },
+    side: 'below',
+    align: 'left',
     text: 'Version 2',
     meaning: 'outcome',
   },
   {
-    from: 33.0,
+    from: 33.3,
     until: 34.3,
     desk: 1,
-    target: () => ({ x: LIB.x + 44, y: LIB.top + LIB.row + 8, w: LIB.w - 44, h: 92 }),
+    target: (ui) => cfoPopover(ui),
     side: 'below',
-    align: 'right',
-    text: 'Another team builds on it',
+    align: 'left',
+    text: 'Their answer cites your report',
     meaning: 'people',
   },
 ];
 
 /** When a hint is on screen (stretched timeline). */
 function hintWindow(h: Hint): { from: number; to: number } {
-  return { from: onGrid(stretch(h.from)), to: onGrid(stretch(h.until)) };
+  return { from: onGrid(stretch(h.from) + (h.lag ?? 0)), to: onGrid(stretch(h.until)) };
 }
 
 /** The callouts' size on screen relative to the window's own type (as the deck shows it, wide). */
@@ -2561,9 +3039,22 @@ export function hintNodes(
     }
     nodes.push(
       box(`${id}-ring`, b.x - 6, b.y - 6, b.w + 12, b.h + 12, 14, {
-        stroke: { color: withAlpha(C.stroke.focus, a), width: 2.5 },
-        shadow: { x: 0, y: 0, blur: 14, color: withAlpha(C.brand.soft, 0.55 * a) },
+        stroke: { color: withAlpha(h.keyed ? meaning.fill : C.stroke.focus, a), width: 2.5 },
+        shadow: {
+          x: 0,
+          y: 0,
+          blur: 14,
+          color: withAlpha(h.keyed ? meaning.fill : C.brand.soft, (h.keyed ? 0.3 : 0.55) * a),
+        },
       }),
+      ...(h.keyed
+        ? [
+            box(`${id}-key`, b.x - 6 - 5.5, b.y - 6 - 5.5, 11, 11, 5.5, {
+              fill: withAlpha(meaning.fill, a),
+              stroke: { color: withAlpha(C.surface.paper, a), width: 2 },
+            }),
+          ]
+        : []),
     );
     // The callout: drawn in its own units, scaled by `k` from its top left.
     const padX = 16;
@@ -2597,12 +3088,21 @@ export function hintNodes(
     const cardY = below ? top : top + sh;
     const lx = clamp(left + Math.min(sw / 2, 40 * k), b.x + 10, b.x + b.w - 10);
     const cx = clamp(lx, left + 14 * k, left + sw - 14 * k);
+    if (!h.keyed)
+      nodes.push(
+        shapeNode(`${id}-lead`, {
+          geometry: pathGeometry(`M${lx} ${ringY}L${cx} ${cardY}`),
+          stroke: {
+            color: withAlpha(C.stroke.focus, a),
+            width: 1.5 * Math.max(k, 1),
+            cap: 'round',
+          },
+        }),
+        box(`${id}-lead-dot`, lx - 3.5, ringY - 3.5, 7, 7, 3.5, {
+          fill: withAlpha(C.brand.fill, a),
+        }),
+      );
     nodes.push(
-      shapeNode(`${id}-lead`, {
-        geometry: pathGeometry(`M${lx} ${ringY}L${cx} ${cardY}`),
-        stroke: { color: withAlpha(C.stroke.focus, a), width: 1.5 * Math.max(k, 1), cap: 'round' },
-      }),
-      box(`${id}-lead-dot`, lx - 3.5, ringY - 3.5, 7, 7, 3.5, { fill: withAlpha(C.brand.fill, a) }),
       groupNode(
         `${id}-card`,
         [
@@ -2661,52 +3161,63 @@ export interface Direction {
  * little larger. Wide between desks.
  */
 function direct(ui: Ui): Direction {
-  const sheet = sheetLayout(ui);
-  const plan = planLayout(ui);
-  const d = paneLayout(ui);
+  const C = cLayout(ui);
+  const AC = aComposer(ui);
+  const A = aChatLayout(ui);
+  const R1 = reportLayout(ui, 1);
+  const LL = libraryLayout(ui);
+  const mid = COMPOSER.x + COMPOSER.w / 2;
   const shots: Shot[] = [
-    // C1: the rep types into the ask bar.
-    { at: 1.3, view: { x: 270, y: DOCK.y + DOCK.h / 2, zoom: 1.9 }, duration: 0.55 },
+    // C1: the rep types into the composer.
+    { at: 1.3, view: { x: mid, y: COMPOSER.empty + 40, zoom: 1.3 }, duration: 0.55 },
     { at: 3.05, view: WIDE, duration: 0.4 },
-    // A1: the COO's question, then the level and Ask.
-    { at: 3.75, view: { x: 320, y: COMPOSER.y + 96, zoom: 1.45 } },
-    { at: 5.5, view: { x: 330, y: LEVEL.y + 16, zoom: 1.55 }, duration: 0.4 },
+    // A1: the COO's question, the level dropdown, send.
+    { at: 3.75, view: { x: mid, y: COMPOSER.empty + AC.h / 2, zoom: 1.28 } },
+    { at: 5.6, view: { x: mid, y: AC.menu.y + 20, zoom: 1.28 }, duration: 0.4 },
     { at: 6.12, view: WIDE, duration: 0.35 },
     // D1: the HR head and the intern type the same question.
-    { at: 6.75, view: { x: 320, y: LOW + 120, zoom: 1.3 } },
+    { at: 6.75, view: { x: 320, y: LOW + 48, zoom: 1.3 } },
     { at: 8.25, view: WIDE, duration: 0.35 },
-    // A2: the plan unfolds; save it as a report, go ahead.
-    { at: 9.0, view: { x: 320, y: plan.cardY + 210, zoom: 1.2 } },
-    { at: 9.55, view: { x: 320, y: plan.fy + 34, zoom: 1.5 }, duration: 0.4 },
+    // A2: the plan chip, then the plan in the Research workspace.
+    { at: 9.0, view: { x: COL.x + COL.w / 2, y: A.chip.y + 48, zoom: 1.5 } },
+    { at: 9.74, view: FULL, duration: 0.4 },
     { at: 10.55, view: WIDE, duration: 0.35 },
     // C2: the rep's answer, whole.
     { at: 11.2, view: FULL },
     { at: 12.85, view: WIDE, duration: 0.3 },
-    // A3: researchers in parallel against the clock, then the checklist.
-    { at: 13.6, view: { x: 320, y: 290, zoom: 1.3 } },
-    { at: 14.35, view: { x: 320, y: 650, zoom: 1.45 } },
+    // A3: the agents at work, the clock, the Checker.
+    { at: 13.6, view: { x: 320, y: WORK.row0 + 2 * WORK.row, zoom: 1.3 } },
+    { at: 14.3, view: { x: 320, y: WORK.strip + 140, zoom: 1.3 } },
+    { at: 15.05, view: { x: 320, y: 440, zoom: 1.3 } },
     { at: 15.9, view: WIDE, duration: 0.4 },
-    // D2: the HR head's answer streams in, the intern's stays empty; then both, whole.
-    { at: 16.95, view: { x: 320, y: d.answerY + 230, zoom: 1.3 } },
+    // D2: the HR head's answer, the intern's; then both, whole.
+    { at: 16.95, view: { x: 320, y: 380, zoom: 1.3 } },
     { at: 18.15, view: FULL },
     { at: 19.1, view: WIDE, duration: 0.3 },
-    // C3: the source opens; the approval line.
-    { at: 19.95, view: { x: sheet.chip.x + 150, y: sheet.chip.y + 16, zoom: 1.7 }, duration: 0.45 },
+    // C3: citation 1, its popover, the Outlook link.
+    { at: 19.95, view: { x: C.cite.x, y: C.cite.y + 7, zoom: 1.7 }, duration: 0.45 },
     { at: 20.6, view: FULL },
     { at: 22.0, view: WIDE, duration: 0.3 },
-    // A5: the report, whole.
-    { at: 22.85, view: FULL },
-    // B1: the report in the library; share with the CFO.
-    { at: 25.75, view: { x: 470, y: SHARE.y + 90, zoom: 1.6 }, duration: 0.4 },
-    { at: 26.75, view: FULL },
+    // A5: the report card, the page, the citation card.
+    { at: 22.85, view: { x: COL.x + COL.w / 2, y: reportCardBox(ui).y + 74, zoom: 1.4 } },
+    { at: 23.3, view: FULL, duration: 0.4 },
+    { at: 23.95, view: { x: 320, y: R1.card.y + R1.card.h / 2, zoom: 1.25 }, duration: 0.4 },
+    // B1: Reports; the row's menu; the Share dialog.
+    { at: 24.6, view: FULL },
+    { at: 25.85, view: { x: LL.menu.x + 40, y: LL.menu.y + 30, zoom: 1.5 }, duration: 0.4 },
+    { at: 26.2, view: FULL, duration: 0.35 },
     { at: 27.8, view: WIDE, duration: 0.3 },
-    // D3: the intern's link, then the page that won't open.
-    { at: 28.6, view: { x: 220, y: 170, zoom: 1.6 }, duration: 0.4 },
+    // D3: the link in the chat, then the page that won't open.
+    { at: 28.6, view: { x: LINK_POS.x + 100, y: LINK_POS.y, zoom: 1.6 }, duration: 0.4 },
     { at: 29.25, view: FULL },
     { at: 30.5, view: WIDE, duration: 0.3 },
-    // B2: one refresh, version 2, another team builds on it.
-    { at: 31.2, view: { x: 470, y: REFRESH.y + 10, zoom: 1.7 }, duration: 0.4 },
-    { at: 32.3, view: FULL },
+    // B2: Refresh, its confirmation, version 2; the CFO's answer.
+    {
+      at: 31.2,
+      view: { x: R1.buttons.refresh.x + 40, y: R1.buttons.refresh.y + 16, zoom: 1.6 },
+      duration: 0.4,
+    },
+    { at: 31.66, view: FULL, duration: 0.35 },
   ];
   return {
     shots: shots.map((s) => ({
@@ -2775,63 +3286,73 @@ function typingCues(k: Typing, gain: number, pan: number): Cues {
 const TAP_EVERY = 5;
 
 const CUES: readonly Cues[] = [
-  // The window opens out of the tile; the inbox comes to rest.
+  // The window opens out of the tile.
   cue(T.intro.tile, whoosh(0.8, { from: 1800, to: 500, peak: 0.4, gain: 0.45 })),
   cue(T.intro.open + 0.5, pop({ degree: 4, gain: 0.45 })),
-  cue(T.scroll.start, whoosh(1.2, { from: 900, to: 300, peak: 0.1, gain: 0.25 })),
   cue(T.c1.click, click()),
   cue(T.c1.send, pop({ degree: 7, gain: 0.55 })),
-  // A1
+  // A1: the dropdown, Level 3, send.
+  cue(T.a1.menu, click()),
   cue(T.a1.level, snap({ degree: 4, gain: 0.45 })),
   cue(T.a1.ask, pop({ degree: 9, gain: 0.5 })),
   // D1: two people typing at once.
   cue(T.d1.sendHr, pop({ degree: 4, gain: 0.4, pan: -0.3 })),
   cue(T.d1.sendIntern, pop({ degree: 7, gain: 0.4, pan: 0.3 })),
-  // A2: the plan unfolds; save; go.
-  cue(T.a2.unfold, whoosh(0.7, { from: 400, to: 2400, peak: 0.5, gain: 0.4 })),
-  cue(T.a2.unfold + 0.15, pluck({ degree: 2, octave: 1, gain: 0.4 })),
+  // A2: the plan opens; save; go.
+  cue(T.a2.review, click()),
+  cue(T.a2.review + 0.03, whoosh(0.5, { from: 400, to: 2400, peak: 0.5, gain: 0.4 })),
+  cue(T.a2.review + 0.15, pluck({ degree: 2, octave: 1, gain: 0.4 })),
   cue(T.a2.save, click()),
   cue(T.a2.save + 0.05, pluck({ degree: 7, octave: 2, gain: 0.35 })),
   cue(T.a2.go, snap({ degree: 0, gain: 0.6 })),
   // C2: the answer was waiting.
   cue(T.c2.sweep, bell({ degree: 4, gain: 0.4 })),
-  // A3: researchers and the racing clock; checks up the scale.
+  // A3: the agents and the racing clock; steps up the scale.
   cue(T.a3.race, whoosh(T.a3.raceEnd - T.a3.race, { from: 300, to: 2400, peak: 0.85, gain: 0.35 })),
   T.a3.steps
     .slice(1)
     .map((at, k) => cue(at, pluck({ degree: [4, 7, 9][k] ?? 0, octave: 2, gain: 0.4 }))),
-  // D2: the HR head's answer; the intern's stays empty.
+  // D2: the HR head's answer; the intern's honest one.
   cue(T.d2.stream, bell({ degree: 7, gain: 0.35, pan: -0.3 })),
-  cue(T.d2.empty + 0.1, thump({ gain: 0.3, pan: 0.3 })),
+  cue(T.d2.empty, pluck({ degree: 2, octave: 1, gain: 0.3, pan: 0.3 })),
   cue(T.d2.streamEnd, pop({ degree: 4, gain: 0.35, pan: -0.3 })),
-  // C3: the source opens; the line is highlighted.
+  // C3: the source's popover; its link to Outlook.
   cue(T.c3.click, click()),
-  cue(T.c3.open, whoosh(0.5, { from: 2000, to: 700, peak: 0.3, gain: 0.35 })),
+  cue(T.c3.open, pop({ degree: 4, gain: 0.35 })),
   cue(T.c3.highlight, tick({ degree: 9, gain: 0.5 })),
-  // A5: the report, and the clock stops.
-  cue(T.a5.open, whoosh(0.55, { from: 500, to: 2200, peak: 0.5, gain: 0.4 })),
-  cue(T.a5.done + 0.05, ding({ degree: 4, gain: 0.4 })),
-  BARS.map((_, k) =>
+  // A5: done; the report opens; its bars; the citation card.
+  cue(T.a5.done, ding({ degree: 4, gain: 0.4 })),
+  cue(T.a5.open, click()),
+  cue(T.a5.open + 0.03, whoosh(0.45, { from: 500, to: 2200, peak: 0.5, gain: 0.4 })),
+  REPORT[1].bars.map((_, k) =>
     cue(T.a5.bars + k * 0.09 + 0.1, pluck({ degree: [0, 2, 4, 7][k] ?? 0, octave: 1, gain: 0.3 })),
   ),
-  // B1: lands in the library; shared with the CFO.
-  cue(T.b1.land + 0.5, slap({ gain: 0.5 })),
+  cue(T.a5.cite, click()),
+  cue(T.a5.cite + 0.05, tick({ degree: 9, gain: 0.5 })),
+  // B1: Reports; share with the CFO.
+  cue(T.b1.land + 0.05, pop({ degree: 2, gain: 0.35 })),
+  cue(T.b1.more, click()),
   cue(T.b1.share, click()),
   cue(T.b1.cfo, click()),
   cue(T.b1.cfo + 0.1, pop({ degree: 7, gain: 0.45 })),
+  cue(T.b1.confirm, click()),
   cue(T.b1.toast + 0.1, ding({ degree: 7, gain: 0.35 })),
-  // D3: the link, and the locked page.
+  // D3: the link, and the page that won't open.
   cue(T.d3.message, pop({ degree: 2, gain: 0.35 })),
   cue(T.d3.click, click()),
   cue(T.d3.page, thump({ gain: 0.45 })),
   cue(T.d3.page + 0.02, pluck({ degree: 0, octave: 0, gain: 0.45 })),
-  // B2: next quarter, refresh, version 2, built on.
-  cue(T.b2.flip, tick({ degree: 4, gain: 0.5 })),
+  // B2: refresh, confirm, version 2; the CFO's answer cites the report.
   cue(T.b2.refresh, click()),
-  cue(T.b2.refresh + 0.05, whoosh(0.55, { from: 600, to: 1800, peak: 0.6, gain: 0.3 })),
-  cue(T.b2.v2, pop({ degree: 9, gain: 0.5 })),
-  cue(T.b2.ask + 0.1, pluck({ degree: 4, octave: 2, gain: 0.4 })),
-  cue(T.b2.ask + 0.5, bell({ degree: 0, gain: 0.45 })),
+  cue(T.b2.confirm, pop({ degree: 2, gain: 0.35 })),
+  cue(T.b2.yes, click()),
+  cue(T.b2.v2, whoosh(0.45, { from: 600, to: 1800, peak: 0.6, gain: 0.3 })),
+  cue(T.b2.v2 + 0.05, pop({ degree: 9, gain: 0.5 })),
+  cue(T.b2.menu, click()),
+  cue(T.b2.cfo, whoosh(0.45, { from: 900, to: 300, peak: 0.4, gain: 0.25 })),
+  cue(T.b2.cite, click()),
+  cue(T.b2.cite + 0.05, pluck({ degree: 4, octave: 2, gain: 0.4 })),
+  cue(T.b2.cite + 0.45, bell({ degree: 0, gain: 0.45 })),
   // The camera moving between desks.
   MOVES.map((m) => cue(m.at, whoosh(m.duration, { from: 260, to: 1300, peak: 0.5, gain: 0.3 }))),
 ];
@@ -2883,4 +3404,4 @@ export function cuesBetween(from: number, to: number, at: number): SoundEvent[] 
 export const OFF_CAMERA = T.c1b;
 
 /** Every font the screens use. */
-export const APPS_FONTS = UI_FONTS;
+export const APPS_FONTS = [...UI_FONTS, ...PRODUCT_FONTS];

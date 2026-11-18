@@ -1,5 +1,6 @@
 export { coworkTheme, type CoworkTheme } from './cowork.js';
 export { defaultTheme, type DefaultTheme } from './default.js';
+export { gridColors, gridRadii } from './grid.js';
 export { softCalmColors, softCalmRadii, softCalmType } from './softcalm.js';
 export {
   defineTheme,

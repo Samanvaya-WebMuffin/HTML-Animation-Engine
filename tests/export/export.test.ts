@@ -142,6 +142,7 @@ describe('4K MP4 export', () => {
 describe('every composition type exports deterministically', () => {
   it.each([
     ['candle-flame', 'WebGL shader'],
+    ['chrome-ball', 'Three.js'],
     ['remotion-title', 'Remotion / React'],
     ['fly-through', 'Canvas 3D'],
     ['counter-roll', 'DOM text'],

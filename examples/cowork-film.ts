@@ -4,20 +4,24 @@
  * group's choreography in turn. Scenes are windows of this timeline
  * (`defineFilmScene`), so every cut is the same frame on both sides.
  *
- * Ten scenes, as in the script. The first (the pain point, `cowork-pain`)
+ * Seven scenes. The first (the pain point, `cowork-pain`)
  * opens on the line at the centre above the pinboard, moves down to the
  * board as it fills, floods it into a wall of paper (`cowork-wall.ts`,
  * drawn over this timeline), breaks the wall, and lands on the board with
  * its gaps. Film time is board time.
  */
 import {
+  baselineOffset,
   clamp,
   createCanvasMeasurer,
+  defineComposition,
   groupNode,
+  layoutText,
   lerp,
   linearGradient,
   mixColors,
   progress,
+  radialGradient,
   rect,
   shapeNode,
   withAlpha,
@@ -26,17 +30,18 @@ import {
 } from '@html-animation-engine/core';
 import {
   aurora,
+  createRenderer,
   defineSceneComposition,
   edgeFade,
   flightPath,
   gridBackdrop,
   kineticText,
-  lightSweep,
   motionBlur,
   screenVelocity,
   viewTransform,
   type BoardView,
   type KineticText,
+  type Renderer,
 } from '@html-animation-engine/renderers';
 import {
   CRITERIA,
@@ -47,8 +52,17 @@ import {
   LOST,
   LOST_LANDINGS,
   OPENING,
-  WEEK,
-  tileSpot,
+  PITCH,
+  revealSpot,
+  MEET_AT,
+  MEET_FONTS,
+  REVEAL,
+  PILE_SCALE,
+  PILE_SPOTS,
+  RING,
+  TILE_SPOTS,
+  WORD_SCALE,
+  coworkWord,
   BOARD_FONTS,
   auroraPools,
   createBoard,
@@ -60,65 +74,39 @@ import {
   type GroupId,
 } from './cowork-board.js';
 import {
-  APPS_FONTS,
-  CAPTIONS,
-  DESK,
-  DOCK_ICON,
-  SCENES as APPS_SCENES,
-  WIN,
-  MID,
-  OFF_CAMERA,
-  WIDE,
-  createApps,
-  cuesBetween,
-  deskFocus,
-  shotAt,
-  stationA,
-  stationC,
-  stationD,
-  windowOpening,
-  HINT_SCALE,
-  hintNodes,
-  stretch,
-  type Apps,
-  type AppsScene,
-  type ShotView,
-} from './cowork-apps.js';
+  BOX as ASK_BOX,
+  SCENE_FONTS,
+  ANSWERS_SHOTS,
+  WORK_SHOTS,
+  answersArt,
+  answersCues,
+  askArt,
+  askCues,
+  workArt,
+  workCues,
+  type SceneKit,
+} from './cowork-scenes.js';
 import { SFX_DIV, beats, onGrid } from './cowork-beat.js';
-import { F, UI, avatar, createUi, label, mark } from './cowork-ui.js';
+import { F, UI, UI_FONTS, avatar, createUi, label, type Ui } from './cowork-ui.js';
+import { PRODUCT_FONTS } from './cowork-product.js';
 import { WALL_CUES } from './cowork-wall.js';
-import {
-  C,
-  LOOK_FONTS,
-  HEAD,
-  R,
-  face,
-  glassPanel,
-  headlineCard,
-  makeHeadline,
-  type HeadSpec,
-  type Headline,
-  lighting,
-  look,
-  markTile,
-  paperCard,
-  puck,
-} from './cowork-look.js';
+import { C, LOOK_FONTS, R, face, lighting, look } from './cowork-look.js';
+import { PILES, pile } from './cowork-piles.js';
+import { bounce, createBallRig, type BallPose, type Drop } from './cowork-ball.js';
+import { createThreeLayer } from '@html-animation-engine/adapters/three';
 import { phoneDefaults } from './index.js';
 import {
   bell,
   changeTimes,
   cue,
-  ding,
   strings,
   pad,
+  thump,
   pluck,
   pop,
   seeded,
   slap,
-  snap,
   soundtrack,
-  thump,
   tick,
   whoosh,
   type Cues,
@@ -148,138 +136,93 @@ export const FILM = {
   criteria: at(20),
   pullBack: { start: at(21), duration: beats(4), zoom: 1.06 },
   toIntro: flight(29),
-  /** The tile lands. */
+  /** "Cowork", carried from the circle, lands at the centre: "Meet Cowork". */
   intro: at(31),
+  /** The name melts into the chrome ball, which bounces, then carries the camera to the ask. */
   introEnd: at(38),
-  /** Down to the product row. */
+  /** Down to the product row, then group to group: each lands a beat into its scene. */
   toAsk: flight(37),
-  /**
-   * The product scenes replay the apps timeline (`cowork-apps.ts`) from
-   * here (on a beat, so the apps' sixteenths are the film's), holding it
-   * for three beats under each scene's intro card (`appsTime`): so each
-   * product flight below comes three beats later per card before it.
-   */
-  apps: at(37),
-  askToWork: flight(67),
-  workToAnswers: flight(97),
-  answersToLibrary: flight(127),
-  libraryEnd: at(158),
-  /** Down to the payoff row: the montage, the week, then along the thread to Cowork. */
-  toProof: flight(157),
-  proof: at(159),
-  toWeek: flight(166),
-  week: at(167),
-  toOutro: flight(174),
-  /** A sixteenth before the camera lands, so the lockup's clap falls on the beat. */
-  outro: at(175.75),
-  end: at(183.5),
+  ask: at(39),
+  askToWork: flight(53),
+  work: at(55),
+  workToAnswers: flight(74),
+  answers: at(76),
+  /** Down the thread to Cowork and the call to action. */
+  toOutro: flight(89),
+  /** "Stop waiting for answers. Just ask Cowork.", a sixteenth before the camera lands. */
+  pitch: at(90.75),
+  /** The lockup, after the pitch (`PITCH.lead`, 5.5 beats: 3 s). */
+  outro: at(90.75 + 5.5),
+  end: at(104),
 } as const;
 
 /**
- * Each product scene opens on its intro card, the cover of the screen it
- * starts on: seen as the camera flies in (the ask's opens out of the Cowork
- * tile with the rep's window), read while the apps timeline holds at `at`
- * (apps time, a settled moment), then lifted off the window like a blind.
+ * Each product scene opens on its intro card: seen as the camera flies in,
+ * held for `CARD_HOLD` after it lands, then lifted off like a blind to show
+ * the scene, whose content time starts as the card has gone.
  */
 interface IntroCard {
-  readonly id: AppsScene;
-  /** Apps time the timeline holds at. */
-  readonly at: number;
-  /** The screen it covers (0 = the rep, 1 = the COO, 2 = HR head and intern). */
-  readonly desk: 0 | 1 | 2;
+  readonly id: ProductScene;
   readonly eyebrow: string;
   readonly title: string;
   readonly sub: string;
   readonly accent: string;
   readonly people: readonly (readonly [string, string, string])[];
 }
+type ProductScene = 'ask' | 'work' | 'answers';
 const INTRO_CARDS: readonly IntroCard[] = [
   {
     id: 'ask',
-    at: stretch(beats(2)),
-    desk: 0,
-    eyebrow: '01 · the ask',
+    eyebrow: 'the ask',
     title: 'Ask it *anything.*',
     sub: 'One company, one Cowork.',
     accent: C.text.accent,
-    people: [
-      ['SR', 'Sales rep', C.avatar.rep],
-      ['CO', 'COO', C.avatar.coo],
-      ['HR', 'HR head', C.avatar.hr],
-      ['IN', 'Intern', C.avatar.intern],
-    ],
+    people: [],
   },
   {
     id: 'work',
-    at: stretch(beats(17)),
-    desk: 1,
-    eyebrow: '02 · the work',
+    eyebrow: 'the work',
     title: 'Then it gets to *work.*',
     sub: 'You stay in charge.',
     accent: C.text.accent,
-    people: [['CO', 'COO', C.avatar.coo]],
+    people: [],
   },
   {
     id: 'answers',
-    at: stretch(beats(31.25)),
-    desk: 2,
-    eyebrow: '03 · the answers',
+    eyebrow: 'the answers',
     title: 'Answers you can *trust.*',
     sub: 'Right person, right source.',
     accent: C.source.fg,
-    people: [
-      ['HR', 'HR head', C.avatar.hr],
-      ['IN', 'Intern', C.avatar.intern],
-      ['SR', 'Sales rep', C.avatar.rep],
-    ],
-  },
-  {
-    id: 'library',
-    at: stretch(beats(46)),
-    desk: 1,
-    eyebrow: '04 · the library',
-    title: 'Work that *stays.*',
-    sub: 'Kept for the whole company.',
-    accent: C.outcome.fg,
-    people: [
-      ['CO', 'COO', C.avatar.coo],
-      ['CF', 'CFO', C.avatar.cfo],
-      ['IN', 'Intern', C.avatar.intern],
-    ],
+    people: [],
   },
 ];
-/** How long the apps timeline holds under each card, and the lift at its end. */
-const HOLD = beats(3);
-const LIFT = beats(0.75);
-
-/** Apps time at film time `t`: held under each intro card. */
-function appsTime(t: number): number {
-  let u = t - FILM.apps;
-  for (const c of INTRO_CARDS) {
-    if (u <= c.at) break;
-    if (u < c.at + HOLD) return c.at;
-    u -= HOLD;
-  }
-  return u;
-}
-/** Film time of apps time `tau` (a moment at a hold plays when the card has lifted). */
-function filmOfApps(tau: number): number {
-  return FILM.apps + tau + HOLD * INTRO_CARDS.filter((c) => tau >= c.at).length;
-}
-/** When the card's timeline hold ends (the card is fully lifted). */
-const cardResume = (c: IntroCard) => filmOfApps(c.at);
+/**
+ * How long each card holds after the camera lands, and the lift at its end
+ * (slow, so it reads as the card being drawn away, not snatched). The
+ * tagline's marker sweeps in as the camera lands, a beat before the lift.
+ */
+const CARD_HOLD = beats(3);
+const LIFT = beats(1.25);
+const MARKER = { from: -CARD_HOLD - beats(0.25), duration: beats(1) } as const;
+/** When each product scene's camera lands. */
+const LANDS: Record<ProductScene, number> = {
+  ask: FILM.ask,
+  work: FILM.work,
+  answers: FILM.answers,
+};
+/** A product scene's content time at film time `t` (0 as its card has lifted). */
+const contentTime = (id: ProductScene, t: number) => t - LANDS[id] - CARD_HOLD;
+/** Film time of a product scene's content time `c`. */
+const filmOfContent = (id: ProductScene) => (c: number) => LANDS[id] + CARD_HOLD + c;
 
 /** The scenes, as windows of the timeline; every cut on a beat. */
 export const FILM_SCENES = {
   pain: { start: 0, end: at(20), title: 'The pain point' },
   criteria: { start: at(20), end: at(30), title: 'What AI should do' },
   intro: { start: at(30), end: FILM.introEnd, title: 'Introducing Cowork' },
-  ask: { start: FILM.introEnd, end: at(68), title: 'The ask' },
-  work: { start: at(68), end: at(98), title: 'The work' },
-  answers: { start: at(98), end: at(128), title: 'The answers' },
-  library: { start: at(128), end: FILM.libraryEnd, title: 'The library' },
-  proof: { start: FILM.libraryEnd, end: at(167), title: 'In use' },
-  week: { start: at(167), end: FILM.toOutro.start, title: 'A week, condensed' },
+  ask: { start: FILM.introEnd, end: at(54), title: 'The ask' },
+  work: { start: at(54), end: at(75), title: 'The work' },
+  answers: { start: at(75), end: FILM.toOutro.start, title: 'The answers' },
   outro: { start: FILM.toOutro.start, end: FILM.end, title: 'Join the waitlist' },
 } as const;
 export type FilmScene = keyof typeof FILM_SCENES;
@@ -289,7 +232,6 @@ const local: Partial<Record<GroupId, (t: number) => number>> = {
   lost: (t) => t,
   criteria: (t) => t - FILM.criteria,
   intro: (t) => t - FILM.intro,
-  week: (t) => t - FILM.week,
   outro: (t) => t - FILM.outro,
 };
 
@@ -354,7 +296,12 @@ export function camera(t: number): BoardView {
       );
     }
     const to = groupView(leg.id);
-    previous = (u: number) => drift(to, u, a.start + a.duration, 8, 0.02);
+    previous =
+      leg.id === 'work'
+        ? (u: number) => shotCamera('work', WORK_SHOTS, u)
+        : leg.id === 'answers'
+          ? (u: number) => shotCamera('answers', ANSWERS_SHOTS, u)
+          : (u: number) => drift(to, u, a.start + a.duration, 8, 0.02);
   }
   return previous(t);
 }
@@ -364,11 +311,29 @@ const LEGS: readonly { id: GroupId; arrive: { start: number; duration: number } 
   { id: 'ask', arrive: FILM.toAsk },
   { id: 'work', arrive: FILM.askToWork },
   { id: 'answers', arrive: FILM.workToAnswers },
-  { id: 'library', arrive: FILM.answersToLibrary },
-  { id: 'proof', arrive: FILM.toProof },
-  { id: 'week', arrive: FILM.toWeek },
   { id: 'outro', arrive: FILM.toOutro },
 ];
+
+/** On a product group: close on each step in turn, then the whole (its `*_SHOTS` table). */
+function shotCamera(
+  id: ProductScene,
+  shots: readonly { at: number; duration: number; view: { x: number; y: number; zoom: number } }[],
+  t: number,
+): BoardView {
+  const g = group(id);
+  const c = contentTime(id, t);
+  let v = { x: FW / 2, y: FH / 2, zoom: 1 };
+  for (const shot of shots) {
+    const p = progress(c, shot.at, Math.max(shot.duration, 1e-3), easing.camera);
+    if (p <= 0) break;
+    v = {
+      x: lerp(v.x, shot.view.x, p),
+      y: lerp(v.y, shot.view.y, p),
+      zoom: Math.exp(lerp(Math.log(v.zoom), Math.log(shot.view.zoom), p)),
+    };
+  }
+  return { x: g.x + v.x, y: g.y + v.y, zoom: v.zoom };
+}
 
 /** Moving between groups (motion blur applies), not diving or settling. */
 function inFlight(t: number): boolean {
@@ -418,26 +383,202 @@ const FLIGHTS = [
   ...LEGS.map((l) => [l.arrive.start, l.arrive.duration] as const),
 ] as const;
 
-/** The hub, carried from the network to the intro, becoming the Cowork tile. */
+/**
+ * What the camera carries between groups: on the way from the opening to the
+ * circle, the five piles, each tucking its pages in and rounding into its
+ * tile as it travels; on the way to the reveal, "Cowork" from the circle's
+ * centre, growing into the reveal's name (the same type, only scaled).
+ */
 function carrier(board: Board, t: number): SceneNode[] {
-  if (t < FILM.toIntro.start || t >= FILM.intro) return [];
-  const cg = group('criteria');
+  const nodes: SceneNode[] = [];
+  const pc = FILM.toCriteria;
+  if (t >= pc.start && t < pc.start + pc.duration) {
+    const lg = group('lost');
+    const cg = group('criteria');
+    const s = progress(t, pc.start, pc.duration, easing.camera);
+    const m = progress(t, pc.start + 0.08, pc.duration - 0.16, easing.camera);
+    for (const { kind } of PILES) {
+      const a = PILE_SPOTS[kind];
+      const b = TILE_SPOTS[kind];
+      const x = lerp(lg.x + a.x, cg.x + b.x, s);
+      const y = lerp(lg.y + a.y, cg.y + b.y, s) - 60 * Math.sin(Math.PI * s);
+      nodes.push(pile(`carry-${kind}`, kind, x, y, board.paper, { scale: PILE_SCALE, morph: m }));
+    }
+  }
+  const wc = FILM.toIntro;
+  if (t >= wc.start && t < FILM.intro) {
+    const cg = group('criteria');
+    const ig = group('intro');
+    const spot = revealSpot();
+    const s = progress(t, wc.start, wc.duration, easing.camera);
+    const x = lerp(cg.x + RING.x, ig.x + spot.x, s);
+    const y = lerp(cg.y + RING.y, ig.y + spot.y, s) - 140 * Math.sin(Math.PI * s);
+    const scale = Math.exp(lerp(Math.log(WORD_SCALE), 0, s));
+    nodes.push(coworkWord(board, 'carry-word', x, y, scale));
+  }
+  return nodes;
+}
+
+// ---------------------------------------------------------------------------
+// The chrome ball (drawn by the Three.js layer in the intro and the ask)
+// ---------------------------------------------------------------------------
+
+/** The ball's size and floor (the intro group's px) and how fast the studio turns round it. */
+const BALL = { r: 66, floor: 830, spin: 70 } as const;
+/**
+ * The ball's moments in film time: the reveal's (`REVEAL`, from the name's
+ * landing), then the flight to the ask (the ball at the frame's centre,
+ * stretched), and its spreading out into the ask's card as the camera lands.
+ */
+const BALL_T = {
+  melt: FILM.intro + REVEAL.melt,
+  formed: FILM.intro + REVEAL.formed,
+  spread: { start: FILM.ask - 0.15, duration: 0.4 },
+  matte: { start: FILM.ask - 0.05, duration: 0.4 },
+  handover: FILM.ask + 0.25,
+  gone: FILM.ask + 0.45,
+  /** The card's words start arriving once it is paper. */
+  words: FILM.ask + 0.5,
+} as const;
+
+/** When the ball hits the floor (each impact, read off the motion itself). */
+const BALL_IMPACTS: readonly number[] = (() => {
+  const times: number[] = [];
+  const drop = BALL.floor - BALL.r - MEET_AT.y;
+  let prev = Infinity;
+  for (let t = BALL_T.formed; t < FILM.toAsk.start && times.length < 3; t += 1 / 480) {
+    const lift = bounce(t - BALL_T.formed, drop).lift;
+    if (lift === 0 && prev > 0) times.push(t);
+    prev = lift;
+  }
+  return times;
+})();
+
+/** A board point on screen under `view`. */
+const onScreen = (view: BoardView, x: number, y: number) => ({
+  x: (x - view.x) * view.zoom + FW / 2,
+  y: (y - view.y) * view.zoom + FH / 2,
+});
+
+/** Each letter's centre in the reveal's name (from the name's centre), for the drops. */
+let letters: readonly { x: number; y: number }[] | undefined;
+function nameLetters(state: FilmState): readonly { x: number; y: number }[] {
+  if (letters) return letters;
+  const font = MEET_FONTS.name;
+  const m = state.kit.look.measurer;
+  const text = 'Cowork';
+  const width = m.measure(text, font);
+  // As the chrome plates place them (`cowork-ball.ts`): mid x-height on each letter.
+  const lh = font.size * (font.lineHeight ?? 1.2);
+  const metrics = m.metrics?.(font) ?? { ascent: font.size * 0.95, descent: font.size * 0.25 };
+  const y = baselineOffset(font, metrics) - font.size * 0.36 - lh / 2;
+  letters = [...text].map((_, i) => {
+    const a = m.measure(text.slice(0, i), font);
+    const b = m.measure(text.slice(0, i + 1), font);
+    return { x: (a + b) / 2 - width / 2, y };
+  });
+  return letters;
+}
+
+export interface BallFrame {
+  readonly ball: BallPose | null;
+}
+
+/**
+ * The Three.js layer at film time `t`: the name in purple chrome from its
+ * landing; then its letters melting into drops that run together into the
+ * ball; the ball dropping onto the floor and ringing like jelly; through the
+ * flight to the ask, the ball at the frame's centre, stretched along the
+ * motion; then spreading out into the ask's card, settling to its paper.
+ */
+export function ballFrame(state: FilmState, t: number): BallFrame {
+  const lt = t - FILM.intro;
+  if (lt < 0 || t >= BALL_T.gone) return { ball: null };
+  const view = camera(t);
   const ig = group('intro');
-  const from = { x: cg.x + FW / 2, y: cg.y + 780 };
-  const spot = tileSpot(board);
-  const to = { x: ig.x + spot.x, y: ig.y + spot.y };
-  const s = progress(t, FILM.toIntro.start, FILM.toIntro.duration, easing.camera);
-  const x = lerp(from.x, to.x, s);
-  const y = lerp(from.y, to.y, s) - 140 * Math.sin(Math.PI * s);
-  const m = progress(t, FILM.toIntro.start + 0.3, 0.75, easing.camera);
-  const size = lerp(128, spot.size, m);
-  return [
-    groupNode('carry-puck-o', [puck('carry-puck', x, y, 64, 'layers', 'brand')], {
-      transform: { x, y, scale: size / 128, originX: x, originY: y },
-      opacity: 1 - m,
-    }),
-    groupNode('carry-tile-o', [markTile('carry-tile', x, y, size)], { opacity: m }),
-  ];
+  const spin = BALL.spin * lt;
+  const centre = onScreen(view, ig.x + FW / 2, ig.y + MEET_AT.y);
+  if (t < BALL_T.melt) return { ball: null };
+  if (t < BALL_T.formed) {
+    // The letters melt into drops, which run together into one.
+    const grow = progress(t, BALL_T.melt, 0.35, easing.enter);
+    const m = progress(t, BALL_T.melt + 0.12, BALL_T.formed - BALL_T.melt - 0.12, easing.camera);
+    const ls = nameLetters(state);
+    const rd = BALL.r / Math.sqrt(ls.length);
+    const drops: Drop[] = ls.map((l) => ({
+      x: lerp(centre.x + l.x * view.zoom, centre.x, m),
+      y: lerp(centre.y + l.y * view.zoom, centre.y, m),
+      r: rd * grow * view.zoom * (1 + 0.15 * Math.sin(Math.PI * m)),
+    }));
+    return { ball: { x: centre.x, y: centre.y, r: BALL.r * view.zoom, drops, spin } };
+  }
+  // Whole: it drops onto the floor and rings, then rides the flight at the frame's centre.
+  const b = bounce(t - BALL_T.formed, BALL.floor - BALL.r - MEET_AT.y);
+  const rest = onScreen(view, ig.x + FW / 2, ig.y + BALL.floor - BALL.r - b.lift);
+  const fl = FILM.toAsk;
+  const toCentre = progress(t, fl.start - 0.15, 0.45, easing.camera);
+  // Spreading, it settles into the input box's place.
+  const ag = group('ask');
+  const box = onScreen(view, ag.x + ASK_BOX.cx, ag.y + ASK_BOX.cy);
+  const spread = progress(t, BALL_T.spread.start, BALL_T.spread.duration, easing.camera);
+  const vel = screenVelocity(camera, t);
+  const speed = t > fl.start && t < fl.start + fl.duration ? Math.hypot(vel.x, vel.y) : 0;
+  return {
+    ball: {
+      x: lerp(lerp(rest.x, FW / 2, toCentre), box.x, spread),
+      y: lerp(lerp(rest.y, FH / 2, toCentre), box.y, spread),
+      r: lerp(BALL.r * view.zoom, BALL.r, toCentre),
+      squash: b.squash,
+      wobble3: b.wobble3,
+      stretch: 1 + 0.6 * clamp(speed / 2600) * (1 - progress(t, BALL_T.spread.start - 0.1, 0.2)),
+      angle: (Math.atan2(vel.y, vel.x) * 180) / Math.PI,
+      spread,
+      matte: progress(t, BALL_T.matte.start, BALL_T.matte.duration, easing.camera),
+      card: { w: ASK_BOX.w * view.zoom, h: ASK_BOX.h * view.zoom },
+      opacity: 1 - progress(t, BALL_T.handover, BALL_T.gone - BALL_T.handover, easing.camera),
+      spin,
+    },
+  };
+}
+
+/** Beneath the layer, on screen: the ball's violet light, and its shadow on the floor while it bounces. */
+function ballUnder(state: FilmState, t: number): SceneNode[] {
+  const { ball } = ballFrame(state, t);
+  if (!ball) return [];
+  const nodes: SceneNode[] = [];
+  const glow = ball.drops ? progress(t, BALL_T.melt, 0.5, easing.enter) : 1 - (ball.spread ?? 0);
+  const halo = ball.r * 3;
+  if (glow > 0)
+    nodes.push(
+      shapeNode('ball-halo', {
+        geometry: rect(ball.x, ball.y, 2 * halo, 2 * halo, halo),
+        fill: radialGradient(ball.x, ball.y, halo, [
+          withAlpha(C.meet.violet, 0.3 * glow),
+          withAlpha(C.meet.lilac, 0.1 * glow),
+          withAlpha(C.meet.lilac, 0),
+        ]),
+      }),
+    );
+  if (!ball.drops && t < FILM.toAsk.start) {
+    const view = camera(t);
+    const ig = group('intro');
+    const floor = onScreen(view, ig.x + FW / 2, ig.y + BALL.floor);
+    const lift = clamp((floor.y - (ball.y + ball.r)) / 220);
+    nodes.push(
+      shapeNode('ball-shadow', {
+        geometry: rect(
+          ball.x,
+          floor.y - 2,
+          ball.r * 1.8 * (1 - 0.35 * lift),
+          18 * (1 - 0.3 * lift),
+          9,
+        ),
+        fill: withAlpha(lighting.shadow, 0.3 * (1 - 0.6 * lift)),
+        blur: 14 + 18 * lift,
+      }),
+    );
+  }
+  return nodes;
 }
 
 // ---------------------------------------------------------------------------
@@ -446,109 +587,17 @@ function carrier(board: Board, t: number): SceneNode[] {
 
 export interface FilmState {
   readonly board: Board;
-  readonly apps: Apps;
-  /** The montage's card lines. */
-  readonly heads: Readonly<Record<string, KineticText>>;
-  /** The product scenes' headline cards, pinned to their groups. */
-  readonly cards: Readonly<Record<string, Headline>>;
+  /** The product scenes' look and measurer. */
+  readonly kit: SceneKit;
   /** Each product scene's intro card: its title and subtext. */
   readonly intros: Readonly<Record<string, { title: KineticText; sub: KineticText }>>;
 }
 
-const isApps = (id: GroupId): id is AppsScene => id in APPS_SCENES;
-/** Hints stay below this line of the frame (clear of the headline cards). */
-const HINT_TOP = 300;
-/** Where the deck's screen in focus sits in its group, and its scale when wide. */
-const DECK_Y = 790;
-const DECK_SCALE = 0.86;
-
-/**
- * The product scenes' headlines, each on its card: a Sora title, a short
- * Newsreader line under it, accents coloured by meaning.
- */
-const APP_HEADS: Readonly<Record<string, HeadSpec>> = {
-  less: { title: '*Less* searching.', sub: 'One question, every source.', accent: C.text.accent },
-  bigger: { title: '*Bigger* questions.', sub: 'Asked in plain words.', accent: C.text.accent },
-  same: {
-    title: 'Same *question.*',
-    sub: 'Two people, two levels of access.',
-    accent: C.text.accent,
-  },
-  plans: {
-    title: 'It *plans* first.',
-    sub: 'You check it before it starts.',
-    accent: C.text.accent,
-  },
-  seconds: { title: 'Answered in *seconds.*', sub: 'Every source cited.', accent: C.time.fg },
-  parallel: {
-    title: 'Researchers, in *parallel.*',
-    sub: 'Every step _checked._',
-    accent: C.text.accent,
-    accent2: C.outcome.fg,
-  },
-  allowed: { title: 'Only what you’re *allowed* to see.', accent: C.text.accent, breaks: [3] },
-  source: {
-    title: 'Straight to the *source.*',
-    sub: 'The email it came from.',
-    accent: C.source.fg,
-  },
-  picture: {
-    title: 'The *bigger* *picture.*',
-    sub: 'Before _lunch._',
-    accent: C.text.accent,
-    accent2: C.time.fg,
-  },
-  saved: { title: 'Saved. Shared. Never _lost._', accent2: C.outcome.fg },
-  protected: {
-    title: 'Still *protected.*',
-    sub: 'A shared link opens nothing extra.',
-    accent: C.text.accent,
-  },
-  building: {
-    title: 'Knowledge that keeps *building.*',
-    sub: 'Refreshed next quarter, built on by others.',
-    accent: C.outcome.fg,
-    breaks: [2],
-  },
-};
+const isProduct = (id: GroupId): id is ProductScene => id in LANDS;
 
 /** Everything the film needs, made once. */
 export async function createFilmState(): Promise<FilmState> {
   const measurer = createCanvasMeasurer();
-  const heads: Record<string, KineticText> = {};
-  const cards: Record<string, Headline> = {};
-  for (const [id, spec] of Object.entries(APP_HEADS)) {
-    cards[id] = makeHeadline(`apphead-${id}`, spec, measurer);
-  }
-  const card = face('headline', 34, { letterSpacing: -0.6 });
-  heads['proof1'] = kineticText({
-    id: 'proof1',
-    text: 'Sparing *hours* of searching,',
-    font: card,
-    measurer,
-    x: 0,
-    y: 0,
-    align: 'center',
-    color: C.text.primary,
-    accent: C.time.fg,
-    at: 0,
-    ease: easing.enter,
-  });
-  heads['proof2'] = kineticText({
-    id: 'proof2',
-    text: 'so teams can do the work that *matters.*',
-    font: card,
-    measurer,
-    x: 0,
-    y: 0,
-    align: 'center',
-    maxWidth: 560,
-    breaks: [4],
-    color: C.text.primary,
-    accent: C.text.accent,
-    at: 0,
-    ease: easing.enter,
-  });
   const intros: Record<string, { title: KineticText; sub: KineticText }> = {};
   for (const c of INTRO_CARDS) {
     const common = { measurer, x: 0, y: 0, at: 0, ease: easing.enter } as const;
@@ -572,19 +621,17 @@ export async function createFilmState(): Promise<FilmState> {
       }),
     };
   }
-  return {
-    board: await createBoard(measurer),
-    apps: createApps(createUi(measurer)),
-    heads,
-    cards,
-    intros,
-  };
+  const board = await createBoard(measurer);
+  return { board, kit: { look: board.look, ui: createUi(measurer) }, intros };
 }
+
+/** The intro card's size (it covers the scene as the old app windows did). */
+const CARD_WIN = { w: 640, h: 860 } as const;
 
 /** The intro card's type and layout (window-local px). */
 const CARD = {
   pad: 56,
-  inner: WIN.w - 112,
+  inner: CARD_WIN.w - 112,
   eyebrow: face('mono', 17, { letterSpacing: 0.3 }),
   title: face('headline', 58, { letterSpacing: -1.6, lineHeight: 1.08 }),
   sub: face('subtext', 34, { lineHeight: 1.25 }),
@@ -595,7 +642,7 @@ const SETTLED_TEXT = 1e4;
 
 /**
  * An intro card over the window it covers (window-local, top left 0, 0):
- * Cloud, the Cowork mark, a lowercase mono eyebrow, the Sora title, the
+ * Cloud, the Cowork name, a lowercase mono eyebrow, the Sora title, the
  * Newsreader subtext, and who the scene follows. `lift` 0–1 rolls it up off
  * the window from the bottom; for the ask, `shape` is the window's outline
  * as it opens out of the tile, and `content` how far its content shows.
@@ -606,32 +653,44 @@ function introCard(
   lift: number,
   shape?: { cx: number; cy: number; w: number; h: number; r: number },
   content = 1,
+  marker = 1,
+  /** Seconds since its text began arriving (letters into focus); settled by default. */
+  since = SETTLED_TEXT,
 ): SceneNode | null {
   const text = state.intros[card.id];
   if (!text || lift >= 1) return null;
-  const ui = state.apps.ui;
+  const ui = state.kit.ui;
   const id = `ic-${card.id}`;
   // Lifting, the card slides up off the window, cut at the window's top edge.
-  const d = WIN.h * lift;
+  const d = CARD_WIN.h * lift;
   const outline = shape
     ? rect(shape.cx, shape.cy, shape.w, shape.h, shape.r)
-    : rect(WIN.w / 2, WIN.h / 2 - d, WIN.w, WIN.h, R.card);
-  const frame = shape ? outline : rect(WIN.w / 2, WIN.h / 2, WIN.w, WIN.h, R.card);
+    : rect(CARD_WIN.w / 2, CARD_WIN.h / 2 - d, CARD_WIN.w, CARD_WIN.h, R.card);
+  const frame = shape
+    ? outline
+    : rect(CARD_WIN.w / 2, CARD_WIN.h / 2, CARD_WIN.w, CARD_WIN.h, R.card);
   const { pad } = CARD;
   const titleY = CARD.top + 40;
   const subY = titleY + text.title.height + 18;
   const kids: SceneNode[] = [
-    mark(`${id}-mark`, pad + 13, 64, 26),
-    label(`${id}-name`, 'Cowork', pad + 36, 49, F.title, C.text.primary),
-    label(`${id}-eyebrow`, card.eyebrow, pad, CARD.top, CARD.eyebrow, C.text.accent),
-    groupNode(`${id}-title`, [text.title(SETTLED_TEXT, 0)], {
+    groupNode(
+      `${id}-labels`,
+      [
+        label(`${id}-name`, 'Cowork', pad, 49, F.title, C.text.primary),
+        label(`${id}-eyebrow`, card.eyebrow, pad, CARD.top, CARD.eyebrow, C.text.accent),
+      ],
+      since < SETTLED_TEXT ? { opacity: clamp(since / 0.35) } : {},
+    ),
+    groupNode(`${id}-title`, [text.title(since, 0)], {
       transform: { x: pad, y: titleY },
     }),
-    groupNode(`${id}-sub`, [text.sub(SETTLED_TEXT, 0)], { transform: { x: pad, y: subY } }),
+    // The tagline's highlighter: light violet, swept on line by line, behind the words.
+    ...markerSweep(ui, id, card.sub, pad, subY, marker),
+    groupNode(`${id}-sub`, [text.sub(since - 0.25, 0)], { transform: { x: pad, y: subY } }),
   ];
   // Who the scene follows: monogram pills along the bottom.
   let x = pad;
-  const y = WIN.h - 100;
+  const y = CARD_WIN.h - 100;
   card.people.forEach(([initials, role, color], k) => {
     const w = Math.round(ui.measure(role, F.role) + 58);
     kids.push(
@@ -650,7 +709,7 @@ function introCard(
     [
       shapeNode(`${id}-sheet`, {
         geometry: outline,
-        fill: linearGradient(0, -d, 0, WIN.h - d, [
+        fill: linearGradient(0, -d, 0, CARD_WIN.h - d, [
           C.surface.paper,
           mixColors(C.surface.paper, C.brand.tint, 0.6),
         ]),
@@ -674,306 +733,122 @@ function introCard(
   );
 }
 
-/** A copy of a node tree with every id prefixed (so the same screens can appear in two groups at once). */
-function prefixed(node: SceneNode, prefix: string): SceneNode {
-  return node.type === 'group'
-    ? { ...node, id: prefix + node.id, children: node.children.map((c) => prefixed(c, prefix)) }
-    : { ...node, id: prefix + node.id };
+/** A highlighter swept behind `text` (laid out as the card's subtext) at `p` (0–1), line by line. */
+function markerSweep(
+  ui: Ui,
+  id: string,
+  text: string,
+  x: number,
+  y: number,
+  p: number,
+): SceneNode[] {
+  if (p <= 0) return [];
+  const layout = layoutText(text.replace(/[*_]/g, ''), CARD.sub, {
+    measurer: ui.measurer,
+    maxWidth: CARD.inner,
+  });
+  const total = layout.lines.reduce((sum, l) => sum + l.width + 16, 0);
+  let used = 0;
+  const lh = layout.lineHeight;
+  return layout.lines.flatMap((line, k) => {
+    const w = line.width + 16;
+    const share = clamp((p * total - used) / w);
+    used += w;
+    if (share <= 0) return [];
+    const mw = w * share;
+    return [
+      shapeNode(`${id}-marker${k}`, {
+        geometry: rect(x + line.x - 8 + mw / 2, y + line.y + lh * 0.58, mw, lh * 0.66, 8),
+        fill: withAlpha(C.brand.soft, 0.85),
+      }),
+    ];
+  });
 }
 
 /**
- * A product scene's group: the rep's, the COO's, and the HR head and
- * intern's screens as a deck. The screen being used is forward and sharp;
- * the others sit softly behind it, and focus pulls between them as the
- * story moves from one person to the next. The headline is pinned above.
+ * A product scene's group: its own content (`cowork-scenes.ts`) under its
+ * intro card, which covers it while the camera flies in and for
+ * `CARD_HOLD` after, then lifts off.
  */
-function deck(state: FilmState, id: AppsScene, t: number): SceneNode[] {
+function productScene(state: FilmState, id: ProductScene, t: number): SceneNode[] {
   const g = group(id);
-  const win = APPS_SCENES[id];
-  const tau = clamp(appsTime(t), Math.max(win.start, 0.5), win.end);
-  const card = INTRO_CARDS.find((c) => c.id === id);
-  const resume = card ? cardResume(card) : -Infinity;
-  const lift = progress(t, resume - LIFT, LIFT, easing.wipe);
-  const focus = deskFocus(tau);
-  const ui = state.apps.ui;
-  const screens = [stationC(ui, tau), stationA(ui, tau), stationD(ui, tau)];
-  // The rep's ask bar carries the Cowork mark.
-  const dockMark = clamp((tau - 0.9) / 0.3);
-  if (dockMark > 0) {
-    screens[0]?.push(
-      groupNode(
-        'c-dock-mark-o',
-        [
-          markTile(
-            'c-dock-mark',
-            DESK.c - WIN.w / 2 + DOCK_ICON.x,
-            WIN.top + DOCK_ICON.y,
-            DOCK_ICON.size,
-            { glow: 0.3 },
-          ),
-        ],
-        {
-          opacity: dockMark,
-        },
-      ),
-    );
+  const c = contentTime(id, t);
+  const art = id === 'ask' ? askArt : id === 'work' ? workArt : answersArt;
+  // The ask's card is what the chrome ball spreads into: it (and the scene it
+  // covers) shows once the ball has.
+  const shown = id === 'ask' ? progress(t, BALL_T.handover, 0.2, easing.enter) : 1;
+  const nodes: SceneNode[] =
+    shown > 0 ? [groupNode(`${id}-art`, art(state.kit, c), { transform: { x: g.x, y: g.y } })] : [];
+  const card = INTRO_CARDS.find((k) => k.id === id);
+  if (id === 'ask' && card) {
+    // No card here: the ball became the input box; the card's words sit above it.
+    nodes.push(askHeadline(state, card, g, t));
+    return nodes;
   }
-  // The intro card covers the screen the scene starts on, until it lifts off.
-  if (card && t < resume) {
-    const left = [DESK.c, DESK.a, DESK.d][card.desk] ?? DESK.c;
-    const opening = card.desk === 0 ? windowOpening(tau) : null;
+  const lift = progress(c, -LIFT, LIFT, easing.wipe);
+  if (card && lift < 1 && shown > 0) {
+    // The ask's card is blank paper as the ball becomes it; then its words arrive, then the marker.
+    const words = id === 'ask' ? t - BALL_T.words : SETTLED_TEXT;
     const sheet = introCard(
       state,
       card,
       lift,
-      opening && opening.open < 1 ? opening.shape : undefined,
-      opening ? clamp((opening.open - 0.45) / 0.45) : 1,
+      undefined,
+      1,
+      id === 'ask'
+        ? progress(t, BALL_T.words + 0.9, MARKER.duration, easing.wipe)
+        : progress(c, MARKER.from, MARKER.duration, easing.wipe),
+      words < 0 ? -1 : words,
     );
-    if (sheet) {
-      screens[card.desk]?.push(
+    if (sheet)
+      nodes.push(
         groupNode(`${id}-intro-card`, [sheet], {
-          transform: { x: left - WIN.w / 2, y: WIN.top },
+          transform: { x: g.x + (FW - CARD_WIN.w) / 2, y: g.y + 210 },
+          // It lifts away and fades as it goes, leaving no edge behind.
+          opacity: (1 - lift * lift) * shown,
         }),
       );
-    }
   }
-  // Wide on the intro card, easing into the scene's first shot as it lifts.
-  const shot =
-    t < resume
-      ? blendShot(WIDE, shotAt(state.apps.direction, tau), lift)
-      : shotAt(state.apps.direction, tau);
-  // Hints on the screens, held the same size on screen however close the camera is.
-  if (t >= resume) {
-    // What the camera shows of the screen in focus (window-local), below the headline card.
-    const sc = DECK_SCALE * shot.zoom;
-    const view = {
-      x0: shot.x - FW / 2 / sc,
-      x1: shot.x + FW / 2 / sc,
-      y0: shot.y + (HINT_TOP - DECK_Y) / sc,
-      y1: shot.y + (FH - DECK_Y) / sc,
-    };
-    const inFocus = Math.round(focus);
-    ([0, 1, 2] as const).forEach((d) => {
-      const hints = hintNodes(ui, d, tau, HINT_SCALE / shot.zoom, d === inFocus ? view : undefined);
-      if (hints.length === 0) return;
-      const left = [DESK.c, DESK.a, DESK.d][d] ?? DESK.c;
-      screens[d]?.push(
-        groupNode(`${id}-hints${d}`, hints, { transform: { x: left - WIN.w / 2, y: WIN.top } }),
-      );
-    });
-  }
-  const desks = [DESK.c, DESK.a, DESK.d];
-  const layers = screens
-    .map((nodes, i) => {
-      const rel = i - focus;
-      const away = Math.min(Math.abs(rel), 1);
-      return {
-        away,
-        node: groupNode(
-          `${id}-desk${i}`,
-          nodes.map((n) => prefixed(n, `${id}-`)),
-          {
-            transform: {
-              x: g.x + FW / 2 + rel * 300,
-              y: g.y + DECK_Y,
-              scale: DECK_SCALE - 0.16 * away,
-              originX: desks[i] ?? DESK.c,
-              originY: MID,
-            },
-            opacity: 1 - 0.3 * away,
-            ...(away > 0.02 ? { blur: 9 * away } : {}),
-          },
-        ),
-      };
-    })
-    .sort((a, b) => b.away - a.away);
-  const heads: SceneNode[] = [];
-  for (const c of CAPTIONS) {
-    const at = c.at[0] ?? 0;
-    if (t < resume || at < win.start || at >= win.end || tau < at - 0.1) continue;
-    const exit = progress(tau, c.out, 0.35, easing.exit);
-    const card = state.cards[c.id];
-    if (!card || exit >= 1) continue;
-    heads.push(
-      headlineCard(`${id}-head-${c.id}`, card, g.x + HEAD.x, g.y + HEAD.y, tau - at, exit),
-    );
-  }
-  // The camera inside the deck: close on the component at work, wide on results.
-  // Window point (x, y) of the screen in focus sits at DECK_Y on screen, zoomed.
-  const s0 = DECK_SCALE;
-  const centre = { x: g.x + FW / 2, y: g.y + FH / 2 };
-  const target = { x: g.x + FW / 2, y: g.y + DECK_Y };
-  const focusPt = {
-    x: g.x + FW / 2 + (shot.x - WIN.w / 2) * s0,
-    y: g.y + DECK_Y + (shot.y - WIN.h / 2) * s0,
-  };
-  const pivot = {
-    x: focusPt.x - (target.x - centre.x) / shot.zoom,
-    y: focusPt.y - (target.y - centre.y) / shot.zoom,
-  };
-  return [
-    groupNode(
-      `${id}-cam`,
-      layers.map((l) => l.node),
-      {
-        transform: {
-          x: centre.x,
-          y: centre.y,
-          scale: shot.zoom,
-          originX: pivot.x,
-          originY: pivot.y,
-        },
-      },
-    ),
-    ...heads,
-  ];
+  return nodes;
 }
 
-// ---------------------------------------------------------------------------
-// Social proof: a fast montage of the product at work
-// ---------------------------------------------------------------------------
-
 /**
- * Each clip replays a moment of the screens' timeline, full width, tilted a
- * little with shallow focus (placeholders until the real screen recordings
- * arrive): an answer streaming in with its sources, researchers at work
- * against the clock, the report opening, the Reports library.
+ * The ask's words above its input box (in place of an intro card): the
+ * lowercase eyebrow, the title arriving letter by letter, the tagline after
+ * it, then the light-violet highlighter swept behind the tagline; they stay
+ * for the scene.
  */
-const PROOF_CLIPS: readonly { desk: 0 | 1 | 2; from: number }[] = [
-  { desk: 0, from: OFF_CAMERA.stream - 0.15 },
-  { desk: 1, from: stretch(13.65) },
-  { desk: 1, from: stretch(22.7) },
-  { desk: 1, from: stretch(25.95) },
-];
-/** Each clip is seven eighths (cuts land on the grid). */
-const PROOF_CLIP = beats(1.75);
-/**
- * How each clip's screen turns in depth while it is on (degrees about the
- * vertical axis; positive = right side away) and drifts sideways (px).
- * Alternate clips turn opposite ways, so each hard cut reads as a new angle.
- */
-const PROOF_TURNS: readonly { from: number; to: number; x: readonly [number, number] }[] = [
-  { from: 24, to: 11, x: [34, -8] },
-  { from: -22, to: -10, x: [-32, 8] },
-  { from: 20, to: 8, x: [28, -8] },
-  { from: -18, to: -5, x: [-24, 4] },
-];
-/** The last clip keeps turning, more slowly, until the camera leaves. */
-const PROOF_LAST_TURN = 1.7;
-/** The two cards, each spanning two clips. */
-const PROOF_CARDS = [
-  { id: 'proof1', at: beats(0.25), out: 2 * PROOF_CLIP - beats(0.25) },
-  { id: 'proof2', at: 2 * PROOF_CLIP, out: Infinity },
-] as const;
-
-function proofMontage(state: FilmState, t: number): SceneNode[] {
-  const g = group('proof');
-  const lt = t - FILM.proof;
-  const k = Math.min(PROOF_CLIPS.length - 1, Math.max(0, Math.floor(lt / PROOF_CLIP)));
-  const clip = PROOF_CLIPS[k] ?? PROOF_CLIPS[0];
-  if (!clip) return [];
-  const into = Math.max(0, lt - k * PROOF_CLIP);
-  const tau = clip.from + into;
-  const ui = state.apps.ui;
-  const draw = [stationC, stationA, stationD][clip.desk] ?? stationA;
-  const nodes = draw(ui, tau);
-  if (clip.desk === 0) {
-    nodes.push(
-      markTile(
-        'c-dock-mark',
-        DESK.c - WIN.w / 2 + DOCK_ICON.x,
-        WIN.top + DOCK_ICON.y,
-        DOCK_ICON.size,
-        { glow: 0.3 },
-      ),
-    );
-  }
-  const desk = [DESK.c, DESK.a, DESK.d][clip.desk] ?? DESK.a;
-  // The screen turns in depth: narrowing with the angle (cos), its edges
-  // slanting with it (skew), a sheen crossing as it turns to the light, its
-  // shadow falling away from the near side. Already moving at the cut, easing out.
-  const turn = PROOF_TURNS[k] ?? PROOF_TURNS[0];
-  if (!turn) return [];
-  const span = k === PROOF_CLIPS.length - 1 ? PROOF_LAST_TURN : PROOF_CLIP;
-  const m = 1 - (1 - clamp(into / span)) ** 1.6;
-  const angle = lerp(turn.from, turn.to, m);
-  const rad = (angle * Math.PI) / 180;
-  const window = { x: desk, y: MID, width: WIN.w, height: WIN.h };
-  const sheen = lightSweep(
-    `proof${k}-sheen`,
-    rect(window.x, window.y, window.width, window.height, 18),
-    window,
-    0.12 + 0.76 * m,
-    { color: lighting.highlight, width: 260, angle: angle > 0 ? 200 : -20, strength: 0.2 },
-  );
-  // Each cut lands with a quick focus pull.
-  const focus = progress(into, 0, 0.2, easing.focus);
-  const out: SceneNode[] = [
-    groupNode(
-      `proof-clip${k}`,
-      [
-        shapeNode(`proof${k}-cast`, {
-          geometry: rect(desk - angle * 1.6, MID + 36, WIN.w * 0.94, WIN.h * 0.94, 28),
-          fill: withAlpha(lighting.shadow, 0.2),
-          blur: 48,
-        }),
-        ...nodes.map((n) => prefixed(n, `proof${k}-`)),
-        ...(sheen ? [sheen] : []),
-      ],
-      {
-        transform: {
-          x: g.x + FW / 2 + lerp(turn.x[0], turn.x[1], m),
-          y: g.y + 600,
-          scale: 1.06 + 0.05 * m,
-          scaleX: Math.cos(rad),
-          skewY: 0.24 * angle,
-          rotation: -2,
-          originX: desk,
-          originY: MID,
-        },
-        ...(focus < 1 ? { blur: 7 * (1 - focus) } : {}),
-      },
-    ),
-    // A sheet near the lens, out of focus, for depth.
-    paperCard('proof-near', g.x + 110, g.y + 1130, 300, 200, {
-      lift: 1,
-      rotation: -9,
-      blur: 16,
-      opacity: 0.55,
-    }),
-  ];
-  for (const card of PROOF_CARDS) {
-    const k2 = state.heads[card.id];
-    if (!k2 || lt < card.at) continue;
-    const exit = progress(lt, card.out, 0.25, easing.exit);
-    if (exit >= 1) continue;
-    const p = progress(lt, card.at, 0.45, easing.enter);
-    const w = k2.width + 64;
-    const h = k2.height + 36;
-    const y = g.y + 1040;
-    out.push(
+function askHeadline(state: FilmState, card: IntroCard, g: { x: number; y: number }, t: number) {
+  const text = state.intros[card.id];
+  const since = t - BALL_T.words;
+  if (!text || since < 0) return groupNode('ask-head-none', []);
+  const x = ASK_BOX.cx - ASK_BOX.w / 2 + 4;
+  const top = ASK_BOX.cy - ASK_BOX.h / 2 - 270;
+  const titleY = top + 40;
+  const subY = titleY + text.title.height + 14;
+  return groupNode(
+    'ask-head',
+    [
       groupNode(
-        `${card.id}-o`,
-        [
-          glassPanel(`${card.id}-panel`, g.x + FW / 2, y + h / 2, w, h, [], 24),
-          groupNode(`${card.id}-text`, [k2(lt - card.at, exit)], {
-            transform: { x: g.x + FW / 2, y: y + 18 },
-          }),
-        ],
-        { opacity: clamp(p * 1.6) * (1 - exit), transform: { y: 14 * (1 - p) } },
+        'ask-head-eyebrow-o',
+        [label('ask-head-eyebrow', card.eyebrow, x, top, CARD.eyebrow, C.text.accent)],
+        {
+          opacity: clamp(since / 0.35),
+        },
       ),
-    );
-  }
-  return out;
-}
-
-/** A shot between two others (zoom eased in log space). */
-function blendShot(a: ShotView, b: ShotView, p: number): ShotView {
-  return {
-    x: lerp(a.x, b.x, p),
-    y: lerp(a.y, b.y, p),
-    zoom: Math.exp(lerp(Math.log(a.zoom), Math.log(b.zoom), p)),
-  };
+      groupNode('ask-head-title', [text.title(since, 0)], { transform: { x, y: titleY } }),
+      ...markerSweep(
+        state.kit.ui,
+        'ask-head',
+        card.sub,
+        x,
+        subY,
+        progress(t, BALL_T.words + 0.9, MARKER.duration, easing.wipe),
+      ),
+      groupNode('ask-head-sub', [text.sub(since - 0.25, 0)], { transform: { x, y: subY } }),
+    ],
+    { transform: { x: g.x, y: g.y } },
+  );
 }
 
 /** Groups near the view. */
@@ -993,29 +868,30 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
   for (const id of visible(view)) {
     // The old opening's group is on the board, but not in the film.
     if (id === 'queries') continue;
-    if (isApps(id)) {
-      content.push(groupNode(`group-${id}`, deck(state, id, t)));
-      continue;
-    }
-    if (id === 'proof') {
-      if (t >= FILM.proof - 1.5) content.push(groupNode('group-proof', proofMontage(state, t)));
+    if (isProduct(id)) {
+      content.push(groupNode(`group-${id}`, productScene(state, id, t)));
       continue;
     }
     const lt = local[id]?.(t);
-    if (lt === undefined || lt < -0.5) continue;
+    // The outro's pitch plays before its lockup's time starts.
+    const lead = id === 'outro' ? PITCH.lead : 0;
+    if (lt === undefined || lt < -lead - 0.5) continue;
     content.push(
       groupNode(
         `group-${id}`,
         groupArt(board, id, {
           lt,
           ...(id === 'criteria' ? { hubGone: t >= FILM.toIntro.start } : {}),
-          ...(id === 'intro' ? { tileHidden: t < FILM.intro } : {}),
+          ...(id === 'lost' ? { pilesGone: t >= FILM.toCriteria.start } : {}),
         }),
       ),
     );
   }
   content.push(...carrier(board, t));
-  const blur = inFlight(t) ? motionBlur(screenVelocity(camera, t)) : undefined;
+  // On the flight the ball carries, the board behind it blurs more (it seems to fly faster).
+  const toAsk = t > FILM.toAsk.start && t < FILM.toAsk.start + FILM.toAsk.duration;
+  const v = screenVelocity(camera, t);
+  const blur = inFlight(t) ? motionBlur(toAsk ? { x: v.x * 1.8, y: v.y * 1.8 } : v) : undefined;
   return [
     ...backdrop(t, view),
     groupNode(
@@ -1027,6 +903,7 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
       ],
       blur ? { blur } : {},
     ),
+    ...ballUnder(state, t),
   ];
 }
 
@@ -1083,14 +960,12 @@ const CUES: readonly Cues[] = [
     FILM.toCriteria.start,
     whoosh(FILM.toCriteria.duration, { from: 260, to: 1500, peak: 0.5, gain: 0.45 }),
   ),
-  // The network assembles; the field spreads; new work lights up, and gets done.
-  cue(C0 + CRITERIA.hub, pop({ degree: 0, gain: 0.5 })),
-  Array.from({ length: 7 }, (_, k) =>
-    cue(
-      C0 + CRITERIA.sats.start + k * CRITERIA.sats.each,
-      pluck({ degree: [0, 2, 4, 7, 9, 7, 4][k] ?? 0, octave: 2, gain: 0.32 }),
-    ),
+  // The piles land as tiles (a soft strum), "Cowork" appears at the centre,
+  // the spokes reach in; the field spreads.
+  [0, 2, 4, 7, 9].map((degree, k) =>
+    cue(C0 + CRITERIA.tiles + k * 0.03, pluck({ degree, octave: 2, gain: 0.26 })),
   ),
+  cue(C0 + CRITERIA.word, pop({ degree: 0, gain: 0.5 })),
   cue(
     C0 + CRITERIA.field.start,
     whoosh(CRITERIA.field.duration, { from: 250, to: 3000, peak: 0.8, gain: 0.6 }),
@@ -1099,11 +974,7 @@ const CUES: readonly Cues[] = [
     C0 + CRITERIA.field.start,
     pad(4.6, { chord: 'lift', attack: 0.5, release: 1.2, gain: 0.55 }),
   ),
-  CRITERIA.tasks.map((at, k) =>
-    cue(C0 + at + 0.1, snap({ degree: 4 + 3 * k, take: k, gain: 0.45 })),
-  ),
-  cue(C0 + CRITERIA.done, ding({ degree: 7, gain: 0.4 })),
-  // The hub flies on and becomes Cowork.
+  // "Cowork" flies on, grows, and becomes the reveal's name.
   cue(
     FILM.toIntro.start,
     whoosh(FILM.toIntro.duration, { from: 220, to: 4000, peak: 0.88, gain: 0.9 }),
@@ -1114,52 +985,35 @@ const CUES: readonly Cues[] = [
     FILM.intro + 0.05,
     pad(FILM.introEnd - FILM.intro - 0.3, { chord: 'home', attack: 0.3, release: 1.5 }),
   ),
-  // The product scenes keep their own sounds (typing, clicks, plucks), and each flight its air.
+  // The name's letters melt (a liquid
+  // rush and a tick per letter); the drops meet; the ball lands and rings
+  // (a soft thump each impact, smaller each time); it spreads into the card.
+  cue(BALL_T.melt - 0.05, whoosh(0.7, { from: 3200, to: 700, peak: 0.35, gain: 0.32 })),
+  [0, 1, 2, 3, 4, 5].map((k) =>
+    cue(BALL_T.melt + 0.05 + k * 0.05, tick({ degree: 4 + k, gain: 0.14, pan: (k - 2.5) * 0.15 })),
+  ),
+  cue(BALL_T.formed - 0.08, pluck({ degree: 4, octave: 1, gain: 0.3 })),
+  BALL_IMPACTS.map((at, k) => cue(at, thump({ gain: 0.5 * 0.55 ** k }))),
+  cue(BALL_T.spread.start, whoosh(0.5, { from: 900, to: 2600, peak: 0.4, gain: 0.3 })),
+  cue(BALL_T.handover, slap({ gain: 0.25 })),
+  // Each flight its air.
   LEGS.map((l) =>
     cue(l.arrive.start, whoosh(l.arrive.duration, { from: 260, to: 1500, peak: 0.5, gain: 0.45 })),
   ),
-  [0, 2, 4, 7, 9].map((degree, k) =>
-    cue(
-      FILM.intro + INTRO.tagline + k * 0.08,
-      pluck({ degree, octave: 2, gain: 0.28, pan: (k - 2) * 0.15 }),
-    ),
-  ),
-  // Each intro card: a soft note as it settles in view, paper as it lifts off.
+  // Each intro card: a soft note as the camera lands on it, paper as it lifts off.
   INTRO_CARDS.map((c, k) => [
-    cue(cardResume(c) - HOLD, pluck({ degree: [4, 7, 9, 7][k] ?? 4, octave: 1, gain: 0.28 })),
-    cue(cardResume(c) - LIFT, whoosh(LIFT, { from: 700, to: 2600, peak: 0.6, gain: 0.3 })),
+    cue(LANDS[c.id], pluck({ degree: [4, 7, 9][k] ?? 4, octave: 1, gain: 0.28 })),
+    c.id === 'ask'
+      ? []
+      : cue(
+          LANDS[c.id] + CARD_HOLD - LIFT,
+          whoosh(LIFT, { from: 700, to: 2600, peak: 0.6, gain: 0.3 }),
+        ),
   ]),
-  // The montage: a soft tick on every cut, a pluck as each card lands.
-  PROOF_CLIPS.map((_, k) =>
-    cue(
-      FILM.proof + k * PROOF_CLIP,
-      tick({ degree: 2 + 2 * k, gain: 0.3, pan: (k % 2 ? 1 : -1) * 0.2 }),
-    ),
-  ),
-  cue(FILM.proof, thump({ gain: 0.3 })),
-  PROOF_CARDS.map((c, k) =>
-    cue(FILM.proof + c.at + 0.1, pluck({ degree: [4, 7][k] ?? 4, octave: 1, gain: 0.32 })),
-  ),
-  // The week: the days pile up, fold into one report, the clock stops in time.
-  Array.from({ length: 5 }, (_, k) =>
-    cue(
-      FILM.week + WEEK.days.start + k * WEEK.days.each + 0.1,
-      slap({ gain: 0.16, pan: (k - 2) * 0.25 }),
-    ),
-  ),
-  cue(
-    FILM.week + WEEK.fold.start,
-    whoosh(WEEK.fold.duration, { from: 1600, to: 300, peak: 0.6, gain: 0.4 }),
-  ),
-  cue(FILM.week + WEEK.report.center, slap({ gain: 0.3 })),
-  Array.from({ length: 9 }, (_, k) =>
-    cue(
-      FILM.week + WEEK.clock.start + ((WEEK.clock.end - WEEK.clock.start) * k) / 9,
-      tick({ degree: 4, gain: 0.2, pan: k % 2 ? 0.2 : -0.2 }),
-    ),
-  ),
-  cue(FILM.week + WEEK.clock.end, ding({ degree: 7, gain: 0.4 })),
-  WEEK.chips.map((at, k) => cue(FILM.week + at, snap({ degree: 4 + 3 * k, take: k, gain: 0.4 }))),
+  // The product scenes' own sounds (typing, clicks, plucks), on their content time.
+  askCues(filmOfContent('ask')),
+  workCues(filmOfContent('work')),
+  answersCues(filmOfContent('answers')),
   // Along the thread to Cowork once more.
   cue(
     FILM.toOutro.start,
@@ -1170,6 +1024,13 @@ const CUES: readonly Cues[] = [
       gain: 0.5,
     }),
   ),
+  // The pitch: a low note under the first line, a bell for the answer, a soft
+  // air as the marker sweeps, and the lines leaving.
+  cue(FILM.pitch + 0.05, pluck({ degree: 2, octave: 1, gain: 0.26 })),
+  cue(FILM.pitch + PITCH.second + 0.05, pluck({ degree: 4, octave: 1, gain: 0.3 })),
+  cue(FILM.pitch + PITCH.second + 0.1, bell({ degree: 7, octave: 1, gain: 0.32 })),
+  cue(FILM.pitch + PITCH.mark, whoosh(0.45, { from: 1600, to: 3600, peak: 0.6, gain: 0.12 })),
+  cue(FILM.pitch + PITCH.leave, whoosh(0.4, { from: 900, to: 2400, peak: 0.5, gain: 0.25 })),
   cue(FILM.outro + 0.15, strings()),
   cue(
     FILM.outro + 0.2,
@@ -1199,12 +1060,7 @@ const ALL_CUES: readonly SoundEvent[] = (() => {
     else c.forEach(walk);
   };
   CUES.forEach(walk);
-  // The product scenes' sounds, in apps time, moved past the holds under the intro cards.
-  const apps = cuesBetween(0.5, APPS_SCENES.library.end, 0.5).map((c) => ({
-    ...c,
-    at: filmOfApps(c.at),
-  }));
-  return [...flat, ...apps];
+  return flat;
 })();
 
 /** One scene's sounds, timed from its own start (earlier cues ring on in the film). */
@@ -1222,13 +1078,39 @@ export const FILM_FONTS = [
   ...phoneDefaults.fonts,
   ...LOOK_FONTS,
   ...BOARD_FONTS,
-  ...APPS_FONTS,
-  face('headline', 34, { letterSpacing: -0.6 }),
+  ...UI_FONTS,
+  ...PRODUCT_FONTS,
+  ...SCENE_FONTS,
 ];
 
 export function defineFilmScene(scene: FilmScene, id: string) {
   const { start, end, title } = FILM_SCENES[scene];
-  return defineSceneComposition({
+  // The scenes the chrome name and ball appear in get a Three.js layer above the board.
+  const ball = start < BALL_T.gone && end > FILM.intro;
+  if (!ball)
+    return defineSceneComposition({
+      ...phoneDefaults,
+      fonts: FILM_FONTS,
+      id,
+      seed: id,
+      title,
+      audio: soundtrack(sceneCues(scene)),
+      duration: end - start,
+      background: C.bg.canvas,
+      renderer: 'svg',
+      setup: createFilmState,
+      scene: (t, _ctx, state) => ({ world: filmWorld(state, start + t) }),
+    });
+  const mounted = new WeakMap<
+    HTMLElement,
+    {
+      readonly svg: Renderer;
+      readonly state: FilmState;
+      readonly layer: ReturnType<typeof createThreeLayer>;
+      readonly rig: ReturnType<typeof createBallRig>;
+    }
+  >();
+  return defineComposition({
     ...phoneDefaults,
     fonts: FILM_FONTS,
     id,
@@ -1237,8 +1119,29 @@ export function defineFilmScene(scene: FilmScene, id: string) {
     audio: soundtrack(sceneCues(scene)),
     duration: end - start,
     background: C.bg.canvas,
-    renderer: 'svg',
-    setup: createFilmState,
-    scene: (t, _ctx, state) => ({ world: filmWorld(state, start + t) }),
+    async setup(ctx) {
+      const size = { width: FW, height: FH, pixelRatio: ctx.pixelRatio };
+      const svg = createRenderer('svg', ctx.root, { ...size, background: C.bg.canvas });
+      const state = await createFilmState();
+      const layer = createThreeLayer(ctx.root, size);
+      const rig = createBallRig(layer.renderer, FW, FH);
+      mounted.set(ctx.root, { svg, state, layer, rig });
+    },
+    render(t, ctx) {
+      const m = mounted.get(ctx.root);
+      if (!m) throw new Error(`${id} rendered before setup.`);
+      const at = start + t;
+      m.svg.render({ width: FW, height: FH, world: filmWorld(m.state, at) });
+      const f = ballFrame(m.state, at);
+      m.rig.pose(f.ball);
+      if (f.ball) m.layer.render(m.rig.scene, m.rig.camera);
+      else m.layer.clear();
+    },
+    teardown(ctx) {
+      const m = mounted.get(ctx.root);
+      m?.svg.destroy();
+      m?.layer.destroy();
+      mounted.delete(ctx.root);
+    },
   });
 }

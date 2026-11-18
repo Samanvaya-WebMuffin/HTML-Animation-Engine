@@ -1,7 +1,7 @@
 import { defineExampleConfig } from '../index.js';
 
-/** The line; it breaking into grain; the flood; the wall with "is lost"; the crack; the break; the hour. */
+/** The line; the flood; the wall out of focus; the paper sorting into the piles; the piles; the hour. */
 export default defineExampleConfig({
-  stills: [0.9, 2.2, 3.2, 4.0, 4.7, 5.2, 5.7, 8.1],
+  stills: [1.5, 3.6, 4.4, 4.9, 5.4, 6.0, 8.0, 10.7],
   budgetMs: 60,
 });

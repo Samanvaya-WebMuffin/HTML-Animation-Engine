@@ -83,7 +83,7 @@ export async function createPaperTextures(seed: string): Promise<PaperTextures> 
 }
 
 /** Shadows for paper resting on a board (`lift` raises it). */
-function paperShadows(lift = 1) {
+export function paperShadows(lift = 1) {
   const shade = lighting.shadow;
   return [
     { x: 0.5, y: 1, blur: 1.5, color: withAlpha(shade, 0.22) },
@@ -123,7 +123,7 @@ function place(id: string, p: Placed, kids: SceneNode[]): SceneNode {
  * A sheet with its bottom-right corner lifting off the board: the outline
  * curves away, the underside catches light, and a shadow sits under it.
  */
-function sheet(
+export function sheet(
   id: string,
   w: number,
   h: number,
@@ -224,7 +224,7 @@ function scribble(
 }
 
 /** Printed text lines (grey bars), for paragraphs seen at a glance. */
-function printLines(
+export function printLines(
   id: string,
   x: number,
   y: number,

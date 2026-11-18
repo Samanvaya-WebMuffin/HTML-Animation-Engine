@@ -44,6 +44,12 @@ const film = Object.fromEntries(
   ]),
 ) as Readonly<Record<Key, string>>;
 
+/** A pile's light tint at OKLCH hue `h`: the folder's stock, its lighter chip, and a mid tone. */
+const pileTint = (h: number) => {
+  const at = (l: number, c: number) => formatColor(oklchToRgb({ l, c, h, a: 1 }));
+  return { stock: at(0.925, 0.04), chip: at(0.965, 0.02), icon: at(0.66, 0.09) };
+};
+
 const palette = {
   ...film,
   /** Shadows are cast in a violet-tinted graphite, never black. */
@@ -138,6 +144,33 @@ const components = {
   lost: { mark: p.red, glow: p.redSoft, coral: p.coral, coralGlow: p.coralSoft },
   /** A clock running out, start to end (mixed in OKLCH). */
   urgency: { start: p.go, middle: p.hurry, end: p.red },
+  /**
+   * The name's reveal ("Meet Cowork"): big, bright pools of coloured light,
+   * the one place the film goes past Soft Calm's quiet tints.
+   */
+  meet: {
+    violet: '#7a5cff',
+    blue: '#3ea6ff',
+    pink: '#ff6fb1',
+    amber: '#ffb54d',
+    teal: '#2fd0c0',
+    lilac: '#c38bff',
+    /** The shimmer's light crossing the name. */
+    shine: '#ffffff',
+  },
+  /**
+   * The opening's piles, one light tint per source, never violet (Cowork's
+   * own). The five hues are spaced evenly around the wheel outside violet,
+   * all at one lightness and chroma, so no pile weighs more than another;
+   * neighbours in the layout (three over two) never share a temperature.
+   */
+  pile: {
+    mail: pileTint(20),
+    files: pileTint(130),
+    m365: pileTint(245),
+    workspace: pileTint(75),
+    slack: pileTint(190),
+  },
   /** The Cowork mark: knowledge, people, insight and outcomes, together on a violet tile. */
   mark: {
     knowledge: p.mist100,

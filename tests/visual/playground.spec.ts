@@ -15,7 +15,7 @@ test('playground boots on the featured video, with its scenes, controls and no c
   await expect(page.locator('[data-hae-stage="cowork-film"]')).toBeVisible();
   // The featured video's scenes, listed on the left; each one jumps to its start.
   const scenes = page.getByRole('navigation', { name: 'Scenes' }).getByRole('button');
-  await expect(scenes).toHaveCount(10);
+  await expect(scenes).toHaveCount(7);
   for (const name of ['Play', '◀ Frame', 'Frame ▶', 'Export 4K']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
   }

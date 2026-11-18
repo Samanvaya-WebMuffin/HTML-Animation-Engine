@@ -75,6 +75,9 @@ for (const name of exampleNames()) {
       // Capture after every frame, as export does: a frame's pixels must not
       // depend on which frames were drawn (and captured) before it.
       const info = await openCapture(page, name);
+      // Each still is drawn and captured twice: long videos (dozens of stills,
+      // some with a WebGL layer) need longer than the default under load.
+      test.setTimeout(30_000 + info.stills.length * 1_500);
       const first: Buffer[] = [];
       for (const t of info.stills) {
         await renderAt(page, t);

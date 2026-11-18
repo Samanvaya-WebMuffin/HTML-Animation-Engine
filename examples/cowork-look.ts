@@ -38,6 +38,8 @@ import {
 export const look = coworkTheme;
 export const C = coworkTheme.components;
 export const P = coworkTheme.colors;
+/** Cowork's purple as the chrome ball wears it, and the reveal's name with it. */
+export const BALL_PURPLE = mixColors(C.meet.violet, C.brand.deep, 0.25);
 export const lighting = coworkTheme.lighting;
 const { type } = coworkTheme;
 
@@ -110,6 +112,18 @@ const ICONS = {
   send: 'M12 18.5V6M6.5 11.5L12 6l5.5 5.5',
   plus: 'M12 5.5v13M5.5 12h13',
   layers: 'M12 4l8.5 4.5L12 13L3.5 8.5ZM3.5 12.5L12 17l8.5-4.5M3.5 16.5L12 21l8.5-4.5',
+  /** Level 1: quick. */
+  bolt: 'M13.5 3.5L6 13.5h5.5L10.5 20.5L18 10.5h-5.5Z',
+  /** Level 3: planned (steps). */
+  plan: 'M9.5 6.5h9.5M9.5 12h9.5M9.5 17.5h9.5M5 5.5l1 1l2-2M5 11l1 1l2-2M5 16.5l1 1l2-2',
+  sparkle: 'M12 3.5l1.6 5.4l5.4 1.6l-5.4 1.6L12 17.5l-1.6-5.4L5 10.5l5.4-1.6Z',
+  /** Microsoft 365, as a category: four app tiles (a plain line icon, not the brand's mark). */
+  apps: 'M5 5h5.5v5.5H5ZM13.5 5H19v5.5h-5.5ZM5 13.5h5.5V19H5ZM13.5 13.5H19V19h-5.5Z',
+  /** Google Workspace, as a category: documents in the cloud (not the brand's mark). */
+  cloud:
+    'M7.5 18.5h9.5a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7 9.6a4.5 4.5 0 0 0 .5 8.9ZM10 14.5h5M10 12h3',
+  /** Slack, as a category: a channel's hash (not the brand's mark). */
+  hash: 'M9.5 4.5L8 19.5M16 4.5l-1.5 15M5 9h14.5M4.5 15H19',
 } as const;
 export type IconName = keyof typeof ICONS;
 

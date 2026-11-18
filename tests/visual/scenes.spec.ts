@@ -14,9 +14,6 @@ const VIDEOS: Record<string, readonly string[]> = {
     'cowork-ask',
     'cowork-work',
     'cowork-answers',
-    'cowork-library',
-    'cowork-proof',
-    'cowork-week',
     'cowork-outro',
   ],
 };

@@ -1,9 +1,5 @@
-import {
-  decodeWav,
-  renderSoundtrack,
-  type PcmAudio,
-  type Soundtrack,
-} from '@html-animation-engine/core';
+import { decodeWav, type PcmAudio, type Soundtrack } from '@html-animation-engine/core';
+import type { SoundRequest } from './sound-worker.js';
 
 const SAMPLE_RATE = 48000;
 /**
@@ -27,6 +23,7 @@ export class SoundPlayer {
   /** Composition time and context time when the current source started. */
   #startedAt = { t: 0, clock: 0 };
   #token = 0;
+  #worker: Worker | undefined;
   enabled = true;
 
   /** Renders `track` (fetching its samples relative to the page). Resolves when ready. */
@@ -44,7 +41,21 @@ export class SoundPlayer {
       }),
     );
     if (token !== this.#token) return;
-    this.#pcm = renderSoundtrack(track, { duration, sampleRate: SAMPLE_RATE, samples, seed });
+    // Rendered in a worker: a whole film's music takes seconds, and the page must stay live.
+    this.#worker?.terminate();
+    const worker = new Worker(new URL('./sound-worker.ts', import.meta.url), { type: 'module' });
+    this.#worker = worker;
+    const request: SoundRequest = { track, duration, sampleRate: SAMPLE_RATE, seed, samples };
+    const pcm = await new Promise<PcmAudio>((resolve, reject) => {
+      worker.onmessage = (event: MessageEvent<PcmAudio>) => resolve(event.data);
+      worker.onerror = (event) => reject(new Error(event.message));
+      worker.postMessage(request);
+    }).finally(() => {
+      worker.terminate();
+      if (this.#worker === worker) this.#worker = undefined;
+    });
+    if (token !== this.#token) return;
+    this.#pcm = pcm;
   }
 
   get available(): boolean {

@@ -5,16 +5,13 @@ import answers from '../cowork-answers/composition.js';
 import ask from '../cowork-ask/composition.js';
 import criteria from '../cowork-criteria/composition.js';
 import intro from '../cowork-intro/composition.js';
-import library from '../cowork-library/composition.js';
 import outro from '../cowork-outro/composition.js';
 import pain from '../cowork-pain/composition.js';
-import proof from '../cowork-proof/composition.js';
-import week from '../cowork-week/composition.js';
 import work from '../cowork-work/composition.js';
 import type { theme } from '../index.js';
-import { bass, cue, hat, keys, kick, rim, soundtrack } from '../sounds.js';
+import { chord, cue, hat, kick, rim, soundtrack, spiccato, violins } from '../sounds.js';
 
-const SCENES = [pain, criteria, intro, ask, work, answers, library, proof, week, outro];
+const SCENES = [pain, criteria, intro, ask, work, answers, outro];
 const DURATION = SCENES.reduce((sum, s) => sum + s.duration, 0);
 const SYNTH = tempo({ bpm: BPM / 2 });
 const db = (x: number) => 10 ** (x / 20);
@@ -27,9 +24,6 @@ const CHORDS: readonly (keyof typeof theme.sound.chords)[] = [
   'home',
   'lift',
   'home',
-  'lift',
-  'lift',
-  'shadow',
   'home',
 ];
 /** Which scene is playing at `t` (a hair later, so a beat on a cut belongs to the new scene). */
@@ -62,7 +56,7 @@ const LOUDER: Pattern = {
 };
 const PUNCHY: Pattern = { ...LOUDER, rim: db(5), four: true, fatRim: true };
 const DRIVING: Pattern = { ...PUNCHY, hat: db(3), busyHats: true };
-/** The pattern under each scene: louder, punchy, driving, punchy, louder. */
+/** The pattern under each scene: louder, punchy, driving, louder. */
 const PATTERNS: readonly Pattern[] = [
   LOUDER, // 1 The pain point
   PUNCHY, // 2 Buying criteria
@@ -70,20 +64,27 @@ const PATTERNS: readonly Pattern[] = [
   PUNCHY, // 4 The ask
   DRIVING, // 5 The work
   DRIVING, // 6 The answers
-  DRIVING, // 7 The library
-  DRIVING, // 8 Social validation
-  PUNCHY, // 9 A week, condensed
-  LOUDER, // 10 Join the waitlist
+  LOUDER, // 7 Join the waitlist
 ];
-/** The synth is one part for the whole film: the same sound and level throughout. */
-const SYNTH_LEVEL = { bass: db(3), keys: db(3) } as const;
+/** The strings are one part for the whole film: the same sound and level throughout. */
+/** The strings' volume, as a share of the level first sampled (60 %, user's call). */
+const STRINGS_VOLUME = 0.6;
+const STRINGS_LEVEL = { bow: db(-1) * STRINGS_VOLUME, tick: db(-2) * STRINGS_VOLUME } as const;
+/** How far into its scene `t` is (0–1): the ostinato grows through each scene. */
+const sceneProgress = (t: number) => {
+  const { index, local } = sceneAt(SCENES, t + 1e-6);
+  return clamp(local / (SCENES[index]?.duration ?? 1));
+};
 
 /**
  * Music under the whole film, on the film's beat grid (`cowork-beat.ts`):
  * the beat at 110 bpm changes pattern on each scene's first beat (every cut
- * is on a beat) and never drops out; the synth, bass and keys at 55 bpm,
+ * is on a beat) and never drops out. Over it a synth string section
  * runs unchanged from the first frame to the last, its chord following the
- * scenes.
+ * scenes: one slow bow every two bars at 55 bpm (violins with vibrato,
+ * violas, cellos and basses), each swelling into the next, and a ticking
+ * spiccato ostinato on the eighths, alternating the chord's fifth and ninth
+ * and growing through each scene.
  */
 const music: Soundtrack = soundtrack([
   Array.from({ length: Math.ceil(DURATION / BEAT) }, (_, n) => {
@@ -107,25 +108,34 @@ const music: Soundtrack = soundtrack([
     if (n % 8 === 7) cues.push(cue(t + BEAT / 2, hat({ open: true, gain: 0.6 * p.hat * f })));
     return cues;
   }),
-  Array.from({ length: Math.ceil(DURATION / SYNTH.secondsPerBeat) }, (_, m) => {
-    const t = SYNTH.beat(m);
-    const length = SYNTH.secondsPerBeat * 0.9;
-    const f = fadeOut(t);
-    return [
-      cue(t, bass(chordAt(t), length, { gain: SYNTH_LEVEL.bass * f })),
-      cue(
-        t,
-        keys(chordAt(t), length, {
-          gain: SYNTH_LEVEL.keys * f * (m % 2 === 0 ? 1 : 0.7),
-          pan: m % 2 ? 0.2 : -0.2,
-        }),
-      ),
-    ];
+  Array.from({ length: Math.ceil(DURATION / (2 * SYNTH.secondsPerBeat)) }, (_, m) => {
+    const bow = 2 * SYNTH.secondsPerBeat;
+    const t = m * bow;
+    return cue(
+      t,
+      violins(chordAt(t), bow * 1.08, {
+        gain: STRINGS_LEVEL.bow * fadeOut(t),
+        pan: m % 2 ? 0.08 : -0.08,
+      }),
+    );
+  }),
+  Array.from({ length: Math.ceil(DURATION / (BEAT / 2)) }, (_, k) => {
+    const t = GRID.beat(k / 2);
+    const notes = chord(chordAt(t), 1);
+    const freq = (k % 2 === 0 ? notes[2] : notes[4]) as number;
+    const grow = 0.55 + 0.45 * sceneProgress(t);
+    return cue(
+      t,
+      spiccato(freq, {
+        gain: STRINGS_LEVEL.tick * grow * (k % 4 === 0 ? 1 : 0.7) * fadeOut(t),
+        pan: k % 2 ? 0.3 : -0.3,
+      }),
+    );
   }),
 ]);
 
 /**
- * The Cowork film: ten scenes, as in the script, each a window of one board
+ * The Cowork film: seven scenes, each a window of one board
  * timeline (the first with the opening's paper wall over it). Every cut is
  * pixel-identical.
  */
