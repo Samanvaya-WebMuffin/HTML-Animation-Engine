@@ -9,14 +9,11 @@
  * is a function of its board origin, laid out in a 720 × 1280 frame.
  */
 import {
-  baselineOffset,
   clamp,
   groupNode,
-  imageNode,
   lerp,
   progress,
   mixColors,
-  linearGradient,
   radialGradient,
   random,
   rect,
@@ -33,6 +30,7 @@ import {
   elbow,
   elevationShadows,
   litFill,
+  litGradient,
   kineticText,
   roundedRoute,
   type AuroraPool,
@@ -52,7 +50,6 @@ import {
   sparkleStar,
   timeRing,
   tone,
-  type IconName,
   HEAD,
   headlineCard,
   makeHeadline,
@@ -62,23 +59,22 @@ import {
   type Look,
   type Meaning,
 } from './cowork-look.js';
-import {
-  chartPage,
-  createPaperTextures,
-  indexCard,
-  notebookPage,
-  pin,
-  printedPage,
-  scrap,
-  stickyNote,
-  tape,
-  type PaperTextures,
-  type Placed,
-} from './cowork-paper.js';
+import { createPaperTextures, type PaperTextures } from './cowork-paper.js';
 import { SFX_DIV, beats, gridTimes, onGrid } from './cowork-beat.js';
 import { createUi, type Ui } from './cowork-ui.js';
 import { ASK, answersArt, askArt, workArt } from './cowork-scenes.js';
-import { PILES, TILE, pile, preloadPileLogos, type PileKind } from './cowork-piles.js';
+import {
+  APP_KINDS,
+  GLASS,
+  OPENING_ITEM_FONTS,
+  POP,
+  STACK,
+  openingGlass,
+  openingItems,
+  pileNode,
+  preloadPileLogos,
+  type PileKind,
+} from './cowork-opening.js';
 
 const { easing } = look;
 export const FW = 720;
@@ -290,6 +286,9 @@ const CARDS: Readonly<Record<string, HeadSpec>> = {
   week: { title: 'Days of digging.', sub: 'One *run.*', accent: C.text.accent },
 };
 
+/** The opening statement's type (on its glass panel). */
+export const OPENING_FONT = face('headline', 46, { letterSpacing: -1.1, lineHeight: 1.12 });
+
 /** The call to action's type: violet Sora, large enough to read as the ask. */
 export const CTA_FONT = face('title', 38, { weight: 500, letterSpacing: -0.4, lineHeight: 1.2 });
 
@@ -323,6 +322,8 @@ const HEADLINES: Readonly<
       font: FontSpec;
       color?: string;
       align?: 'left' | 'center';
+      /** Line breaks after these word indices. */
+      breaks?: readonly number[];
       /** Accent colours and arrival, where they differ from the defaults. */
       motion?: {
         accent?: string;
@@ -335,6 +336,14 @@ const HEADLINES: Readonly<
     }
   >
 > = {
+  /** The opening statement, on its glass: "knowledge" in the colour of knowledge. */
+  opening: {
+    text: 'Your company produces *knowledge* every day.',
+    font: OPENING_FONT,
+    align: 'center',
+    breaks: [3],
+    motion: { accent: C.source.fg },
+  },
   /** The reveal: "Meet" small above a large "Cowork", no tagline. */
   meetKicker: {
     text: 'Meet',
@@ -387,6 +396,7 @@ export async function createBoard(measurer: TextMeasurer): Promise<Board> {
       y: 0,
       maxWidth: 620,
       ...(h.align ? { align: h.align } : {}),
+      ...(h.breaks ? { breaks: h.breaks } : {}),
       color: h.color ?? C.text.primary,
       at: 0,
       ease: easing.enter,
@@ -409,6 +419,8 @@ export async function createBoard(measurer: TextMeasurer): Promise<Board> {
 export const BOARD_FONTS = [
   face('title', 28, { weight: 500 }),
   face('title', 84, { weight: 600, letterSpacing: 0 }),
+  OPENING_FONT,
+  ...OPENING_ITEM_FONTS,
   MEET_FONTS.kicker,
   MEET_FONTS.name,
   OUT_NAME_FONT,
@@ -754,589 +766,48 @@ function crackNodes(
 
 /**
  * The film's opening (scene 1, the pain point, twenty beats), in seconds of
- * the film: the line arrives at the centre; as the board's pieces start to
- * appear and the camera moves down, the line breaks into grain and drifts
- * away; the board fills and a flood of paper covers everything into a
- * wall; the wall goes out of focus and "Most of it is lost." is printed on
- * it; the wall (with the line) cracks and breaks onto bare ground. The
- * paper wall is drawn by `cowork-wall.ts`; the pinboard under it is this
- * file's `lost` group, whose local time is the film's.
+ * the film, which is the `lost` group's local time: items pop up on the
+ * bare background, the statement arrives on its glass, the items sort
+ * themselves into six stacks (all drawn by `cowork-opening.ts`), then an
+ * hour of searching (below).
  */
-/** When the wall's paper starts sorting into piles (`OPENING.sort.start`). */
-const OPENING_SORT_START = beats(8);
-
 export const OPENING = {
-  text: 0,
-  /** The line breaks into grain and drifts away. */
-  dissolve: { start: beats(4.5), duration: beats(1.5) },
-  pan: { start: beats(4.5), duration: beats(1.25) },
-  fill: beats(4.5),
-  flood: { start: beats(5.25), end: beats(7.5) },
-  blur: { start: beats(7.5), duration: beats(0.5) },
-  /**
-   * Once the wall is out of focus, its paper lifts off, top layer first, and
-   * sorts itself into the piles: departures spread over `span`, each flight
-   * `flight` long (seconds).
-   */
-  sort: { start: OPENING_SORT_START, span: 1.0, flight: 0.62 },
-  /** The last piece is in its pile and the wall is gone (the camera starts to drift). */
+  /** The stacks are badged and the camera starts to drift. */
   break: beats(11),
 } as const;
 
-/**
- * Where the piles stand in the lost group (group-local px, the folders'
- * front centres), under the hour: three over two, at `PILE_SCALE`. Until the
- * wall has gone the camera stands still on the group, so these are also
- * their places on screen.
- */
-export const PILE_SPOTS: Readonly<Record<PileKind, { x: number; y: number }>> = {
-  mail: { x: 130, y: 860 },
-  files: { x: 360, y: 860 },
-  m365: { x: 590, y: 860 },
-  workspace: { x: 245, y: 1100 },
-  slack: { x: 475, y: 1100 },
-};
-export const PILE_SCALE = 0.72;
-/**
- * The empty folders rise softly into place as the paper starts to lift,
- * left to right across the frame, `each` apart.
- */
-export const PILE_REVEAL = { start: OPENING_SORT_START - 0.1, duration: 0.5, each: 0.07 } as const;
-/** How far pile `kind` has risen into place at film time `t` (0–1). */
-export function pileReveal(kind: PileKind, t: number): number {
-  const order = [...PILES].sort((a, b) => PILE_SPOTS[a.kind].x - PILE_SPOTS[b.kind].x);
-  const k = order.findIndex((p) => p.kind === kind);
-  return progress(t, PILE_REVEAL.start + k * PILE_REVEAL.each, PILE_REVEAL.duration, easing.enter);
-}
-
-/**
- * The five piles at their spots (offset by `o`), each `fills[kind]` full
- * (0–1) and `reveal(kind)` (0–1) of the way into place.
- */
-export function piles(
-  tex: PaperTextures,
-  o: { x: number; y: number },
-  fills: Readonly<Record<PileKind, number>>,
-  revealOf: (kind: PileKind) => number = () => 1,
-): SceneNode[] {
-  return PILES.flatMap(({ kind }) => {
-    const spot = PILE_SPOTS[kind];
-    const reveal = revealOf(kind);
-    if (reveal <= 0) return [];
-    return groupNode(
-      `pile-${kind}-o`,
-      [
-        pile(`pile-${kind}`, kind, o.x + spot.x, o.y + spot.y, tex, {
-          scale: PILE_SCALE,
-          fill: fills[kind],
-        }),
-      ],
-      reveal < 1
-        ? {
-            opacity: clamp(reveal * 1.4),
-            transform: { y: 22 * (1 - reveal) },
-            blur: 6 * (1 - reveal),
-          }
-        : {},
-    );
-  });
-}
-const FULL: Readonly<Record<PileKind, number>> = {
-  mail: 1,
-  files: 1,
-  m365: 1,
-  workspace: 1,
-  slack: 1,
-};
-
-/** How many pinboard pieces are up from the first frame (the rest land as the camera arrives). */
-const PRE_LANDED = 6;
-
 /** Choreography of the lost-knowledge group, in seconds of the film. */
 const LOST_WRITTEN = {
-  /** Piece k (from `PRE_LANDED` on) lands at pieces.start + (k − PRE_LANDED) × pieces.each, its pin pressed in just after. */
-  pieces: { start: OPENING.fill, each: 0.075, drop: 0.45, pin: 0.16 },
-  /** The board's colour drains from the lower right once the wall has broken. */
+  /** A low bed once the piles are done. */
   loss: { start: OPENING.break, duration: 1.6 },
-  /** Pieces tear free and fall as the wall breaks (`fallAt`); a red question mark is left in each gap. */
-  fall: 0.75,
-  /** The question mark, this long after its piece starts to fall. */
-  mark: 0.3,
-  /** The second line: the board goes soft behind an hour of searching. */
-  b: { start: beats(10.75), search: 0.9, each: 0.3, ring: 0.9, sweep: 2.6 },
+  /** The second line: an hour of searching. */
+  b: { start: beats(12.25), search: 0.9, each: 0.3, ring: 0.9, sweep: 2.45 },
 } as const;
-/** On the film's beat grid: sixteenths, the landing stagger on thirty-seconds. */
-export const LOST = {
-  ...gridTimes(LOST_WRITTEN),
-  pieces: { ...gridTimes(LOST_WRITTEN.pieces), each: onGrid(LOST_WRITTEN.pieces.each, SFX_DIV) },
-};
-/** When piece `k` lands (before the film's first frame for the first few). */
-const landAt = (k: number) =>
-  k < PRE_LANDED ? -1 : LOST.pieces.start + (k - PRE_LANDED) * LOST.pieces.each;
-
-type PieceKind = 'page' | 'chart' | 'sticky' | 'index' | 'notebook';
-interface PieceSpec {
-  readonly id: string;
-  readonly kind: PieceKind;
-  readonly x: number;
-  readonly y: number;
-  readonly rot: number;
-  readonly title?: string;
-  readonly icon?: IconName;
-  readonly curl?: number;
-  readonly w?: number;
-  readonly h?: number;
-  /** Colour token name for sticky notes and chart bars. */
-  readonly color?: string;
-  readonly size?: number;
-  readonly seed?: number;
-  readonly lines?: readonly number[];
-  readonly bars?: readonly number[];
-  readonly ink?: string;
-  readonly pin?: string;
-  readonly tape?: { readonly dy: number; readonly w: number; readonly rot: number };
-  /**
-   * Its order in tearing free when the wall breaks (the written times are
-   * squeezed into the half second after the break by `fallAt`).
-   */
-  readonly falls?: number;
-}
-
-/** The pinboard's pieces, in landing order (dense, overlapping clusters). */
-const PIECES: readonly PieceSpec[] = [
-  {
-    id: 'pb-p1',
-    kind: 'page',
-    x: 140,
-    y: 470,
-    rot: -5,
-    title: 'Q3 pricing',
-    icon: 'doc',
-    curl: 16,
-    pin: C.person.fill,
-  },
-  {
-    id: 'pb-s1',
-    kind: 'sticky',
-    x: 235,
-    y: 390,
-    rot: 8,
-    color: C.insight.marker,
-    seed: 1,
-    size: 92,
-    lines: [70, 52],
-  },
-  { id: 'pb-n1', kind: 'notebook', x: 355, y: 480, rot: 3, seed: 11, pin: C.brand.fill },
-  {
-    id: 'pb-c1',
-    kind: 'chart',
-    x: 565,
-    y: 430,
-    rot: 2,
-    title: 'Late deliveries',
-    bars: [0.35, 0.5, 0.42, 0.8, 0.95],
-    color: C.source.icon,
-    tape: { dy: -68, w: 84, rot: -4 },
-  },
-  {
-    id: 'pb-s2',
-    kind: 'sticky',
-    x: 420,
-    y: 590,
-    rot: -6,
-    color: C.person.glow,
-    seed: 2,
-    lines: [70, 84, 50],
-    falls: onGrid(3.3, SFX_DIV),
-  },
-  {
-    id: 'pb-i1',
-    kind: 'index',
-    x: 580,
-    y: 570,
-    rot: -3,
-    seed: 4,
-    curl: 10,
-    pin: C.time.ring,
-    falls: onGrid(3.1, SFX_DIV),
-  },
-  { id: 'pb-i2', kind: 'index', x: 165, y: 670, rot: -2, seed: 8, pin: C.source.icon },
-  {
-    id: 'pb-d1',
-    kind: 'sticky',
-    x: 655,
-    y: 690,
-    rot: 6,
-    color: C.insight.marker,
-    seed: 13,
-    size: 96,
-    pin: C.person.fill,
-    falls: onGrid(2.45, SFX_DIV),
-  },
-  {
-    id: 'pb-s3',
-    kind: 'sticky',
-    x: 95,
-    y: 790,
-    rot: 7,
-    color: C.source.glow,
-    seed: 3,
-    size: 100,
-    lines: [76, 60],
-  },
-  {
-    id: 'pb-p2',
-    kind: 'page',
-    x: 330,
-    y: 760,
-    rot: -2,
-    title: 'Re: Renewal terms',
-    icon: 'mail',
-    w: 170,
-    h: 180,
-    pin: C.outcome.fill,
-    falls: onGrid(3.4, SFX_DIV),
-  },
-  {
-    id: 'pb-s4',
-    kind: 'sticky',
-    x: 420,
-    y: 845,
-    rot: 5,
-    color: C.outcome.glow,
-    seed: 5,
-    size: 96,
-    falls: onGrid(2.9, SFX_DIV),
-  },
-  {
-    id: 'pb-p3',
-    kind: 'page',
-    x: 575,
-    y: 760,
-    rot: 4,
-    title: 'Supplier SLAs',
-    icon: 'sheet',
-    curl: 18,
-    pin: C.person.fill,
-    falls: onGrid(2.55, SFX_DIV),
-  },
-  {
-    id: 'pb-p4',
-    kind: 'page',
-    x: 175,
-    y: 960,
-    rot: -3,
-    title: 'Onboarding notes',
-    icon: 'doc',
-    curl: 20,
-    tape: { dy: -94, w: 90, rot: 3 },
-  },
-  {
-    id: 'pb-s5',
-    kind: 'sticky',
-    x: 285,
-    y: 1030,
-    rot: -8,
-    color: C.time.track,
-    seed: 9,
-    size: 90,
-    lines: [60, 72],
-    falls: onGrid(3.0, SFX_DIV),
-  },
-  {
-    id: 'pb-n2',
-    kind: 'notebook',
-    x: 430,
-    y: 990,
-    rot: -4,
-    seed: 12,
-    ink: C.text.primary,
-    falls: onGrid(2.65, SFX_DIV),
-  },
-  {
-    id: 'pb-c2',
-    kind: 'chart',
-    x: 590,
-    y: 960,
-    rot: -5,
-    title: 'Margins by region',
-    bars: [0.7, 0.55, 0.8, 0.45, 0.6],
-    color: C.time.ring,
-    falls: onGrid(2.15, SFX_DIV),
-  },
-  {
-    id: 'pb-d2',
-    kind: 'chart',
-    x: 525,
-    y: 1110,
-    rot: 3,
-    title: 'Supplier list',
-    bars: [0.6, 0.3, 0.8, 0.5, 0.4],
-    color: C.time.ring,
-    pin: C.brand.fill,
-    falls: onGrid(2.3, SFX_DIV),
-  },
-  {
-    id: 'pb-s6',
-    kind: 'sticky',
-    x: 120,
-    y: 1110,
-    rot: 10,
-    color: C.insight.marker,
-    seed: 10,
-    size: 88,
-    lines: [60, 48],
-    falls: onGrid(3.2, SFX_DIV),
-  },
-  {
-    id: 'pb-d3',
-    kind: 'index',
-    x: 365,
-    y: 1130,
-    rot: -5,
-    seed: 14,
-    pin: C.source.icon,
-    falls: onGrid(2.8, SFX_DIV),
-  },
-];
-
-/** How tall a piece is (for placing its pin at its top). */
-function pieceHeight(s: PieceSpec): number {
-  switch (s.kind) {
-    case 'page':
-      return s.h ?? 196;
-    case 'chart':
-      return 140;
-    case 'sticky':
-      return s.size ?? 118;
-    case 'index':
-      return 118;
-    case 'notebook':
-      return 200;
-  }
-}
-
-/**
- * The company's knowledge as a real pinboard: printed pages, charts, sticky
- * notes, notebook pages and index cards, pinned and taped up one by one. The
- * loss (`loss` 0–1) spreads from the lower right: colour drains, focus goes,
- * and three pieces tear free and fall, leaving their pins and torn scraps.
- */
-function pinboard(b: Board, o: { x: number; y: number }, lt: number): SceneNode[] {
-  const tex = b.paper;
-  const B = { x: o.x + 24, y: o.y + 320, w: 672, h: 860 };
-  const nodes: SceneNode[] = [
-    groupNode(
-      'pb-board',
-      [
-        shapeNode('pb-frame', {
-          geometry: rect(B.x + B.w / 2, B.y + B.h / 2, B.w + 14, B.h + 14, 22),
-          fill: linearGradient(0, B.y, 0, B.y + B.h, [P.white, C.stroke.hairline]),
-          shadow: elevationShadows(lighting, 'mid'),
-        }),
-        groupNode(
-          'pb-fabric',
-          [
-            imageNode('pb-fabric-img', {
-              src: tex.fabric,
-              width: B.w,
-              height: B.h,
-              transform: { x: B.x + B.w / 2, y: B.y + B.h / 2 },
-            }),
-          ],
-          { clip: rect(B.x + B.w / 2, B.y + B.h / 2, B.w, B.h, 16) },
-        ),
-        shapeNode('pb-inset', {
-          geometry: rect(B.x + B.w / 2, B.y + B.h / 2, B.w, B.h, 16),
-          stroke: { color: withAlpha(lighting.shadow, 0.12), width: 1.5 },
-        }),
-      ],
-      {},
-    ),
-  ];
-  const L = progress(lt, LOST.loss.start, LOST.loss.duration, easing.camera);
-  // How lost a spot on the board is: the loss front sweeps up from the lower right.
-  const loss = (x: number, y: number) => {
-    const s = clamp(((x - B.x) / B.w) * 0.55 + ((y - B.y) / B.h) * 0.45);
-    const reach = clamp(s * 1.8 - 0.62);
-    return clamp((L * 1.3 - (1 - s)) / 0.35) * reach;
-  };
-  const drain = (color: string, l: number) => mixColors(color, C.stroke.hairline, 0.75 * l);
-  const pins: SceneNode[] = [];
-  PIECES.forEach((s, k) => {
-    const at = landAt(k);
-    const p = progress(lt, at, LOST.pieces.drop, easing.enter);
-    if (p <= 0) return;
-    const bx = o.x + s.x;
-    const by = o.y + s.y;
-    const l = loss(bx, by);
-    const f = s.falls === undefined ? 0 : progress(lt, fallAt(s.falls), LOST.fall, easing.exit);
-    const h = pieceHeight(s);
-    const pinPos = { x: bx, y: by - h / 2 + 10 };
-    // Landing: held a little off the board, then pressed down. Falling: down and turning, smeared by speed.
-    const speed = f > 0 && f < 1 ? 1300 * f : 0;
-    const placed: Placed = {
-      x: bx + 30 * f,
-      y: by - 12 * (1 - p) + 1000 * f * f,
-      rotation: s.rot + 34 * f,
-      lift: 1 + 2.2 * (1 - p) + 2.5 * f,
-      opacity: clamp(p * 2.5) * (1 - 0.25 * l) * (1 - f * f),
-      // Only motion blurs a piece: the loss takes pieces away, it doesn't soften them.
-      ...(speed > 30
-        ? { blur: { x: 2 * 0.29 * (speed / 60) * 0.5, y: 2, angle: 92 + 34 * f } }
-        : {}),
-      scale: 1 + 0.06 * (1 - p),
-    };
-    const color = drain(s.color ?? C.source.icon, l);
-    // Once it has fallen out of sight it is gone (only its pin and scrap remain).
-    const gone = f >= 1;
-    let node: SceneNode;
-    switch (s.kind) {
-      case 'page':
-        node = printedPage(s.id, placed, tex, {
-          title: s.title ?? '',
-          icon: s.icon ?? 'doc',
-          tint: drain(C.source.icon, l),
-          curl: s.curl ?? 0,
-          ...(s.w ? { w: s.w } : {}),
-          ...(s.h ? { h: s.h } : {}),
-        });
-        break;
-      case 'chart':
-        node = chartPage(s.id, placed, tex, { title: s.title ?? '', bars: s.bars ?? [], color });
-        break;
-      case 'sticky':
-        node = stickyNote(s.id, placed, tex, {
-          color,
-          seed: s.seed ?? 0,
-          ...(s.size ? { size: s.size } : {}),
-          ...(s.lines ? { lines: s.lines } : {}),
-        });
-        break;
-      case 'index':
-        node = indexCard(s.id, placed, tex, {
-          seed: s.seed ?? 0,
-          ...(s.curl ? { curl: s.curl } : {}),
-        });
-        break;
-      case 'notebook':
-        node = notebookPage(s.id, placed, tex, {
-          seed: s.seed ?? 0,
-          ...(s.ink ? { ink: s.ink } : {}),
-        });
-        break;
-    }
-    if (!gone) nodes.push(node);
-    if (s.tape) {
-      nodes.push(
-        groupNode(
-          `${s.id}-tape-o`,
-          [tape(`${s.id}-tape`, bx, by + s.tape.dy, s.tape.w, s.tape.rot)],
-          { opacity: clamp((p - 0.6) * 3) * (1 - f) },
-        ),
-      );
-    }
-    if (s.pin) {
-      const pp = progress(lt, at + LOST.pieces.pin, 0.3, easing.snap);
-      if (pp > 0) {
-        // When the piece tears free, a scrap of it stays under the pin.
-        if (f > 0.02)
-          pins.push(
-            scrap(
-              `${s.id}-scrap`,
-              pinPos.x,
-              pinPos.y + 6,
-              s.rot * 3,
-              k,
-              s.kind === 'sticky' ? color : P.white,
-            ),
-          );
-        pins.push(
-          groupNode(`${s.id}-pin-o`, [pin(`${s.id}-pin`, pinPos.x, pinPos.y, drain(s.pin, l))], {
-            transform: {
-              x: pinPos.x,
-              y: pinPos.y,
-              scale: lerp(1.5, 1, pp),
-              originX: pinPos.x,
-              originY: pinPos.y,
-            },
-            opacity: clamp(pp * 2),
-          }),
-        );
-      }
-    }
-  });
-  nodes.push(...pins);
-  // Where knowledge was: a red question mark rises in each gap.
-  PIECES.forEach((s) => {
-    if (s.falls === undefined) return;
-    const q = progress(lt, fallAt(s.falls) + LOST.mark, 0.5, easing.snap);
-    if (q <= 0) return;
-    const x = o.x + s.x;
-    const y = o.y + s.y;
-    const size = 0.9 + 0.25 * random('lost-q', s.id);
-    nodes.push(
-      groupNode(
-        `${s.id}-q`,
-        [
-          textNode(`${s.id}-q-t`, {
-            text: '?',
-            font: LOST_MARK,
-            fill: C.lost.mark,
-            align: 'center',
-            transform: { x, y: y - LOST_MARK.size * 0.62 },
-            shadow: { x: 0, y: 0, blur: 22, color: withAlpha(C.lost.glow, 0.9) },
-          }),
-        ],
-        {
-          transform: {
-            x,
-            y,
-            scale: size * lerp(0.4, 1, q),
-            rotation: (random('lost-q-r', s.id) - 0.5) * 24,
-            originX: x,
-            originY: y,
-          },
-          opacity: clamp(q * 2),
-        },
-      ),
-    );
-  });
-  return nodes;
-}
-
-/** The pinboard's question marks. */
-const LOST_MARK = face('title', 84, { weight: 600, letterSpacing: 0 });
-/** When a piece written to fall at `written` (2.15–3.4) tears free: in the 0.4 s after the wall breaks. */
-function fallAt(written: number): number {
-  return onGrid(OPENING.break + 0.05 + (written - 2.15) * 0.32, SFX_DIV);
-}
-/** When each piece that lands during the film lands (film time): for sound. */
-export const LOST_LANDINGS: readonly number[] = PIECES.map((_, k) => landAt(k)).filter(
-  (t) => t >= 0,
-);
-/** When each piece tears free (film time), in order: for sound. */
-export const LOST_FALLS: readonly number[] = PIECES.flatMap((s) =>
-  s.falls === undefined ? [] : [fallAt(s.falls)],
-).sort((a, b) => a - b);
+/** On the film's beat grid: sixteenths. */
+export const LOST = gridTimes(LOST_WRITTEN);
 
 function lost(b: Board, o: { x: number; y: number }, lt = SETTLED, pilesGone = false): SceneNode[] {
   const L = b.look;
   const nodes: SceneNode[] = [];
   const B = LOST.b;
-  // The board is only seen before the paper wall covers it; the wall breaks
-  // onto the bare ground, and the line, the searches and the clock hold the
-  // centre of the frame on their own.
-  if (lt < OPENING.flood.end) nodes.push(groupNode('lost-board', pinboard(b, o, lt)));
-  // The piles, full, once the wall has gone (until then the wall's layer draws them, above it).
-  if (lt >= OPENING.break && !pilesGone) nodes.push(...piles(b.paper, o, FULL));
+  // The opening (`cowork-opening.ts`): items pop up on the bare background,
+  // the statement arrives on its glass and moves up, and the items sort
+  // themselves into stacks; then the hour's words take the statement's
+  // place. The stacks stay until the flight carries them off.
+  const card = b.cards['lostB'];
+  // (Once the flight to the circle starts, the film carries the stacks.)
+  if (!pilesGone) nodes.push(groupNode('opening-items', openingItems(b.paper, o, lt)));
+  nodes.push(
+    ...openingGlass(b.paper, o, lt, {
+      statement: b.heads['opening'],
+      ...(card ? { hour: { card, start: B.start } } : {}),
+    }),
+  );
   if (lt >= B.start) {
-    // The line on its card, then the searches beside the clock: one block above the piles.
-    const card = b.cards['lostB'];
-    const [cardW, cardH] = [card?.width ?? 640, card?.height ?? 220];
+    // The searches beside the clock, under the glass with the hour's words: one block above the stacks.
+    const cardH = card?.height ?? 220;
     const top = o.y + HOUR.top;
     const row = top + cardH + HOUR.gap;
-    nodes.push(head(b, 'lostB', o.x + (FW - cardW) / 2, top, lt - B.start - 0.2));
     // Searching for an hour: queries that come back empty, the hour running out.
     ['latest pricing deck', 'who approved the discount', 'Arden renewal terms'].forEach((s, k) => {
       const at = B.start + B.search + k * B.each;
@@ -1425,7 +896,7 @@ function lost(b: Board, o: { x: number; y: number }, lt = SETTLED, pilesGone = f
 }
 
 /** The hour of searching, laid out under its card: gap, the row's height, the clock's centre in it. */
-const HOUR = { top: 150, gap: 44, row: 200, clock: 96 } as const;
+const HOUR = { top: GLASS.top, gap: 44, row: 200, clock: 96 } as const;
 /** The three people searching, each in their own tint. */
 const SEARCHERS = [tone('knowledge'), tone('outcome'), tone('insight')] as const;
 /** The hour's clock: minutes counting up to a full hour (1:00). */
@@ -1445,6 +916,9 @@ const CRITERIA_WRITTEN = {
   /** "Cowork" at the centre, for the first time. */
   word: beats(1) + 0.15,
   spokes: { start: beats(1) + 0.3, each: 0.08, draw: 0.55 },
+  /** The two app piles pop up below, a sixteenth apart. */
+  apps: beats(1) + 0.15,
+  appsEach: beats(0.25),
   pulses: { start: 1.6, every: 1.1 },
   reach: 1.0,
   field: { start: 1.3, duration: 1.7 },
@@ -1458,21 +932,110 @@ export const CRITERIA = {
   },
 };
 
-/** The circle's centre (group-local): "Cowork" sits here, the tiles around it. */
-export const RING = { x: FW / 2, y: 760, r: 250 } as const;
 /**
- * Each pile's place on the circle (group-local), evenly spaced from the top,
- * in the order that keeps the carried piles from crossing on the way.
+ * The white circle "Cowork" sits in (group-local): every arm ends on its
+ * edge. (The film carries the word on from its centre to the intro.)
  */
-export const TILE_SPOTS: Readonly<Record<PileKind, { x: number; y: number }>> = (() => {
-  const order: PileKind[] = ['files', 'm365', 'slack', 'workspace', 'mail'];
-  const spots = {} as Record<PileKind, { x: number; y: number }>;
-  order.forEach((kind, k) => {
-    const a = ((-90 + k * 72) * Math.PI) / 180;
-    spots[kind] = { x: RING.x + RING.r * Math.cos(a), y: RING.y + RING.r * Math.sin(a) };
-  });
-  return spots;
-})();
+export const RING = { x: FW / 2, y: 720, r: 105 } as const;
+/** The piles in the circle, at this scale of their size in the opening. */
+export const CIRCLE_PILE_SCALE = 0.6;
+/**
+ * Where each pile stands round the circle (group-local, its bottom sheet's
+ * centre): three in a column on each side, the two app piles below. The
+ * opening's top row (email, PDFs, text) and bottom row (messages, sheets,
+ * slides) go to the sides they are nearest, so no paths cross.
+ */
+export const CIRCLE_SPOTS: Readonly<Record<PileKind, { x: number; y: number }>> = {
+  email: { x: 100, y: 520 },
+  pdf: { x: 100, y: 720 },
+  message: { x: 100, y: 920 },
+  text: { x: FW - 100, y: 520 },
+  sheet: { x: FW - 100, y: 720 },
+  slides: { x: FW - 100, y: 920 },
+  slack: { x: 250, y: 1135 },
+  m365: { x: FW - 250, y: 1135 },
+};
+/** Every pile in the circle, in the order its arm draws on. */
+export const CIRCLE_KINDS: readonly PileKind[] = [
+  'email',
+  'pdf',
+  'message',
+  'text',
+  'sheet',
+  'slides',
+  'slack',
+  'm365',
+];
+/**
+ * Each arm's route, from its pile to the circle's edge: lines only ever
+ * run parallel to the frame's edges, turning at right angles. The middle
+ * pile on each side runs straight in; the others step through a lane
+ * beside their column and enter the circle 30 px above or below the
+ * middle; the app piles rise, step inwards and rise into its bottom.
+ */
+function armRoute(kind: PileKind): { x: number; y: number }[] {
+  const spot = CIRCLE_SPOTS[kind];
+  const half = (STACK.w * CIRCLE_PILE_SCALE) / 2;
+  const edge = (d: number) => Math.sqrt(RING.r * RING.r - d * d);
+  const step = 30;
+  if (kind === 'slack' || kind === 'm365') {
+    const side = Math.sign(spot.x - RING.x);
+    const top = spot.y - (STACK.h / 2 + 5 * STACK.rise) * CIRCLE_PILE_SCALE - 8;
+    const col = RING.x + side * step;
+    const turn = top - 50;
+    return [
+      { x: spot.x, y: top },
+      { x: spot.x, y: turn },
+      { x: col, y: turn },
+      { x: col, y: RING.y + edge(step) },
+    ];
+  }
+  const side = Math.sign(spot.x - RING.x);
+  const from = { x: spot.x - side * (half + 8), y: spot.y };
+  const dy = spot.y - RING.y;
+  if (Math.abs(dy) < 1) return [from, { x: RING.x + side * RING.r, y: spot.y }];
+  const lane = RING.x + side * 155;
+  const enter = RING.y + Math.sign(dy) * step;
+  return [
+    from,
+    { x: lane, y: spot.y },
+    { x: lane, y: enter },
+    { x: RING.x + side * edge(step), y: enter },
+  ];
+}
+/** The arms, made once: routed lines that draw on from each pile, with light travelling in. */
+let arms: ReadonlyMap<PileKind, (t: number) => SceneNode> | undefined;
+function armsOf(): ReadonlyMap<PileKind, (t: number) => SceneNode> {
+  if (arms) return arms;
+  arms = new Map(
+    CIRCLE_KINDS.map((kind, k) => {
+      const tint = C.file[kind];
+      const start = CRITERIA.spokes.start + k * CRITERIA.spokes.each;
+      return [
+        kind,
+        connector({
+          id: `cr-arm-${kind}`,
+          d: roundedRoute(armRoute(kind), 12),
+          color: mixColors(C.stroke.strong, tint.icon, 0.3),
+          width: 2,
+          start,
+          duration: CRITERIA.spokes.draw,
+          ease: easing.enter,
+          dots: [1],
+          dotColor: tint.icon,
+          pulses: [0, 1, 2, 3, 4].map((n) => ({
+            at: CRITERIA.pulses.start + n * CRITERIA.pulses.every + k * 0.13,
+            duration: 1.0,
+            color: tint.icon,
+          })),
+          pulseEase: easing.drift,
+          glow: 0.5,
+        }),
+      ];
+    }),
+  );
+  return arms;
+}
 /** "Cowork" at the circle's centre: the reveal's name (Sora 500) at this scale. */
 export const WORD_SCALE = 0.3;
 
@@ -1489,54 +1052,6 @@ export function coworkWord(b: Board, id: string, cx: number, cy: number, scale: 
     transform: { x: cx, y: cy - (lh * scale) / 2, scale },
   });
 }
-
-/**
- * A spoke from (x1, y1) to (x2, y2): a thin line that is clear at both ends
- * and solid only in its middle, so it seems to dissolve into the tile and
- * into the name. `p` (0–1) draws it from the tile inwards; `pulses` are
- * points of light (0–1 along it) travelling in, fading at the ends too.
- */
-function spoke(
-  id: string,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  p: number,
-  pulses: readonly number[],
-  pulseColor: string,
-): SceneNode | null {
-  if (p <= 0) return null;
-  const len = Math.hypot(x2 - x1, y2 - y1);
-  const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
-  const c = C.stroke.strong;
-  const kids: SceneNode[] = [
-    shapeNode(`${id}-line`, {
-      geometry: rect((len * p) / 2, 0, len * p, 3, 1.5),
-      fill: linearGradient(0, 0, len, 0, [
-        { offset: 0, color: withAlpha(c, 0) },
-        { offset: 0.3, color: withAlpha(c, 0.85) },
-        { offset: 0.7, color: withAlpha(c, 0.85) },
-        { offset: 1, color: withAlpha(c, 0) },
-      ]),
-    }),
-  ];
-  pulses.forEach((u, k) => {
-    if (u <= 0 || u >= 1 || u > p) return;
-    kids.push(
-      shapeNode(`${id}-pulse${k}`, {
-        geometry: rect(len * u, 0, 7, 7, 3.5),
-        fill: pulseColor,
-        shadow: { x: 0, y: 0, blur: 8, color: withAlpha(pulseColor, 0.7) },
-        opacity: Math.sin(Math.PI * u),
-      }),
-    );
-  });
-  return groupNode(id, kids, { transform: { x: x1, y: y1, rotation: angle } });
-}
-
-/** The hub, in board space relative to the group (the network plane pivots on it). */
-export const HUB = { x: FW / 2, y: 780 } as const;
 
 /** Something arriving into focus: scaled up a touch and blurred, then sharp. */
 function focusIn(
@@ -1555,18 +1070,18 @@ function focusIn(
 }
 
 /**
- * A Glean-style network on a slightly tilted plane: the hub, the company's
- * sources (blue) and people (pink) around it, routed links with pulses
- * flowing in. The camera settles back as a violet field spreads past the
- * team's old reach (the bigger picture), and work they couldn't take on
- * before lights up (insight), then gets done (outcome). `hubGone` hides the
- * hub once it has left for the intro.
+ * The circle: the opening's six stacks (carried here by the film) and the
+ * two app piles (popping up as the camera lands) round "Cowork" in its
+ * white circle, each joined to it by a right-angled arm with light
+ * travelling in, over a violet field. `hubGone` hides the word once it has
+ * left for the intro; `circleOut` (0–1) fades the white circle as it goes.
  */
 function criteria(
   b: Board,
   o: { x: number; y: number },
   lt = SETTLED,
   hubGone = false,
+  circleOut = 0,
 ): SceneNode[] {
   const hub = { x: RING.x, y: RING.y };
   const nodes: SceneNode[] = [head(b, 'criteria', o.x + HEAD.x, o.y + HEAD.y, lt - CRITERIA.head)];
@@ -1585,50 +1100,61 @@ function criteria(
       }),
     );
   }
-  const reach = progress(lt, CRITERIA.reach, 0.5, easing.enter);
-  if (reach > 0) {
-    net.push(
-      shapeNode('reach', {
-        geometry: rect(hub.x, hub.y, 300, 300, 150),
-        stroke: { color: C.stroke.strong, width: 2, dash: [6, 8] },
-        opacity: reach * (1 - 0.4 * field),
-      }),
-    );
-  }
-  // The piles, now tiles on the circle, joined to "Cowork" at the centre by
-  // spokes that fade at both ends, with points of light travelling in.
-  const kinds = PILES.map((p) => p.kind);
   if (lt >= CRITERIA.tiles) {
-    kinds.forEach((kind, k) => {
-      const spot = TILE_SPOTS[kind];
-      const dx = hub.x - spot.x;
-      const dy = hub.y - spot.y;
-      const d = Math.hypot(dx, dy);
-      const [ux, uy] = [dx / d, dy / d];
-      const from = TILE.r + 8;
-      const to = d - 78;
-      const start = CRITERIA.spokes.start + k * CRITERIA.spokes.each;
+    const lines = armsOf();
+    for (const kind of CIRCLE_KINDS) {
+      const arm = lines.get(kind);
+      if (arm) net.push(arm(lt));
+    }
+    CIRCLE_KINDS.forEach((kind) => {
+      const spot = CIRCLE_SPOTS[kind];
+      const app = APP_KINDS.findIndex((a) => a.kind === kind);
+      if (app < 0) {
+        net.push(pileNode(`cr-pile-${kind}`, kind, spot.x, spot.y, b.paper, CIRCLE_PILE_SCALE));
+        return;
+      }
+      // The app piles pop up out of thin air, like the opening's items.
+      const at = CRITERIA.apps + app * CRITERIA.appsEach;
+      if (lt <= at) return;
+      const size = progress(lt, at, POP.ease.duration, POP.ease);
+      const u = lt - at;
       net.push(
-        spoke(
-          `cr-spoke${k}`,
-          spot.x + ux * from,
-          spot.y + uy * from,
-          spot.x + ux * to,
-          spot.y + uy * to,
-          progress(lt, start, CRITERIA.spokes.draw, easing.enter),
-          [0, 1, 2, 3, 4].map((n) =>
-            clamp((lt - (CRITERIA.pulses.start + n * CRITERIA.pulses.every + k * 0.13)) / 1.0),
-          ),
-          C.pile[kind].icon,
+        groupNode(
+          `cr-pile-${kind}-o`,
+          [
+            pileNode(
+              `cr-pile-${kind}`,
+              kind,
+              spot.x,
+              spot.y,
+              b.paper,
+              CIRCLE_PILE_SCALE * lerp(POP.from, 1, size),
+            ),
+          ],
+          {
+            ...(u < 0.12 ? { opacity: u / 0.12 } : {}),
+            ...(u < 0.24 ? { blur: 9 * (1 - u / 0.24) } : {}),
+          },
         ),
       );
     });
-    kinds.forEach((kind) => {
-      const spot = TILE_SPOTS[kind];
-      net.push(
-        pile(`cr-tile-${kind}`, kind, spot.x, spot.y, b.paper, { scale: PILE_SCALE, morph: 1 }),
-      );
-    });
+  }
+  // The white circle, arriving with the word and fading as the word leaves.
+  const disc = progress(lt, CRITERIA.word - 0.1, 0.5, easing.enter) * (1 - circleOut);
+  if (disc > 0) {
+    const r = RING.r * lerp(0.85, 1, Math.min(1, disc / Math.max(1e-6, 1 - circleOut)));
+    net.push(
+      shapeNode('cr-circle', {
+        geometry: rect(hub.x, hub.y, 2 * r, 2 * r, r),
+        fill: litGradient(lighting, C.surface.raised, hub.y - r, hub.y + r, {
+          sheen: 0.2,
+          shade: 0.05,
+        }),
+        stroke: { color: C.stroke.hairline, width: 1 },
+        shadow: elevationShadows(lighting, 'mid'),
+        ...(disc < 1 ? { opacity: disc } : {}),
+      }),
+    );
   }
   if (!hubGone) {
     const w = progress(lt, CRITERIA.word, 0.5, easing.enter);
@@ -1660,17 +1186,6 @@ export const MEET = gridTimes({
 } as const);
 /** Where the name sits (group-local): the centre of the frame. */
 export const MEET_AT = { y: 640, kicker: 108 } as const;
-
-/**
- * The ball, from the moment the carried name lands (s): the name melts into
- * drops that run together into the ball (`merge` long; the film's Three.js
- * layer draws them), which is whole at `formed` and drops onto the floor.
- */
-export const REVEAL = {
-  melt: beats(3.75),
-  merge: beats(1),
-  formed: beats(4.75),
-} as const;
 
 /** The reveal's light pools, around the name (offset from the centre, radii, colour, strength). */
 const MEET_POOLS: readonly {
@@ -1729,31 +1244,18 @@ function meet(b: Board, o: { x: number; y: number }, lt: number): SceneNode[] {
   const shine = b.heads['meetShine'];
   const halo = b.heads['meetHalo'];
   const nameTop = cy - (MEET_FONTS.name.size * (MEET_FONTS.name.lineHeight ?? 1.2)) / 2;
-  // "Meet" stays until the name melts.
-  const melting = progress(lt, REVEAL.melt, 0.35, easing.exit);
-  if (melting < 1)
-    nodes.push(
-      groupNode(
-        'meet-kicker-o',
-        [head(b, 'meetKicker', cx, nameTop - MEET_AT.kicker + 40, lt - MEET.kicker)],
-        melting > 0 ? { opacity: 1 - melting } : {},
-      ),
-    );
+  nodes.push(head(b, 'meetKicker', cx, nameTop - MEET_AT.kicker + 40, lt - MEET.kicker));
   // The name itself, already whole (carried here from the circle's centre,
-  // growing on the way), with a soft light behind it; later its letters
-  // melt, one after another, each shrinking into its centre, where the
-  // film's ball layer grows its drop.
+  // growing on the way), with a soft light behind it.
   if (name && glow && lt >= 0) {
-    const melt = progress(lt, REVEAL.melt - 0.05, 0.5, easing.enter);
     nodes.push(
       groupNode('meet-name-glow', [glow(SETTLED, 0)], {
         transform: { x: cx, y: nameTop },
-        opacity: 0.35 * bloom * (1 - melt),
+        opacity: 0.35 * bloom,
         blur: 22,
       }),
     );
-    if (melt <= 0) nodes.push(coworkWord(b, 'meet-name', cx, cy, 1));
-    else nodes.push(...meltingName(b, cx, cy, melt));
+    nodes.push(coworkWord(b, 'meet-name', cx, cy, 1));
   }
   // The shimmer: a slanted band of light crossing the name once. Real light
   // has soft edges, so the band is many thin slices whose strength follows a
@@ -1805,47 +1307,8 @@ function meet(b: Board, o: { x: number; y: number }, lt: number): SceneNode[] {
     nameTop + 26,
     (lt - MEET.glint) / 0.7,
   );
-  if (glint && lt < REVEAL.melt) nodes.push(glint);
+  if (glint) nodes.push(glint);
   return nodes;
-}
-
-/**
- * The reveal's name melting (`melt` 0–1): each letter, a little after the one
- * before, shrinks into its own centre (mid x-height, where the ball's drop
- * grows: `nameLetters` in the film uses the same place) and goes.
- */
-function meltingName(b: Board, cx: number, cy: number, melt: number): SceneNode[] {
-  const font = MEET_FONTS.name;
-  const text = 'Cowork';
-  const m = b.ui.measurer;
-  const width = m.measure(text, font);
-  const lh = font.size * (font.lineHeight ?? 1.2);
-  const metrics = m.metrics?.(font) ?? { ascent: font.size * 0.95, descent: font.size * 0.25 };
-  const midY = baselineOffset(font, metrics) - font.size * 0.36 - lh / 2;
-  const n = text.length;
-  return [...text].flatMap((ch, i) => {
-    const own = clamp(melt * 1.5 - (i / Math.max(1, n - 1)) * 0.5);
-    const shrink = 1 - 0.8 * own * own;
-    const fade = 1 - clamp((own - 0.35) / 0.55);
-    if (fade <= 0) return [];
-    const a = m.measure(text.slice(0, i), font);
-    const right = m.measure(text.slice(0, i + 1), font);
-    const lx = (a + right) / 2 - width / 2;
-    return [
-      groupNode(
-        `meet-melt${i}`,
-        [
-          textNode(`meet-melt${i}-t`, {
-            text: ch,
-            font,
-            fill: C.text.primary,
-            transform: { x: a - width / 2 - lx, y: -lh / 2 - midY },
-          }),
-        ],
-        { transform: { x: cx + lx, y: cy + midY, scale: shrink }, opacity: fade },
-      ),
-    ];
-  });
 }
 
 /** A copy of a node tree with every id prefixed (the same drawing used more than once). */
@@ -2060,6 +1523,8 @@ export interface ArtOptions {
   readonly dive?: number;
   /** "Cowork" has left the criteria group (it is flying to the intro). */
   readonly hubGone?: boolean;
+  /** The criteria group's white circle fading as "Cowork" leaves (0–1). */
+  readonly circleOut?: number;
   /** The piles have left the lost group (they are flying to the circle). */
   readonly pilesGone?: boolean;
 }
@@ -2075,7 +1540,7 @@ export function groupArt(b: Board, id: GroupId, options: ArtOptions = {}): Scene
     case 'lost':
       return lost(b, o, lt, options.pilesGone ?? false);
     case 'criteria':
-      return criteria(b, o, lt, options.hubGone ?? false);
+      return criteria(b, o, lt, options.hubGone ?? false, options.circleOut ?? 0);
     case 'intro':
       return intro(b, o, lt);
     case 'ask':

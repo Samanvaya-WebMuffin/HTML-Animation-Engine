@@ -11,17 +11,14 @@
  * its gaps. Film time is board time.
  */
 import {
-  baselineOffset,
   clamp,
   createCanvasMeasurer,
-  defineComposition,
   groupNode,
   layoutText,
   lerp,
   linearGradient,
   mixColors,
   progress,
-  radialGradient,
   rect,
   shapeNode,
   withAlpha,
@@ -30,7 +27,6 @@ import {
 } from '@html-animation-engine/core';
 import {
   aurora,
-  createRenderer,
   defineSceneComposition,
   edgeFade,
   flightPath,
@@ -41,7 +37,6 @@ import {
   viewTransform,
   type BoardView,
   type KineticText,
-  type Renderer,
 } from '@html-animation-engine/renderers';
 import {
   CRITERIA,
@@ -50,17 +45,12 @@ import {
   GROUPS,
   INTRO,
   LOST,
-  LOST_LANDINGS,
   OPENING,
   PITCH,
   revealSpot,
-  MEET_AT,
-  MEET_FONTS,
-  REVEAL,
-  PILE_SCALE,
-  PILE_SPOTS,
   RING,
-  TILE_SPOTS,
+  CIRCLE_PILE_SCALE,
+  CIRCLE_SPOTS,
   WORD_SCALE,
   coworkWord,
   BOARD_FONTS,
@@ -74,7 +64,6 @@ import {
   type GroupId,
 } from './cowork-board.js';
 import {
-  BOX as ASK_BOX,
   SCENE_FONTS,
   ANSWERS_SHOTS,
   WORK_SHOTS,
@@ -89,11 +78,16 @@ import {
 import { SFX_DIV, beats, onGrid } from './cowork-beat.js';
 import { F, UI, UI_FONTS, avatar, createUi, label, type Ui } from './cowork-ui.js';
 import { PRODUCT_FONTS } from './cowork-product.js';
-import { WALL_CUES } from './cowork-wall.js';
 import { C, LOOK_FONTS, R, face, lighting, look } from './cowork-look.js';
-import { PILES, pile } from './cowork-piles.js';
-import { bounce, createBallRig, type BallPose, type Drop } from './cowork-ball.js';
-import { createThreeLayer } from '@html-animation-engine/adapters/three';
+import {
+  BADGE_TIMES,
+  FILE_KINDS,
+  GLASS,
+  POP_SLOTS,
+  STACK_LANDINGS,
+  STACK_SPOTS,
+  pileNode,
+} from './cowork-opening.js';
 import { phoneDefaults } from './index.js';
 import {
   bell,
@@ -101,7 +95,6 @@ import {
   cue,
   strings,
   pad,
-  thump,
   pluck,
   pop,
   seeded,
@@ -138,7 +131,7 @@ export const FILM = {
   toIntro: flight(29),
   /** "Cowork", carried from the circle, lands at the centre: "Meet Cowork". */
   intro: at(31),
-  /** The name melts into the chrome ball, which bounces, then carries the camera to the ask. */
+  /** "Meet Cowork" holds, then the camera flies down to the ask. */
   introEnd: at(38),
   /** Down to the product row, then group to group: each lands a beat into its scene. */
   toAsk: flight(37),
@@ -240,8 +233,6 @@ const local: Partial<Record<GroupId, (t: number) => number>> = {
 // ---------------------------------------------------------------------------
 
 const V = {
-  /** Above the pinboard, the opening line at the centre (the board just showing at the bottom). */
-  open: { ...groupView('lost'), y: groupView('lost').y - 700 },
   lost: groupView('lost'),
   criteria: groupView('criteria', FILM.pullBack.zoom),
   intro: groupView('intro'),
@@ -260,11 +251,8 @@ const drift = (
 
 /** Where the camera is at film time `t`. */
 export function camera(t: number): BoardView {
-  if (t < FILM.lost) {
-    // Down from the line to the pinboard, then still while the wall builds and breaks.
-    const p = progress(t, OPENING.pan.start, OPENING.pan.duration, easing.camera);
-    return { ...V.lost, y: lerp(V.open.y, V.lost.y, p) };
-  }
+  // Still on the opening while its items pop up and sort themselves.
+  if (t < FILM.lost) return V.lost;
   const lostView = (u: number) => drift(V.lost, u, FILM.lost, 7.5);
   if (t < FILM.toCriteria.start) return lostView(t);
   const criteriaView = (u: number) => ({
@@ -396,13 +384,13 @@ function carrier(board: Board, t: number): SceneNode[] {
     const lg = group('lost');
     const cg = group('criteria');
     const s = progress(t, pc.start, pc.duration, easing.camera);
-    const m = progress(t, pc.start + 0.08, pc.duration - 0.16, easing.camera);
-    for (const { kind } of PILES) {
-      const a = PILE_SPOTS[kind];
-      const b = TILE_SPOTS[kind];
+    // The stacks fly straight into their places round the circle, shrinking to fit.
+    for (const { kind } of FILE_KINDS) {
+      const a = STACK_SPOTS[kind];
+      const b = CIRCLE_SPOTS[kind];
       const x = lerp(lg.x + a.x, cg.x + b.x, s);
       const y = lerp(lg.y + a.y, cg.y + b.y, s) - 60 * Math.sin(Math.PI * s);
-      nodes.push(pile(`carry-${kind}`, kind, x, y, board.paper, { scale: PILE_SCALE, morph: m }));
+      nodes.push(pileNode(`carry-${kind}`, kind, x, y, board.paper, lerp(1, CIRCLE_PILE_SCALE, s)));
     }
   }
   const wc = FILM.toIntro;
@@ -415,168 +403,6 @@ function carrier(board: Board, t: number): SceneNode[] {
     const y = lerp(cg.y + RING.y, ig.y + spot.y, s) - 140 * Math.sin(Math.PI * s);
     const scale = Math.exp(lerp(Math.log(WORD_SCALE), 0, s));
     nodes.push(coworkWord(board, 'carry-word', x, y, scale));
-  }
-  return nodes;
-}
-
-// ---------------------------------------------------------------------------
-// The chrome ball (drawn by the Three.js layer in the intro and the ask)
-// ---------------------------------------------------------------------------
-
-/** The ball's size and floor (the intro group's px) and how fast the studio turns round it. */
-const BALL = { r: 66, floor: 830, spin: 70 } as const;
-/**
- * The ball's moments in film time: the reveal's (`REVEAL`, from the name's
- * landing), then the flight to the ask (the ball at the frame's centre,
- * stretched), and its spreading out into the ask's card as the camera lands.
- */
-const BALL_T = {
-  melt: FILM.intro + REVEAL.melt,
-  formed: FILM.intro + REVEAL.formed,
-  spread: { start: FILM.ask - 0.15, duration: 0.4 },
-  matte: { start: FILM.ask - 0.05, duration: 0.4 },
-  handover: FILM.ask + 0.25,
-  gone: FILM.ask + 0.45,
-  /** The card's words start arriving once it is paper. */
-  words: FILM.ask + 0.5,
-} as const;
-
-/** When the ball hits the floor (each impact, read off the motion itself). */
-const BALL_IMPACTS: readonly number[] = (() => {
-  const times: number[] = [];
-  const drop = BALL.floor - BALL.r - MEET_AT.y;
-  let prev = Infinity;
-  for (let t = BALL_T.formed; t < FILM.toAsk.start && times.length < 3; t += 1 / 480) {
-    const lift = bounce(t - BALL_T.formed, drop).lift;
-    if (lift === 0 && prev > 0) times.push(t);
-    prev = lift;
-  }
-  return times;
-})();
-
-/** A board point on screen under `view`. */
-const onScreen = (view: BoardView, x: number, y: number) => ({
-  x: (x - view.x) * view.zoom + FW / 2,
-  y: (y - view.y) * view.zoom + FH / 2,
-});
-
-/** Each letter's centre in the reveal's name (from the name's centre), for the drops. */
-let letters: readonly { x: number; y: number }[] | undefined;
-function nameLetters(state: FilmState): readonly { x: number; y: number }[] {
-  if (letters) return letters;
-  const font = MEET_FONTS.name;
-  const m = state.kit.look.measurer;
-  const text = 'Cowork';
-  const width = m.measure(text, font);
-  // As the chrome plates place them (`cowork-ball.ts`): mid x-height on each letter.
-  const lh = font.size * (font.lineHeight ?? 1.2);
-  const metrics = m.metrics?.(font) ?? { ascent: font.size * 0.95, descent: font.size * 0.25 };
-  const y = baselineOffset(font, metrics) - font.size * 0.36 - lh / 2;
-  letters = [...text].map((_, i) => {
-    const a = m.measure(text.slice(0, i), font);
-    const b = m.measure(text.slice(0, i + 1), font);
-    return { x: (a + b) / 2 - width / 2, y };
-  });
-  return letters;
-}
-
-export interface BallFrame {
-  readonly ball: BallPose | null;
-}
-
-/**
- * The Three.js layer at film time `t`: the name in purple chrome from its
- * landing; then its letters melting into drops that run together into the
- * ball; the ball dropping onto the floor and ringing like jelly; through the
- * flight to the ask, the ball at the frame's centre, stretched along the
- * motion; then spreading out into the ask's card, settling to its paper.
- */
-export function ballFrame(state: FilmState, t: number): BallFrame {
-  const lt = t - FILM.intro;
-  if (lt < 0 || t >= BALL_T.gone) return { ball: null };
-  const view = camera(t);
-  const ig = group('intro');
-  const spin = BALL.spin * lt;
-  const centre = onScreen(view, ig.x + FW / 2, ig.y + MEET_AT.y);
-  if (t < BALL_T.melt) return { ball: null };
-  if (t < BALL_T.formed) {
-    // The letters melt into drops, which run together into one.
-    const grow = progress(t, BALL_T.melt, 0.35, easing.enter);
-    const m = progress(t, BALL_T.melt + 0.12, BALL_T.formed - BALL_T.melt - 0.12, easing.camera);
-    const ls = nameLetters(state);
-    const rd = BALL.r / Math.sqrt(ls.length);
-    const drops: Drop[] = ls.map((l) => ({
-      x: lerp(centre.x + l.x * view.zoom, centre.x, m),
-      y: lerp(centre.y + l.y * view.zoom, centre.y, m),
-      r: rd * grow * view.zoom * (1 + 0.15 * Math.sin(Math.PI * m)),
-    }));
-    return { ball: { x: centre.x, y: centre.y, r: BALL.r * view.zoom, drops, spin } };
-  }
-  // Whole: it drops onto the floor and rings, then rides the flight at the frame's centre.
-  const b = bounce(t - BALL_T.formed, BALL.floor - BALL.r - MEET_AT.y);
-  const rest = onScreen(view, ig.x + FW / 2, ig.y + BALL.floor - BALL.r - b.lift);
-  const fl = FILM.toAsk;
-  const toCentre = progress(t, fl.start - 0.15, 0.45, easing.camera);
-  // Spreading, it settles into the input box's place.
-  const ag = group('ask');
-  const box = onScreen(view, ag.x + ASK_BOX.cx, ag.y + ASK_BOX.cy);
-  const spread = progress(t, BALL_T.spread.start, BALL_T.spread.duration, easing.camera);
-  const vel = screenVelocity(camera, t);
-  const speed = t > fl.start && t < fl.start + fl.duration ? Math.hypot(vel.x, vel.y) : 0;
-  return {
-    ball: {
-      x: lerp(lerp(rest.x, FW / 2, toCentre), box.x, spread),
-      y: lerp(lerp(rest.y, FH / 2, toCentre), box.y, spread),
-      r: lerp(BALL.r * view.zoom, BALL.r, toCentre),
-      squash: b.squash,
-      wobble3: b.wobble3,
-      stretch: 1 + 0.6 * clamp(speed / 2600) * (1 - progress(t, BALL_T.spread.start - 0.1, 0.2)),
-      angle: (Math.atan2(vel.y, vel.x) * 180) / Math.PI,
-      spread,
-      matte: progress(t, BALL_T.matte.start, BALL_T.matte.duration, easing.camera),
-      card: { w: ASK_BOX.w * view.zoom, h: ASK_BOX.h * view.zoom },
-      opacity: 1 - progress(t, BALL_T.handover, BALL_T.gone - BALL_T.handover, easing.camera),
-      spin,
-    },
-  };
-}
-
-/** Beneath the layer, on screen: the ball's violet light, and its shadow on the floor while it bounces. */
-function ballUnder(state: FilmState, t: number): SceneNode[] {
-  const { ball } = ballFrame(state, t);
-  if (!ball) return [];
-  const nodes: SceneNode[] = [];
-  const glow = ball.drops ? progress(t, BALL_T.melt, 0.5, easing.enter) : 1 - (ball.spread ?? 0);
-  const halo = ball.r * 3;
-  if (glow > 0)
-    nodes.push(
-      shapeNode('ball-halo', {
-        geometry: rect(ball.x, ball.y, 2 * halo, 2 * halo, halo),
-        fill: radialGradient(ball.x, ball.y, halo, [
-          withAlpha(C.meet.violet, 0.3 * glow),
-          withAlpha(C.meet.lilac, 0.1 * glow),
-          withAlpha(C.meet.lilac, 0),
-        ]),
-      }),
-    );
-  if (!ball.drops && t < FILM.toAsk.start) {
-    const view = camera(t);
-    const ig = group('intro');
-    const floor = onScreen(view, ig.x + FW / 2, ig.y + BALL.floor);
-    const lift = clamp((floor.y - (ball.y + ball.r)) / 220);
-    nodes.push(
-      shapeNode('ball-shadow', {
-        geometry: rect(
-          ball.x,
-          floor.y - 2,
-          ball.r * 1.8 * (1 - 0.35 * lift),
-          18 * (1 - 0.3 * lift),
-          9,
-        ),
-        fill: withAlpha(lighting.shadow, 0.3 * (1 - 0.6 * lift)),
-        blur: 14 + 18 * lift,
-      }),
-    );
   }
   return nodes;
 }
@@ -774,81 +600,31 @@ function productScene(state: FilmState, id: ProductScene, t: number): SceneNode[
   const g = group(id);
   const c = contentTime(id, t);
   const art = id === 'ask' ? askArt : id === 'work' ? workArt : answersArt;
-  // The ask's card is what the chrome ball spreads into: it (and the scene it
-  // covers) shows once the ball has.
-  const shown = id === 'ask' ? progress(t, BALL_T.handover, 0.2, easing.enter) : 1;
-  const nodes: SceneNode[] =
-    shown > 0 ? [groupNode(`${id}-art`, art(state.kit, c), { transform: { x: g.x, y: g.y } })] : [];
+  const nodes: SceneNode[] = [
+    groupNode(`${id}-art`, art(state.kit, c), { transform: { x: g.x, y: g.y } }),
+  ];
   const card = INTRO_CARDS.find((k) => k.id === id);
-  if (id === 'ask' && card) {
-    // No card here: the ball became the input box; the card's words sit above it.
-    nodes.push(askHeadline(state, card, g, t));
-    return nodes;
-  }
   const lift = progress(c, -LIFT, LIFT, easing.wipe);
-  if (card && lift < 1 && shown > 0) {
-    // The ask's card is blank paper as the ball becomes it; then its words arrive, then the marker.
-    const words = id === 'ask' ? t - BALL_T.words : SETTLED_TEXT;
+  if (card && lift < 1) {
     const sheet = introCard(
       state,
       card,
       lift,
       undefined,
       1,
-      id === 'ask'
-        ? progress(t, BALL_T.words + 0.9, MARKER.duration, easing.wipe)
-        : progress(c, MARKER.from, MARKER.duration, easing.wipe),
-      words < 0 ? -1 : words,
+      progress(c, MARKER.from, MARKER.duration, easing.wipe),
+      SETTLED_TEXT,
     );
     if (sheet)
       nodes.push(
         groupNode(`${id}-intro-card`, [sheet], {
           transform: { x: g.x + (FW - CARD_WIN.w) / 2, y: g.y + 210 },
           // It lifts away and fades as it goes, leaving no edge behind.
-          opacity: (1 - lift * lift) * shown,
+          opacity: 1 - lift * lift,
         }),
       );
   }
   return nodes;
-}
-
-/**
- * The ask's words above its input box (in place of an intro card): the
- * lowercase eyebrow, the title arriving letter by letter, the tagline after
- * it, then the light-violet highlighter swept behind the tagline; they stay
- * for the scene.
- */
-function askHeadline(state: FilmState, card: IntroCard, g: { x: number; y: number }, t: number) {
-  const text = state.intros[card.id];
-  const since = t - BALL_T.words;
-  if (!text || since < 0) return groupNode('ask-head-none', []);
-  const x = ASK_BOX.cx - ASK_BOX.w / 2 + 4;
-  const top = ASK_BOX.cy - ASK_BOX.h / 2 - 270;
-  const titleY = top + 40;
-  const subY = titleY + text.title.height + 14;
-  return groupNode(
-    'ask-head',
-    [
-      groupNode(
-        'ask-head-eyebrow-o',
-        [label('ask-head-eyebrow', card.eyebrow, x, top, CARD.eyebrow, C.text.accent)],
-        {
-          opacity: clamp(since / 0.35),
-        },
-      ),
-      groupNode('ask-head-title', [text.title(since, 0)], { transform: { x, y: titleY } }),
-      ...markerSweep(
-        state.kit.ui,
-        'ask-head',
-        card.sub,
-        x,
-        subY,
-        progress(t, BALL_T.words + 0.9, MARKER.duration, easing.wipe),
-      ),
-      groupNode('ask-head-sub', [text.sub(since - 0.25, 0)], { transform: { x, y: subY } }),
-    ],
-    { transform: { x: g.x, y: g.y } },
-  );
 }
 
 /** Groups near the view. */
@@ -881,17 +657,19 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
         `group-${id}`,
         groupArt(board, id, {
           lt,
-          ...(id === 'criteria' ? { hubGone: t >= FILM.toIntro.start } : {}),
+          ...(id === 'criteria'
+            ? {
+                hubGone: t >= FILM.toIntro.start,
+                circleOut: progress(t, FILM.toIntro.start, 0.45, easing.exit),
+              }
+            : {}),
           ...(id === 'lost' ? { pilesGone: t >= FILM.toCriteria.start } : {}),
         }),
       ),
     );
   }
   content.push(...carrier(board, t));
-  // On the flight the ball carries, the board behind it blurs more (it seems to fly faster).
-  const toAsk = t > FILM.toAsk.start && t < FILM.toAsk.start + FILM.toAsk.duration;
-  const v = screenVelocity(camera, t);
-  const blur = inFlight(t) ? motionBlur(toAsk ? { x: v.x * 1.8, y: v.y * 1.8 } : v) : undefined;
+  const blur = inFlight(t) ? motionBlur(screenVelocity(camera, t)) : undefined;
   return [
     ...backdrop(t, view),
     groupNode(
@@ -903,7 +681,6 @@ export function filmWorld(state: FilmState, t: number): SceneNode[] {
       ],
       blur ? { blur } : {},
     ),
-    ...ballUnder(state, t),
   ];
 }
 
@@ -930,13 +707,25 @@ export function openingBackdrop(before: number): SceneNode[] {
 
 const C0 = FILM.criteria;
 const CUES: readonly Cues[] = [
-  // The opening: the line, the flood, the wall out of focus, "is lost", the crack and the break.
-  WALL_CUES,
-  // The pinboard fills as the camera arrives: each piece lands, every third pin pressed in.
-  LOST_LANDINGS.map((at, k) => [
-    cue(at + 0.12, slap({ gain: 0.22, pan: (seeded('pb', k) - 0.5) * 0.8 })),
-    k % 3 === 0 ? cue(at + LOST.pieces.pin + 0.05, tick({ degree: 2, gain: 0.25 })) : [],
-  ]),
+  // The opening: a tiny tick each time items pop up (louder the more at
+  // once, panned to where they are), a pad swelling under the glass, a very
+  // quiet slap as items land on their stacks, and a rising pop per badge.
+  POP_SLOTS.map((s, k) =>
+    cue(s.at, tick({ degree: 2 + (k % 7), gain: 0.2 * Math.sqrt(s.n), pan: s.x * 1.2 })),
+  ),
+  cue(GLASS.start, pad(2.2, { chord: 'lift', attack: 0.4, release: 1.2, gain: 0.4 })),
+  [...new Set(STACK_LANDINGS)].map((at, k) =>
+    cue(
+      at,
+      slap({
+        gain: 0.11 * Math.sqrt(STACK_LANDINGS.filter((l) => l === at).length),
+        pan: (seeded('stack-land', k) - 0.5) * 0.6,
+      }),
+    ),
+  ),
+  BADGE_TIMES.map((at, k) =>
+    cue(at, pop({ degree: [0, 2, 4, 5, 7, 9][k] ?? 0, take: k, gain: 0.35 })),
+  ),
   // The wall has broken onto bare ground: a low bed under the hour of searching.
   cue(LOST.loss.start, pad(4.5, { chord: 'shadow', attack: 0.8, release: 1.5, gain: 0.5 })),
   // An hour of searching, coming back empty.
@@ -985,17 +774,6 @@ const CUES: readonly Cues[] = [
     FILM.intro + 0.05,
     pad(FILM.introEnd - FILM.intro - 0.3, { chord: 'home', attack: 0.3, release: 1.5 }),
   ),
-  // The name's letters melt (a liquid
-  // rush and a tick per letter); the drops meet; the ball lands and rings
-  // (a soft thump each impact, smaller each time); it spreads into the card.
-  cue(BALL_T.melt - 0.05, whoosh(0.7, { from: 3200, to: 700, peak: 0.35, gain: 0.32 })),
-  [0, 1, 2, 3, 4, 5].map((k) =>
-    cue(BALL_T.melt + 0.05 + k * 0.05, tick({ degree: 4 + k, gain: 0.14, pan: (k - 2.5) * 0.15 })),
-  ),
-  cue(BALL_T.formed - 0.08, pluck({ degree: 4, octave: 1, gain: 0.3 })),
-  BALL_IMPACTS.map((at, k) => cue(at, thump({ gain: 0.5 * 0.55 ** k }))),
-  cue(BALL_T.spread.start, whoosh(0.5, { from: 900, to: 2600, peak: 0.4, gain: 0.3 })),
-  cue(BALL_T.handover, slap({ gain: 0.25 })),
   // Each flight its air.
   LEGS.map((l) =>
     cue(l.arrive.start, whoosh(l.arrive.duration, { from: 260, to: 1500, peak: 0.5, gain: 0.45 })),
@@ -1003,12 +781,10 @@ const CUES: readonly Cues[] = [
   // Each intro card: a soft note as the camera lands on it, paper as it lifts off.
   INTRO_CARDS.map((c, k) => [
     cue(LANDS[c.id], pluck({ degree: [4, 7, 9][k] ?? 4, octave: 1, gain: 0.28 })),
-    c.id === 'ask'
-      ? []
-      : cue(
-          LANDS[c.id] + CARD_HOLD - LIFT,
-          whoosh(LIFT, { from: 700, to: 2600, peak: 0.6, gain: 0.3 }),
-        ),
+    cue(
+      LANDS[c.id] + CARD_HOLD - LIFT,
+      whoosh(LIFT, { from: 700, to: 2600, peak: 0.6, gain: 0.3 }),
+    ),
   ]),
   // The product scenes' own sounds (typing, clicks, plucks), on their content time.
   askCues(filmOfContent('ask')),
@@ -1085,32 +861,7 @@ export const FILM_FONTS = [
 
 export function defineFilmScene(scene: FilmScene, id: string) {
   const { start, end, title } = FILM_SCENES[scene];
-  // The scenes the chrome name and ball appear in get a Three.js layer above the board.
-  const ball = start < BALL_T.gone && end > FILM.intro;
-  if (!ball)
-    return defineSceneComposition({
-      ...phoneDefaults,
-      fonts: FILM_FONTS,
-      id,
-      seed: id,
-      title,
-      audio: soundtrack(sceneCues(scene)),
-      duration: end - start,
-      background: C.bg.canvas,
-      renderer: 'svg',
-      setup: createFilmState,
-      scene: (t, _ctx, state) => ({ world: filmWorld(state, start + t) }),
-    });
-  const mounted = new WeakMap<
-    HTMLElement,
-    {
-      readonly svg: Renderer;
-      readonly state: FilmState;
-      readonly layer: ReturnType<typeof createThreeLayer>;
-      readonly rig: ReturnType<typeof createBallRig>;
-    }
-  >();
-  return defineComposition({
+  return defineSceneComposition({
     ...phoneDefaults,
     fonts: FILM_FONTS,
     id,
@@ -1119,29 +870,8 @@ export function defineFilmScene(scene: FilmScene, id: string) {
     audio: soundtrack(sceneCues(scene)),
     duration: end - start,
     background: C.bg.canvas,
-    async setup(ctx) {
-      const size = { width: FW, height: FH, pixelRatio: ctx.pixelRatio };
-      const svg = createRenderer('svg', ctx.root, { ...size, background: C.bg.canvas });
-      const state = await createFilmState();
-      const layer = createThreeLayer(ctx.root, size);
-      const rig = createBallRig(layer.renderer, FW, FH);
-      mounted.set(ctx.root, { svg, state, layer, rig });
-    },
-    render(t, ctx) {
-      const m = mounted.get(ctx.root);
-      if (!m) throw new Error(`${id} rendered before setup.`);
-      const at = start + t;
-      m.svg.render({ width: FW, height: FH, world: filmWorld(m.state, at) });
-      const f = ballFrame(m.state, at);
-      m.rig.pose(f.ball);
-      if (f.ball) m.layer.render(m.rig.scene, m.rig.camera);
-      else m.layer.clear();
-    },
-    teardown(ctx) {
-      const m = mounted.get(ctx.root);
-      m?.svg.destroy();
-      m?.layer.destroy();
-      mounted.delete(ctx.root);
-    },
+    renderer: 'svg',
+    setup: createFilmState,
+    scene: (t, _ctx, state) => ({ world: filmWorld(state, start + t) }),
   });
 }

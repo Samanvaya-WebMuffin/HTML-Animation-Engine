@@ -44,8 +44,8 @@ const film = Object.fromEntries(
   ]),
 ) as Readonly<Record<Key, string>>;
 
-/** A pile's light tint at OKLCH hue `h`: the folder's stock, its lighter chip, and a mid tone. */
-const pileTint = (h: number) => {
+/** A file kind's light tint at OKLCH hue `h`: the folder's stock, its lighter chip, and a mid tone. */
+const fileTint = (h: number) => {
   const at = (l: number, c: number) => formatColor(oklchToRgb({ l, c, h, a: 1 }));
   return { stock: at(0.925, 0.04), chip: at(0.965, 0.02), icon: at(0.66, 0.09) };
 };
@@ -159,17 +159,21 @@ const components = {
     shine: '#ffffff',
   },
   /**
-   * The opening's piles, one light tint per source, never violet (Cowork's
-   * own). The five hues are spaced evenly around the wheel outside violet,
-   * all at one lightness and chroma, so no pile weighs more than another;
-   * neighbours in the layout (three over two) never share a temperature.
+   * The opening's six kinds of file, one light tint each, never violet
+   * (Cowork's own): hues spaced evenly round the wheel outside violet, at one
+   * lightness and chroma, each near its kind's usual colour (mail blue, PDFs
+   * red, slides amber, sheets green, text teal, messages pink).
    */
-  pile: {
-    mail: pileTint(20),
-    files: pileTint(130),
-    m365: pileTint(245),
-    workspace: pileTint(75),
-    slack: pileTint(190),
+  file: {
+    email: fileTint(230),
+    pdf: fileTint(30),
+    text: fileTint(180),
+    message: fileTint(340),
+    sheet: fileTint(130),
+    slides: fileTint(80),
+    /** Scene 2's two app piles, in the gaps between their neighbours' hues. */
+    slack: fileTint(5),
+    m365: fileTint(205),
   },
   /** The Cowork mark: knowledge, people, insight and outcomes, together on a violet tile. */
   mark: {

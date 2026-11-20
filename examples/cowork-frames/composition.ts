@@ -43,7 +43,7 @@ const FRAMES: readonly { group: GroupId | 'overview'; lt?: number; beat?: 'a' | 
   { group: 'overview' },
   { group: 'queries', lt: QUERIES.full },
   { group: 'queries', lt: QUERIES.crack.start + 1.2 },
-  { group: 'lost', lt: OPENING.flood.start },
+  { group: 'lost', lt: OPENING.break },
   { group: 'lost', lt: LOST.b.start + 3.6 },
   { group: 'criteria' },
   { group: 'intro' },

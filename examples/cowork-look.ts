@@ -124,6 +124,10 @@ const ICONS = {
     'M7.5 18.5h9.5a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7 9.6a4.5 4.5 0 0 0 .5 8.9ZM10 14.5h5M10 12h3',
   /** Slack, as a category: a channel's hash (not the brand's mark). */
   hash: 'M9.5 4.5L8 19.5M16 4.5l-1.5 15M5 9h14.5M4.5 15H19',
+  /** A PDF: a page with a banner across it. */
+  pdf: 'M7 3.5h7l4 4v13H7ZM14 3.5v4h4M5 11.5h9v5H5Z',
+  /** Slides: a screen on a stand. */
+  slides: 'M3.5 5h17M5 5v10h14V5M12 15v3.5M9 20.5l3-2l3 2',
 } as const;
 export type IconName = keyof typeof ICONS;
 
